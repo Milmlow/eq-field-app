@@ -2,8 +2,15 @@
 <html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SKS Labour Forecast — NSW Operations</title>
+<title>SKS Technologies — Labour Forecast</title>
+<meta name="description" content="NSW Labour Forecast and Weekly Roster for SKS Technologies staff">
+<meta name="theme-color" content="#1F335C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SKS Labour">
+<link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzFGMzM1QyIvPgo8dGV4dCB4PSIxNiIgeT0iMjEiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXNpemU9IjEzIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+U0tTPC90ZXh0Pgo8L3N2Zz4=">
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIiB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMzIiIGZpbGw9IiMxRjMzNUMiLz4KPHRleHQgeD0iOTYiIHk9IjEyNSIgZm9udC1mYW1pbHk9IkFyaWFsLHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNzgiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IndoaXRlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5TS1M8L3RleHQ+Cjwvc3ZnPg==">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -652,7 +659,7 @@ body.manager-mode .view-only{display:none}
     <div class="gate-title"><span id="gate-org-name">SKS Technologies</span></div>
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
-      <label style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
+      <label for="gate-name-search" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
       <input type="hidden" id="gate-name" value="">
       <div id="gate-selected-name" onclick="toggleGateNamePicker()" style="font-size:15px;padding:12px 14px;width:100%;background:var(--surface);color:var(--ink-4);border:2px solid var(--border);border-radius:10px;font-family:inherit;font-weight:600;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:48px">
         <span id="gate-selected-text">Tap to select your name</span>
@@ -667,7 +674,7 @@ body.manager-mode .view-only{display:none}
       </div>
     </div>
     <div style="width:100%">
-      <label style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
+      <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
       <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key===&#39;Enter&#39;)checkPin()" oninput="document.getElementById(&#39;gate-err&#39;).textContent=&#39;&#39;" style="">
     </div>
     <div class="gate-error" id="gate-err"></div>
@@ -806,7 +813,7 @@ body.manager-mode .view-only{display:none}
 <!-- ── Content ── -->
 <div class="content">
   <div class="topbar">
-    <div class="topbar-title" id="page-title">Weekly Roster</div>
+    <h1 class="topbar-title" id="page-title">Weekly Roster</h1>
     <div class="topbar-week">
       <button onclick="stepWeek(-1)" style="background:none;border:none;cursor:pointer;color:var(--navy-2);font-size:15px;padding:0 2px;line-height:1;font-family:inherit" title="Previous week">‹</button>
       <span id="week-label-text" style="font-size:12px;font-weight:600;color:var(--navy-2)">Week Starting 6th April 2026</span>
@@ -831,6 +838,7 @@ body.manager-mode .view-only{display:none}
     <span style="font-size:13px">🔄</span>
     <span id="last-updated" style="font-size:13px;font-weight:600;color:var(--navy)">Updated 02/04 08:28</span>
     <span id="last-updated-manager" style="font-size:12px;color:var(--ink-3)"></span>
+    <span id="sync-status" style="display:none;background:var(--amber-lt);color:var(--amber);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto"></span>
   </div>
 
   <!-- ── Dashboard ── -->
@@ -885,9 +893,9 @@ body.manager-mode .view-only{display:none}
     <div class="filter-row" data-protonpass-form="">
       <div class="search-wrap">
         <span class="search-icon">⌕</span>
-        <input type="text" id="roster-search" placeholder="Search name…" oninput="renderRoster()">
+        <input type="text" id="roster-search" placeholder="Search name…" aria-label="Search roster" oninput="renderRoster()">
       </div>
-      <select class="filter-select" id="roster-group" onchange="renderRoster()">
+      <select class="filter-select" id="roster-group" aria-label="Filter roster by group" onchange="renderRoster()">
         <option value="">All Groups</option>
         <option value="SKS Direct">⚡ SKS Direct</option>
         <option value="Apprentice">🎓 Apprentice</option>
@@ -1073,9 +1081,9 @@ body.manager-mode .view-only{display:none}
     <div class="filter-row">
       <div class="search-wrap">
         <span class="search-icon">⌕</span>
-        <input type="text" id="contacts-search" placeholder="Search contacts…" oninput="renderContacts()">
+        <input type="text" id="contacts-search" placeholder="Search contacts…" aria-label="Search contacts" oninput="renderContacts()">
       </div>
-      <select class="filter-select" id="contacts-group" onchange="renderContacts()">
+      <select class="filter-select" id="contacts-group" aria-label="Filter contacts by group" onchange="renderContacts()">
         <option value="">All Groups</option>
         <option value="SKS Direct">⚡ SKS Direct</option>
         <option value="Apprentice">🎓 Apprentice</option>
@@ -1169,13 +1177,13 @@ body.manager-mode .view-only{display:none}
         <button class="btn btn-sm" id="leave-view-list" onclick="setLeaveView(&#39;list&#39;)" style="border-radius:7px 0 0 7px;border:none;font-size:11px">📋 List</button>
         <button class="btn btn-secondary btn-sm" id="leave-view-cal" onclick="setLeaveView(&#39;calendar&#39;)" style="border-radius:0 7px 7px 0;border:none;font-size:11px">📅 Calendar</button>
       </div>
-      <select class="filter-select" id="leave-filter-status" onchange="renderLeave()">
+      <select class="filter-select" id="leave-filter-status" aria-label="Filter leave requests by status" onchange="renderLeave()">
         <option value="">All Requests</option>
         <option value="Pending">Pending</option>
         <option value="Approved">Approved</option>
         <option value="Rejected">Rejected</option>
       </select>
-      <input type="text" id="leave-search" placeholder="Search name…" oninput="renderLeave()" class="filter-select" style="min-width:160px">
+      <input type="text" id="leave-search" placeholder="Search name…" aria-label="Search leave requests" oninput="renderLeave()" class="filter-select" style="min-width:160px">
       <span style="flex:1"></span>
       <button class="btn btn-secondary btn-sm edit-only" onclick="openLeaveCCConfig()" style="font-size:11px">✉ Email CC List</button>
       <button class="btn btn-secondary btn-sm edit-only" onclick="confirmClearLeave()" style="font-size:11px;color:var(--red)">🗑 Clear All</button>
@@ -1357,7 +1365,7 @@ body.manager-mode .view-only{display:none}
         </p>
       </div>
       <div id="jobnumbers-search-bar" style="margin-bottom:12px">
-        <input type="text" id="jobnumbers-search" placeholder="Search job number or project name…" oninput="renderJobNumbers()" class="filter-select" style="min-width:240px;width:100%">
+        <input type="text" id="jobnumbers-search" placeholder="Search job number or project name…" aria-label="Search job numbers" oninput="renderJobNumbers()" class="filter-select" style="min-width:240px;width:100%">
       </div>
       <div id="jobnumbers-content">
         <div class="empty"><div class="empty-icon">🔢</div><p>No job numbers added yet</p></div>
@@ -2236,7 +2244,30 @@ body.manager-mode .view-only{display:none}
 </div>
 
 
-<script data-cfasync="false" src="file:///C:/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
+// ─────────────────────────────────────────────────────────────
+// XSS SANITISATION — escapes user-supplied data for safe HTML insertion
+// ─────────────────────────────────────────────────────────────
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+// Sanitise a complete HTML string by stripping dangerous tags/attributes
+function sanitizeHTML(html) {
+  if (!html) return '';
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\bon\w+\s*=\s*[^\s>]*/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/data\s*:[^,]*base64/gi, '');
+}
+
 // ─────────────────────────────────────────────────────────────
 // SEED DATA
 // ─────────────────────────────────────────────────────────────
@@ -2379,14 +2410,28 @@ async function sbFetch(path, method='GET', body=null, prefer='return=minimal') {
   };
   const fetchOpts = { method, headers };
   if(resolvedBody) fetchOpts.body = typeof resolvedBody === 'string' ? resolvedBody : JSON.stringify(resolvedBody);
-  const res = await fetch(SB_URL + '/rest/v1/' + resolvedPath, fetchOpts);
-  if(!res.ok) {
-    const err = await res.text();
-    console.error('Supabase error:', method, resolvedPath, res.status, err);
-    throw new Error(res.status + ': ' + err);
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/' + resolvedPath, fetchOpts);
+    if(!res.ok) {
+      const err = await res.text();
+      console.error('Supabase error:', method, resolvedPath, res.status, err);
+      throw new Error(res.status + ': ' + err);
+    }
+    _sbOnline = true;
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
+  } catch(err) {
+    // Queue writes for later if offline
+    if(method !== 'GET' && (typeof _writeQueue !== 'undefined')) {
+      _writeQueue.push({ path, method, body, prefer });
+      try { localStorage.setItem('sks_write_queue', JSON.stringify(_writeQueue)); } catch(e){}
+      _sbOnline = false;
+      updateOnlineStatus();
+      console.warn('Write queued (offline):', method, path);
+      return []; // allow UI to continue
+    }
+    throw err;
   }
-  const text = await res.text();
-  return text ? JSON.parse(text) : [];
 }
 
 // ─── State lives in Supabase, cached locally ─────────────────
@@ -2426,7 +2471,7 @@ async function loadFromSupabase() {
     // Deduplicate schedule rows — keep highest id (most recently written) per name+week
     const scheduleMap = {};
     schedule.forEach(r => {
-      const key = `${r.name}||${r.week}`;
+      const key = `${esc(r.name)}||${r.week}`;
       if(!scheduleMap[key] || r.id > scheduleMap[key].id) scheduleMap[key] = r;
     });
     STATE.schedule = Object.values(scheduleMap).map(r => ({ id:r.id, name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:r.sat||'', sun:r.sun||'' }));
@@ -2954,7 +2999,7 @@ function showImportConfirm(elId, summary, onConfirm, onCancel){
 function showPreviewError(elId, msg){
   const el=document.getElementById(elId);
   el.style.display='block';
-  el.innerHTML=`<div style="background:var(--red-lt);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:11.5px;color:var(--red)">${msg}</div>`;
+  el.innerHTML=`<div style="background:var(--red-lt);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:11.5px;color:var(--red)">${esc(msg)}</div>`;
 }
 function hidePreview(elId){ const el=document.getElementById(elId); el.style.display='none'; el.innerHTML=''; }
 
@@ -3001,7 +3046,7 @@ function buildBatchPeopleList(){
     people.forEach(p=>{
       html += `<label class="batch-person-row">
         <input type="checkbox" value="${p.id}" onchange="updateBatchCount()">
-        <span style="font-size:12.5px;font-weight:500;color:var(--ink)">${p.name}</span>
+        <span style="font-size:12.5px;font-weight:500;color:var(--ink)">${esc(p.name)}</span>
         <span style="font-size:10.5px;color:var(--ink-3);margin-left:auto">${p.phone||''}</span>
       </label>`;
     });
@@ -3675,18 +3720,75 @@ function updateMobileLock() {
 
 
 
-// ── Connection monitoring ─────────────────────────────────
-function updateOnlineStatus(){
+// ── Connection monitoring (enhanced) ────────────────────────
+let _sbOnline = true;
+const _writeQueue = []; // queued writes when Supabase is unreachable
+
+function updateOnlineStatus(forceOffline){
   const banner = document.getElementById('offline-banner');
+  const syncBadge = document.getElementById('sync-status');
   if(!banner) return;
-  if(!navigator.onLine){
+  const offline = forceOffline === true || !navigator.onLine || !_sbOnline;
+  if(offline){
     banner.classList.add('show');
+    banner.textContent = !navigator.onLine
+      ? '\u26A0 No internet connection — changes are queued locally.'
+      : '\u26A0 Cannot reach server — changes are queued locally. Check your network.';
   } else {
     banner.classList.remove('show');
   }
+  // Show pending write count
+  if(syncBadge){
+    if(_writeQueue.length > 0){
+      syncBadge.textContent = _writeQueue.length + ' pending';
+      syncBadge.style.display = 'inline-block';
+    } else {
+      syncBadge.style.display = 'none';
+    }
+  }
 }
-window.addEventListener('online',  updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
+window.addEventListener('online',  () => { _sbOnline = true; flushWriteQueue(); updateOnlineStatus(); });
+window.addEventListener('offline', () => updateOnlineStatus());
+
+// Ping Supabase periodically to detect API-level outages
+async function checkSupabaseHealth(){
+  try {
+    const resp = await fetch(SB_URL + '/rest/v1/', {
+      method: 'HEAD',
+      headers: { 'apikey': SB_KEY },
+      signal: AbortSignal.timeout(5000)
+    });
+    _sbOnline = resp.ok;
+  } catch(e) {
+    _sbOnline = false;
+  }
+  updateOnlineStatus();
+}
+setInterval(checkSupabaseHealth, 30000); // every 30s
+
+// Flush queued writes when connectivity returns
+async function flushWriteQueue(){
+  if(!_writeQueue.length) return;
+  const pending = [..._writeQueue];
+  _writeQueue.length = 0;
+  for(const item of pending){
+    try {
+      await sbFetch(item.path, item.method, item.body, item.prefer);
+    } catch(e){
+      // Re-queue if still failing
+      _writeQueue.push(item);
+    }
+  }
+  updateOnlineStatus();
+  // Save queue to localStorage in case browser closes
+  try { localStorage.setItem('sks_write_queue', JSON.stringify(_writeQueue)); } catch(e){}
+}
+
+// Restore queued writes from previous session
+try {
+  const saved = localStorage.getItem('sks_write_queue');
+  if(saved) { const arr = JSON.parse(saved); if(Array.isArray(arr)) _writeQueue.push(...arr); localStorage.removeItem('sks_write_queue'); }
+} catch(e){}
 
 // ── Access gate ────────────────────────────────────────────
 // Passwords validated server-side via Netlify Function
@@ -4018,7 +4120,7 @@ function applyAgencyMode() {
   if(auditBtn) auditBtn.style.display = 'none';
   // Update sidebar footer
   const footer = document.querySelector('.sidebar-footer');
-  if(footer) footer.innerHTML = `<strong style="color:rgba(255,255,255,.7)">${agencyName}</strong><span style="display:block;margin-top:2px">Agency read-only access</span><button onclick="agencyLogout()" style="margin-top:8px;background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.5);font-size:10px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;width:100%">Log Out</button>`;
+  if(footer) footer.innerHTML = `<strong style="color:rgba(255,255,255,.7)">${esc(agencyName)}</strong><span style="display:block;margin-top:2px">Agency read-only access</span><button onclick="agencyLogout()" style="margin-top:8px;background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.5);font-size:10px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:inherit;width:100%">Log Out</button>`;
   // Force LH tab active
   tsTab = 'lh';
   const lhTab = document.getElementById('ts-tab-lh');
@@ -4149,7 +4251,7 @@ function renderTimesheets() {
     const rowBg = !entry ? 'background:#FFF1F2' : total>0&&total<40 ? 'background:#FFFBEB' : '';
     const pid = p.name.replace(/\W/g,'_');
     html += `<tr style="${rowBg}">
-      <td style="font-weight:600;color:var(--navy)">${p.name}</td>
+      <td style="font-weight:600;color:var(--navy)">${esc(p.name)}</td>
       ${days.map(d => {
         const rawJob = entry&&entry[d+'_job'] ? entry[d+'_job'] : '';
         const rawHrs = entry&&entry[d+'_hrs']!=null ? entry[d+'_hrs'] : '';
@@ -4167,22 +4269,22 @@ function renderTimesheets() {
         return `<td style="padding:5px 6px">
           <div class="ts-cell">
             <input class="ts-job" type="text" inputmode="numeric" list="ts-job-list" value="${job1}" placeholder="Job no."${disabled}
-              data-name="${p.name}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
+              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
               oninput="this.value=this.value.toUpperCase()"
               onchange="onTsCellChange(this)">
             <input class="ts-hrs" type="number" value="${hrs1}" placeholder="h" min="0" max="24" step="0.5"${disabled}
-              data-name="${p.name}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
+              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
               onchange="onTsCellChange(this)">
             <button class="ts-split-btn${isSplit?' active':''}" title="Split: add second job" onclick="toggleTsSplit('${pid2}',this)"${disabled ? ' disabled' : ''}
               style="font-size:8px;padding:1px 4px;border:1px solid var(--border);border-radius:4px;background:${isSplit?'var(--purple-lt)':'var(--surface-2)'};color:var(--ink-3);cursor:pointer;margin-top:2px;width:100%">＋ split</button>
           </div>
           <div class="ts-cell ts-split-row" id="split-${pid2}" style="display:${isSplit?'flex':'none'};margin-top:3px">
             <input class="ts-job" type="text" inputmode="numeric" list="ts-job-list" value="${job2}" placeholder="Job 2"${disabled}
-              data-name="${p.name}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
+              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
               oninput="this.value=this.value.toUpperCase()"
               onchange="onTsCellChange(this)">
             <input class="ts-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
-              data-name="${p.name}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
+              data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
               onchange="onTsCellChange(this)">
           </div>
         </td>`;
@@ -4324,8 +4426,8 @@ function openTsBatch() {
   const people = [...STATE.people].filter(p=>p.group===grpName).sort((a,b)=>a.name.localeCompare(b.name));
   document.getElementById('ts-batch-people').innerHTML = people.map(p=>
     `<label class="batch-person-row">
-      <input type="checkbox" value="${p.id}" data-name="${p.name}" data-group="${p.group}" checked onchange="updateTsBatchCount()">
-      <span style="font-size:12px;font-weight:500">${p.name}</span>
+      <input type="checkbox" value="${p.id}" data-name="${esc(p.name)}" data-group="${p.group}" checked onchange="updateTsBatchCount()">
+      <span style="font-size:12px;font-weight:500">${esc(p.name)}</span>
     </label>`
   ).join('');
   updateTsBatchCount();
@@ -4413,9 +4515,9 @@ function exportTsPayroll() {
     let hasData = false;
     TS_DAYS.forEach((d,i)=>{
       const job=e?.[d+'_job']; const hrs=e?.[d+'_hrs'];
-      if(job||hrs){ rows.push([`"${p.name}"`,`"${p.group}"`,`"${TS_LABELS[i]}"`,`"${job||''}"`,`"${hrs||''}"`]); hasData=true; }
+      if(job||hrs){ rows.push([`"${esc(p.name)}"`,`"${p.group}"`,`"${TS_LABELS[i]}"`,`"${job||''}"`,`"${hrs||''}"`]); hasData=true; }
     });
-    if(!hasData) rows.push([`"${p.name}"`,`"${p.group}"`,'"—"','"No data"','""']);
+    if(!hasData) rows.push([`"${esc(p.name)}"`,`"${p.group}"`,'"—"','"No data"','""']);
     rows.push(['']);
   });
   downloadCSV(rows.map(r=>r.join(',')).join('\n'), 'SKS_Payroll_'+week.replace(/\./g,'-')+'.csv');
@@ -4706,7 +4808,7 @@ function renderLeaveCCList() {
   }
   el.innerHTML = leaveCCList.map((email, i) =>
     `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;margin-bottom:4px">
-      <span style="flex:1;font-size:12px;color:var(--ink)">${email}</span>
+      <span style="flex:1;font-size:12px;color:var(--ink)">${esc(email)}</span>
       <button onclick="removeLeaveCC(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0">✕</button>
     </div>`
   ).join('');
@@ -4786,7 +4888,7 @@ function openLeaveRequest() {
   const pSel = document.getElementById('leave-person');
   const people = [...(STATE.people||[])].sort((a,b)=>a.name.localeCompare(b.name));
   pSel.innerHTML = '<option value="">— Select your name —</option>' +
-    people.map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
+    people.map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
 
   // Populate approver dropdown from supervision contacts
   const aSel = document.getElementById('leave-approver');
@@ -5607,7 +5709,7 @@ function renderDashboard(){
   }
 
   document.getElementById('dashboard-sites').innerHTML = sitesHtml;
-  const leaveHtml = sched.filter(r=>days.every(d=>isLeave(r[d]))).map(r=>`<span style="background:var(--amber-lt);border:1px solid #FDE68A;border-radius:7px;padding:4px 11px;font-size:11.5px;font-weight:600;color:var(--amber)">${r.name}</span>`).join('');
+  const leaveHtml = sched.filter(r=>days.every(d=>isLeave(r[d]))).map(r=>`<span style="background:var(--amber-lt);border:1px solid #FDE68A;border-radius:7px;padding:4px 11px;font-size:11.5px;font-weight:600;color:var(--amber)">${esc(r.name)}</span>`).join('');
   document.getElementById('dashboard-leave').innerHTML = leaveHtml||'<p style="font-size:12px;color:var(--ink-3)">No full-week absences recorded</p>';
 
   // Pending leave requests card
@@ -5716,7 +5818,7 @@ function renderRoster(){
           const s=getPersonSchedule(p.name,week);
           const rc=g==='Apprentice'?'row-app':g==='Labour Hire'?'row-lh':'';
           return `<tr class="${rc}">
-            <td class="name-col">${p.name}</td>
+            <td class="name-col">${esc(p.name)}</td>
             ${days.map(d=>`<td class="day-cell">${chip(s[d])}</td>`).join('')}
           </tr>`;
         }).join('')}</tbody>
@@ -5772,7 +5874,7 @@ function renderSchedule(){
 
   document.getElementById('schedule-content').innerHTML=`
     <div class="schedule-hero" style="max-width:600px">
-      <div class="schedule-hero-name">${name}</div>
+      <div class="schedule-hero-name">${esc(name)}</div>
       <div class="schedule-hero-meta">${person?person.group:''}${person&&person.licence?' · '+person.licence:''}${person&&person.agency?' · '+person.agency:''} &nbsp;·&nbsp; w/c ${week}</div>
     </div>
     <div style="max-width:600px;display:flex;flex-direction:column;gap:8px">
@@ -5822,15 +5924,15 @@ function renderContacts(){
       html += `<div style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${gColors[g]};padding:10px 4px 6px">${g} (${gPeople.length})</div>`;
       gPeople.forEach(p=>{
         const phoneHtml = p.phone
-          ? `<a href="tel:${p.phone}" style="color:var(--purple);font-weight:600;text-decoration:none;font-size:14px">${p.phone}</a>`
+          ? `<a href="tel:${esc(p.phone)}" style="color:var(--purple);font-weight:600;text-decoration:none;font-size:14px">${esc(p.phone)}</a>`
           : '<span style="color:#EF4444;font-size:12px">No phone</span>';
         html += `<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${p.name}</div>
+            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               ${phoneHtml}
-              ${p.email?`<a href="mailto:${p.email}" style="color:var(--purple);font-size:11px;text-decoration:none">${p.email}</a>`:''}
-              ${p.agency?`<span style="color:var(--ink-3);font-size:11px">· ${p.agency}</span>`:''}
+              ${p.email?`<a href="mailto:${esc(p.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(p.email)}</a>`:''}
+              ${p.agency?`<span style="color:var(--ink-3);font-size:11px">· ${esc(p.agency)}</span>`:''}
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
@@ -5855,10 +5957,10 @@ function renderContacts(){
       </tr></thead>
       <tbody>${people.map(p=>`
         <tr>
-          <td class="name-col">${p.name}</td>
+          <td class="name-col">${esc(p.name)}</td>
           <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${groupBadge[p.group]||p.group}</td>
-          <td class="phone-col">${p.phone?`<a href="tel:${p.phone}">${p.phone}</a>`:'<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
-          <td class="meta-col">${p.email?`<a href="mailto:${p.email}" style="color:var(--purple);text-decoration:none">${p.email}</a>`:'—'}</td>
+          <td class="phone-col">${p.phone?`<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>`:'<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
+          <td class="meta-col">${p.email?`<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>`:'—'}</td>
           <td class="meta-col">${p.agency||'—'}</td>
           <td class="center" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
             <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
@@ -5891,14 +5993,14 @@ function renderSites(){
         <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:6px">
           <div style="flex:1">
             <div class="site-abbr">${site.abbr}</div>
-            <div class="site-name-lg" style="margin-bottom:0">${site.name}</div>
+            <div class="site-name-lg" style="margin-bottom:0">${esc(site.name)}</div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px">
             <button class="btn-icon btn-sm" title="Edit site" onclick="openEditSite(${site.id})">✎</button>
             <button class="btn-icon btn-sm" style="color:var(--red)" title="Delete site" onclick="confirmDeleteSite(${site.id},'${site.name.replace(/'/g,"\'")}')">✕</button>
           </div>
         </div>
-        ${site.address?`<div class="site-detail"><span>📍</span>${site.address}</div>`:''}
+        ${site.address?`<div class="site-detail"><span>📍</span>${esc(site.address)}</div>`:''}
         ${site.site_lead?`<div class="site-detail"><span>👤</span><strong>${site.site_lead}</strong>${site.site_lead_phone?' — <a href="tel:'+site.site_lead_phone+'" style="color:var(--blue);text-decoration:none">'+site.site_lead_phone+'</a>':''}</div>`:''}
         <div class="site-headcount"><span class="site-headcount-label">On site this week</span><span class="site-headcount-value">${count||'—'}</span></div>
       </div>
@@ -6092,7 +6194,7 @@ function renderEditor(){
     const all=[...new Set([...codes,...statusCodes])].sort();
     dl.innerHTML=all.map(s=>{
       const site=STATE.sites.find(x=>x.abbr===s);
-      const label=site ? `${s}  |  ${site.name}` : s;
+      const label=site ? `${s}  |  ${esc(site.name)}` : s;
       return `<option value="${s}" label="${label}">`;
     }).join('');
   }
@@ -6120,13 +6222,13 @@ function renderEditor(){
     people.forEach(p=>{
       const s=getPersonSchedule(p.name,week);
       html+=`<div class="roster-editor-row">
-        <div class="editor-name">${p.name}${!p.phone?`<span class="flag" title="No phone recorded">📵</span>`:''}</div>
+        <div class="editor-name">${esc(p.name)}${!p.phone?`<span class="flag" title="No phone recorded">📵</span>`:''}</div>
         <div class="editor-days">
           ${days.map(d=>`<div class="editor-day">
             <input type="text" list="site-datalist"
               value="${(s[d]||'').toUpperCase()}"
               placeholder="${d.toUpperCase()}"
-              data-name="${p.name}" data-week="${week}" data-day="${d}"
+              data-name="${esc(p.name)}" data-week="${week}" data-day="${d}"
               oninput="handleCellInput(this)"
               onchange="updateCell(this)"
               autocomplete="off" spellcheck="false">
@@ -6757,7 +6859,7 @@ async function openStaffTsGate() {
   }
 
   sel.innerHTML = '<option value="">— Select your name —</option>' +
-    eligible.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    eligible.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
   setTimeout(() => { const p = document.getElementById('staff-ts-pin'); if (p) p.focus(); }, 150);
 }
 
@@ -7022,7 +7124,7 @@ function renderStaffTs() {
 
   let html = `
     <div style="background:linear-gradient(135deg,var(--navy),var(--navy-2));border-radius:12px;padding:18px 20px;margin-bottom:20px">
-      <div style="font-size:18px;font-weight:700;color:white;margin-bottom:2px">${name}</div>
+      <div style="font-size:18px;font-weight:700;color:white;margin-bottom:2px">${esc(name)}</div>
       <div style="font-size:12px;color:rgba(255,255,255,.5)">${group} &nbsp;·&nbsp; ${formatWeekLabel(week)}</div>
       <div id="staff-ts-total-display" style="margin-top:10px;font-size:28px;font-weight:800;color:${totalColor}">${total > 0 ? total + 'h' : '—'} <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.6)">recorded this week</span></div>
     </div>
@@ -7416,7 +7518,7 @@ function openCalPanel(ds){
         <div style="padding-left:16px;display:flex;flex-direction:column;gap:3px">
           ${people.sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
             <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:12px;color:var(--ink-2);flex:1">${p.name}</span>
+              <span style="font-size:12px;color:var(--ink-2);flex:1">${esc(p.name)}</span>
               <span style="font-size:9px;font-weight:700;color:white;background:${groupCol[p.group]||'var(--navy)'};padding:1px 5px;border-radius:3px">${groupBadge[p.group]||p.group}</span>
             </div>`).join('')}
         </div>
@@ -7437,7 +7539,7 @@ function openCalPanel(ds){
         <div style="padding-left:8px;display:flex;flex-direction:column;gap:3px">
           ${people.sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`
             <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:12px;color:var(--ink-2);flex:1">${p.name}</span>
+              <span style="font-size:12px;color:var(--ink-2);flex:1">${esc(p.name)}</span>
               <span style="font-size:9px;font-weight:700;color:white;background:${groupCol[p.group]||'var(--navy)'};padding:1px 5px;border-radius:3px">${groupBadge[p.group]||p.group}</span>
             </div>`).join('')}
         </div>
@@ -7466,7 +7568,14 @@ function closeCalPanel(){
   renderCalendar();
 }
 
+// ── Service Worker Registration ─────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+
 </script>
-
-
-<protonpass-root-de71 data-protonpass-role="root" data-protonpass-theme="os"><template shadowrootmode="closed"><iframe src="chrome-extension://ghmbeldphafepmbegfdlkpapadhbakde/dropdown.html#iframe=7a6fa04c" style="--frame-animation: fadein;"></iframe></template></protonpass-root-de71></body></html>
+</body></html>
