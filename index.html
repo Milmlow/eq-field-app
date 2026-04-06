@@ -654,9 +654,9 @@ body.manager-mode .view-only{display:none}
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
       <label style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
-      <input type="hidden" id="gate-name" value="Elliot Gross">
+      <input type="hidden" id="gate-name" value="">
       <div id="gate-selected-name" onclick="toggleGateNamePicker()" style="font-size:15px;padding:12px 14px;width:100%;background:var(--surface);color:var(--ink-4);border:2px solid var(--border);border-radius:10px;font-family:inherit;font-weight:600;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:48px">
-        <span id="gate-selected-text" style="color: rgb(31, 51, 92);">Elliot Gross</span>
+        <span id="gate-selected-text" style="color:var(--ink-4)">— Tap to select your name —</span>
         <span style="font-size:12px;color:var(--ink-4)">▼</span>
       </div>
       <div id="gate-name-picker" style="margin-top: 6px; background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: rgba(0, 0, 0, 0.12) 0px 8px 24px; display: none;">
@@ -787,7 +787,7 @@ body.manager-mode .view-only{display:none}
     " onmouseover="this.style.background=&#39;rgba(0,0,0,.4)&#39;" onmouseout="this.style.background=&#39;rgba(0,0,0,.25)&#39;">
       <span id="lock-icon" style="font-size:18px;flex-shrink:0">🔒</span>
       <span style="text-align:left">
-        <span id="lock-label" style="display:block;font-size:11px;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.6px">Elliot Gross</span>
+        <span id="lock-label" style="display:block;font-size:11px;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.6px">View Only</span>
         <span id="lock-status" style="display:block;font-size:13px;font-weight:600;color:rgba(255,255,255,.9);margin-top:1px">View only — tap to unlock</span>
       </span>
     </button>
@@ -1700,7 +1700,7 @@ body.manager-mode .view-only{display:none}
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Full Name</label>
-          <input class="form-input" id="person-name" placeholder="e.g. Aaron Clohessy">
+          <input class="form-input" id="person-name" placeholder="e.g. Aaron Clohessy" onkeydown="if(event.key==='Enter')savePerson()">
         </div>
         <div class="form-group">
           <label class="form-label">Mobile</label>
@@ -1894,7 +1894,7 @@ body.manager-mode .view-only{display:none}
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Name</label>
-          <input class="form-input" id="manager-name" placeholder="e.g. Ian Marston">
+          <input class="form-input" id="manager-name" placeholder="e.g. Ian Marston" onkeydown="if(event.key==='Enter')saveManager()">
         </div>
         <div class="form-group">
           <label class="form-label">Category</label>
@@ -3532,7 +3532,7 @@ function saveManager(){
   const email    = document.getElementById('manager-email').value.trim().toLowerCase();
   if(!name){ showToast('Name is required'); return; }
   // SUP-002: Check for duplicate names
-  const existingPerson = STATE.people.find(x => x.name.toLowerCase() === name.toLowerCase() && (!id || x.id !== parseInt(id)));
+  const existingPerson = STATE.people.find(x => x.name.toLowerCase() === name.toLowerCase() && (!editId || x.id !== parseInt(editId)));
   if(existingPerson) { showToast('⚠ ' + name + ' already exists in the contacts list'); return; }
   if(!STATE.managers) STATE.managers = [];
   let mgr;
