@@ -3686,17 +3686,36 @@ function toggleManagerMode() {
   }, 120);
 }
 
-function submitManagerPassword() {
+async function submitManagerPassword() {
   const pw   = (document.getElementById('manager-pw-input').value||'').trim();
   const name = (document.getElementById('manager-name-select').value||'').trim();
-  if(pw === MANAGER_PASSWORD && name) {
-    isManager = true;
-    currentManagerName = name;
-    applyManagerMode();
-    closeModal('modal-manager-pw');
-    showToast('Supervision mode unlocked — ' + name);
-    auditLog('Unlocked manager mode', 'Access', null, null);
-  } else {
+  if(!pw || !name) {
+    document.getElementById('manager-pw-error').style.display = 'block';
+    document.getElementById('manager-pw-input').focus();
+    return;
+  }
+  try {
+    const resp = await fetch('/.netlify/functions/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: pw, name: name })
+    });
+    const text = await resp.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch(e) { data = {}; }
+    if(data.valid && data.role === 'supervisor') {
+      isManager = true;
+      currentManagerName = name;
+      applyManagerMode();
+      closeModal('modal-manager-pw');
+      showToast('Supervision mode unlocked — ' + name);
+      auditLog('Unlocked manager mode', 'Access', null, null);
+    } else {
+      document.getElementById('manager-pw-error').style.display = 'block';
+      document.getElementById('manager-pw-input').value = '';
+      document.getElementById('manager-pw-input').focus();
+    }
+  } catch(e) {
     document.getElementById('manager-pw-error').style.display = 'block';
     document.getElementById('manager-pw-input').value = '';
     document.getElementById('manager-pw-input').focus();
