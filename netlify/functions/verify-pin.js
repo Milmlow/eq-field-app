@@ -1,21 +1,17 @@
 const crypto = require('crypto');
 
-// A02-01: Passwords hashed with HMAC-SHA256 — never stored or compared as plaintext
 const SECRET_SALT = 'sks-nsw-labour-2026-hvK9mP2xQ7';
 function hashCode(code) {
   return crypto.createHmac('sha256', SECRET_SALT).update(code).digest('hex');
 }
 
-// Pre-computed hashes (original values never appear in code)
 const STAFF_HASH = '1b2e74d160a514b52a35ad24f86a99416ba8e69367be5a99e86b801540ab9762';
 const MANAGER_HASH = '787b9ed62dcb4b8edc875be85725fffe063fe1716eca1933768b64d96eb45220';
 
-// A04-01 + A07-02: Rate limiting + lockout
 const attempts = {};
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 
-// A09-02: Login attempt logging
 const SB_URL = 'https://hignguefjjjtrhofdztu.supabase.co';
 const SB_KEY = 'sb_publishable_npv-8-iiMPde4Ggk9dD5Pw_QAP2OeWi';
 
@@ -39,7 +35,7 @@ async function logAttempt(name, success, ip, detail) {
   } catch (e) {}
 }
 
-// A07-03: Signed remember-me tokens
+// 7 day remember-me tokens
 function signToken(name, role, expiresAt) {
   const payload = JSON.stringify({ name, role, exp: expiresAt });
   const sig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
@@ -67,7 +63,6 @@ exports.handler = async (event) => {
     const body = JSON.parse(event.body);
     const ip = event.headers['x-forwarded-for'] || event.headers['client-ip'] || 'unknown';
 
-    // A07-03: Token verification for remember-me
     if (body.action === 'verify-token') {
       const data = verifyToken(body.token);
       if (data) {
@@ -76,7 +71,6 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }
 
-    // Standard login flow
     const { code, name, remember } = body;
     const now = Date.now();
 
@@ -104,10 +98,9 @@ exports.handler = async (event) => {
       record.lockedUntil = 0;
       await logAttempt(name, true, ip);
 
-      // A07-03: Issue signed token if remember requested
       let token = null;
       if (remember) {
-        token = signToken(name, role, now + 86400000); // 24 hours
+        token = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000)); // 7 days
       }
 
       return {
