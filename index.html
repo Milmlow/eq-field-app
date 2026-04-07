@@ -5555,9 +5555,9 @@ async function initApp(){
 
   // Week selector — build from schedule data + any upcoming weeks
   const weekSet = new Set(STATE.schedule.map(r=>r.week));
-  // Always include coming 10 weeks from today
+  // Include 8 weeks back and 20 weeks forward from today
   const today = new Date();
-  for(let i=0; i<16; i++){
+  for(let i=-8; i<20; i++){
     const d = new Date(today);
     d.setDate(d.getDate() - d.getDay() + 1 + i*7); // Mon
     const dd = String(d.getDate()).padStart(2,'0');
@@ -5951,14 +5951,17 @@ function renderRoster(){
   const days      = allDays.filter((_,i)=>i<5||(i===5&&showSat)||(i===6&&showSun));
   const dayLabels = allLabels.filter((_,i)=>i<5||(i===5&&showSat)||(i===6&&showSun));
   const groups = ['SKS Direct','Apprentice','Labour Hire'];
-  const gClass = {'SKS Direct':'direct','Apprentice':'apprentice','Labour Hire':'labour'};
-  const gIcon  = {'SKS Direct':'⚡','Apprentice':'🎓','Labour Hire':'🔧'};
+  const gBg   = {'SKS Direct':'var(--navy)','Apprentice':'var(--purple)','Labour Hire':'var(--navy-3)'};
+  const gIcon = {'SKS Direct':'⚡','Apprentice':'🎓','Labour Hire':'🔧'};
 
   const weekDates = getWeekDates(week);
 
   function thClass(col){ return `sortable${rosterSort.col===col?' sort-'+rosterSort.dir:''}`; }
 
-  let html='';
+  // Build all rows across all groups into one table
+  let bodyRows = '';
+  let anyGroup = false;
+
   groups.forEach(g=>{
     let people = STATE.people.filter(p=>p.group===g);
     if(group && g!==group) return;
@@ -5966,31 +5969,45 @@ function renderRoster(){
     if(site)   people = people.filter(p=>{ const s=getPersonSchedule(p.name,week); return days.some(d=>s[d]===site); });
     if(!people.length) return;
     people = sortPeople(people, week);
-    html+=`<div class="group-section" style="margin-bottom:14px">
-      <div class="group-strip ${gClass[g]}"><span>${gIcon[g]}</span><span>${g}</span><span class="group-strip-count">${people.length}</span></div>
-      <div class="roster-card"><div class="table-scroll"><table>
-        <thead><tr>
-          <th class="name-col ${thClass('name')}" onclick="setSortCol('name')">Name</th>
-          ${days.map((d,i)=>`<th class="center ${thClass(d)}" onclick="setSortCol('${d}')">${dayLabels[i]}<br><span style="font-size:9px;font-weight:400;color:var(--ink-3)">${weekDates[['mon','tue','wed','thu','fri','sat','sun'].indexOf(d)]}</span></th>`).join('')}
-        </tr></thead>
-        <tbody>${people.map(p=>{
-          const s=getPersonSchedule(p.name,week);
-          const rc=g==='Apprentice'?'row-app':g==='Labour Hire'?'row-lh':'';
-          return `<tr class="${rc}">
-            <td class="name-col">${p.name}</td>
-            ${days.map(d=>`<td class="day-cell">${chip(s[d])}</td>`).join('')}
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div></div>
-    </div>`;
+    anyGroup = true;
+
+    const colSpan = days.length + 1;
+    // Group header row — spans full width, styled like the old group-strip
+    bodyRows += `<tr>
+      <td colspan="${colSpan}" style="background:${gBg[g]};color:white;padding:7px 16px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;">
+        <span style="margin-right:6px">${gIcon[g]}</span>${g}
+        <span style="margin-left:8px;background:rgba(255,255,255,.18);font-size:10px;padding:1px 8px;border-radius:10px">${people.length}</span>
+      </td>
+    </tr>`;
+
+    people.forEach(p=>{
+      const s=getPersonSchedule(p.name,week);
+      const rc=g==='Apprentice'?'row-app':g==='Labour Hire'?'row-lh':'';
+      bodyRows += `<tr class="${rc}">
+        <td class="name-col">${p.name}</td>
+        ${days.map(d=>`<td class="day-cell">${chip(s[d])}</td>`).join('')}
+      </tr>`;
+    });
   });
-  document.getElementById('roster-content').innerHTML = html||'<div class="empty"><div class="empty-icon">🔍</div><p>No results match your filters</p></div>';
+
+  if(!anyGroup){
+    document.getElementById('roster-content').innerHTML = '<div class="empty"><div class="empty-icon">🔍</div><p>No results match your filters</p></div>';
+    renderRosterLegend();
+    return;
+  }
+
+  const html = `<div class="roster-card" style="border-radius:var(--radius-lg)"><div class="table-scroll"><table>
+    <thead><tr>
+      <th class="name-col ${thClass('name')}" onclick="setSortCol('name')">Name</th>
+      ${days.map((d,i)=>`<th class="center ${thClass(d)}" onclick="setSortCol('${d}')">${dayLabels[i]}<br><span style="font-size:9px;font-weight:400;color:var(--ink-3)">${weekDates[['mon','tue','wed','thu','fri','sat','sun'].indexOf(d)]}</span></th>`).join('')}
+    </tr></thead>
+    <tbody>${bodyRows}</tbody>
+  </table></div></div>`;
+
+  document.getElementById('roster-content').innerHTML = html;
   renderRosterLegend();
 }
 
-// ─────────────────────────────────────────────────────────────
-// MY SCHEDULE
-// ─────────────────────────────────────────────────────────────
 function renderSchedule(){
   const name = document.getElementById('schedule-person').value;
   const week = STATE.currentWeek;
