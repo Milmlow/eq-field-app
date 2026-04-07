@@ -315,9 +315,14 @@ td.day-cell{text-align:center}
   tbody tr.group-row{page-break-before:auto}
 
   /* ── Editor ── */
-  .editor-name{font-size:10px}
-  .editor-day input{font-size:9px}
-  .roster-editor-row{border:1px solid #eee}
+  .editor-actions{display:none!important}
+  .editor-name{font-size:9px;min-width:110px;max-width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .editor-days{display:flex;flex:1}
+  .editor-day{flex:1;min-width:0}
+  .editor-day input{font-size:8px;width:100%;border:1px solid #ddd;padding:2px 3px;text-align:center;box-sizing:border-box}
+  .roster-editor-row{display:flex;align-items:center;border:1px solid #eee;border-top:none;padding:2px 4px;page-break-inside:avoid}
+  #editor-content{width:100%;overflow:visible}
+  #editor-content .roster-editor-row{width:100%;box-sizing:border-box}
 }
 @media(max-width:768px){
   body{min-height:100vh;min-height:100dvh;background:var(--bg)!important}
