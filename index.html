@@ -651,7 +651,7 @@ body.manager-mode .view-only{display:none}
 <!-- Access gate -->
 <div id="access-gate" class="">
   <div class="gate-card" data-protonpass-form="" style="">
-    <div class="gate-logo"><img src="./index_files/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
+    <div class="gate-logo"><img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
     <div class="gate-title"><span id="gate-org-name">SKS Technologies</span></div>
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
@@ -674,8 +674,8 @@ body.manager-mode .view-only{display:none}
     </div>
     <div class="gate-error" id="gate-err"></div>
     <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px">
-      <input type="checkbox" id="gate-remember" style="width:16px;height:16px;accent-color:var(--purple)">
-      <label for="gate-remember" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 24 hours</label>
+      <input type="checkbox" id="gate-remember" checked style="width:16px;height:16px;accent-color:var(--purple)">
+      <label for="gate-remember" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 7 days</label>
     </div>
     <button class="gate-btn" onclick="checkPin()">Enter</button>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:8px">
@@ -750,9 +750,9 @@ body.manager-mode .view-only{display:none}
 <!-- ── Sidebar ── -->
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <img src="./index_files/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
+    <img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
     <div style="display:flex;align-items:center;height:52px;border-left:1px solid rgba(255,255,255,.15);padding-left:10px;margin-left:2px">
-      <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:30px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">SKS</span>
+      <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:30px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">NSW</span>
     </div>
   </div>
   <div class="nav">
@@ -1260,6 +1260,7 @@ body.manager-mode .view-only{display:none}
       <input type="text" id="leave-search" placeholder="Search name…" oninput="renderLeave()" class="filter-select" style="min-width:160px">
       <span style="flex:1"></span>
       <button class="btn btn-secondary btn-sm edit-only" onclick="openLeaveCCConfig()" style="font-size:11px">✉ Email CC List</button>
+      <button class="btn btn-secondary btn-sm edit-only" onclick="pushApprovedLeaveToRoster()" style="font-size:11px;color:var(--green)">📋 Push to Roster</button>
       <button class="btn btn-secondary btn-sm edit-only" onclick="confirmClearLeave()" style="font-size:11px;color:var(--red)">🗑 Clear All</button>
       <button class="btn btn-secondary btn-sm" onclick="printLeaveRequests()" style="font-size:11px">🖨 Print</button>
       <button class="btn btn-primary btn-sm" onclick="openLeaveRequest()">＋ New Leave Request</button>
@@ -5166,6 +5167,72 @@ async function writeLeaveToSchedule(req) {
     }
     dayKeys.forEach(d => entry[d] = req.leave_type);
   }
+}
+
+async function pushApprovedLeaveToRoster() {
+  if(!isManager) { showToast('Supervision access required'); return; }
+  const approved = leaveRequests.filter(r => r.status === 'Approved');
+  if(!approved.length) { showToast('No approved leave requests found'); return; }
+
+  let written = 0, skipped = 0, errors = 0;
+  showToast('⏳ Pushing approved leave to roster…');
+
+  for(const req of approved) {
+    try {
+      // Parse individual_days defensively
+      let parsedDays = req.individual_days;
+      if(typeof parsedDays === 'string') { try { parsedDays = JSON.parse(parsedDays); } catch(e) { parsedDays = null; } }
+
+      // Build date list
+      let dates = [];
+      if(parsedDays && Array.isArray(parsedDays) && parsedDays.length) {
+        dates = parsedDays.map(d => new Date(d+'T00:00:00'));
+      } else if(req.date_start && req.date_end) {
+        const d = new Date(req.date_start+'T00:00:00');
+        const end = new Date(req.date_end+'T00:00:00');
+        while(d <= end) { if(d.getDay()!==0 && d.getDay()!==6) dates.push(new Date(d)); d.setDate(d.getDate()+1); }
+      }
+      if(!dates.length) { skipped++; continue; }
+
+      // Group by week
+      const byWeek = {};
+      dates.forEach(dt => {
+        const mon = new Date(dt);
+        mon.setDate(mon.getDate() - ((mon.getDay()+6)%7));
+        const wk = String(mon.getDate()).padStart(2,'0')+'.'+String(mon.getMonth()+1).padStart(2,'0')+'.'+String(mon.getFullYear()).slice(-2);
+        if(!byWeek[wk]) byWeek[wk] = [];
+        const dayKey = ['mon','tue','wed','thu','fri','sat','sun'][(dt.getDay()+6)%7];
+        byWeek[wk].push(dayKey);
+      });
+
+      for(const [week, dayKeys] of Object.entries(byWeek)) {
+        for(const day of dayKeys) {
+          // Only write if cell is empty or already a leave code — don't overwrite real site allocations
+          const entry = STATE.schedule.find(r => r.name === req.requester_name && r.week === week);
+          const currentVal = entry ? entry[day] : '';
+          if(!currentVal || isLeave(currentVal)) {
+            await saveCellToSB(req.requester_name, week, day, req.leave_type);
+            if(entry) entry[day] = req.leave_type;
+            else {
+              const newEntry = {name:req.requester_name, week, mon:'',tue:'',wed:'',thu:'',fri:'',sat:'',sun:''};
+              newEntry[day] = req.leave_type;
+              STATE.schedule.push(newEntry);
+            }
+            written++;
+          } else {
+            skipped++;
+          }
+        }
+      }
+    } catch(e) {
+      console.error('pushApprovedLeaveToRoster error for', req.requester_name, e);
+      errors++;
+    }
+  }
+
+  auditLog('Manual push: approved leave → roster', 'Leave', `${written} cells written, ${skipped} skipped, ${errors} errors`, null);
+  showToast(`✅ Done — ${written} cells written${skipped ? ', ' + skipped + ' skipped (not empty)' : ''}${errors ? ', ' + errors + ' errors' : ''}`);
+  renderCurrentPage();
 }
 
 function printLeaveRequests() {
