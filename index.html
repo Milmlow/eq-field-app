@@ -672,7 +672,7 @@ body.manager-mode .view-only{display:none}
       <label style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
       <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key===&#39;Enter&#39;)checkPin()" oninput="document.getElementById(&#39;gate-err&#39;).textContent=&#39;&#39;" style="">
     </div>
-    <div class="gate-error" id="gate-err">Connection error: Failed to fetch</div>
+    <div class="gate-error" id="gate-err"></div>
     <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px">
       <input type="checkbox" id="gate-remember" checked="" style="width:16px;height:16px;accent-color:var(--purple)">
       <label for="gate-remember" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 7 days</label>
