@@ -651,7 +651,7 @@ body.manager-mode .view-only{display:none}
 <!-- Access gate -->
 <div id="access-gate" class="">
   <div class="gate-card" data-protonpass-form="" style="">
-    <div class="gate-logo"><img src="./index_files/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
+    <div class="gate-logo"><img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
     <div class="gate-title"><span id="gate-org-name">SKS Technologies</span></div>
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
@@ -750,7 +750,7 @@ body.manager-mode .view-only{display:none}
 <!-- ── Sidebar ── -->
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <img src="./index_files/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
+    <img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
     <div style="display:flex;align-items:center;height:52px;border-left:1px solid rgba(255,255,255,.15);padding-left:10px;margin-left:2px">
       <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:25px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">SKS</span>
     </div>
@@ -3672,6 +3672,20 @@ function applyManagerMode() {
   updateMobileLock();
 }
 
+function applyDevMode() {
+  // Show/hide job numbers nav based on dev mode
+  const navJn = document.getElementById('nav-jobnumbers');
+  const ditemJn = document.getElementById('ditem-jobnumbers');
+  if(isDevMode) {
+    if(navJn) navJn.style.display = '';
+    if(ditemJn) ditemJn.style.display = '';
+  } else {
+    if(navJn) navJn.style.display = 'none';
+    if(ditemJn) ditemJn.style.display = 'none';
+  }
+}
+
+
 function toggleManagerMode() {
   if(isManager) {
     auditLog('Locked manager mode', 'Access', null, null);
@@ -3718,6 +3732,7 @@ async function submitManagerPassword() {
       isManager = true;
       currentManagerName = name;
       applyManagerMode();
+      applyDevMode();
       closeModal('modal-manager-pw');
       showToast('Supervision mode unlocked — ' + name);
       auditLog('Unlocked manager mode', 'Access', null, null);
@@ -3820,6 +3835,20 @@ async function checkPin() {
   sessionStorage.removeItem(ACCESS_KEY);
   sessionStorage.removeItem('sks_logged_in_name');
   sessionStorage.removeItem('sks_auto_admin');
+  sessionStorage.removeItem('sks_dev_mode');
+
+  // Dev mode bypass — local only, never sent to server
+  if(val === 'Dev2026') {
+    sessionStorage.setItem(ACCESS_KEY, '1');
+    sessionStorage.setItem('sks_logged_in_name', name || 'Dev');
+    sessionStorage.setItem('sks_auto_admin', '1');
+    sessionStorage.setItem('sks_dev_mode', '1');
+    document.getElementById('access-gate').classList.add('hidden');
+    document.getElementById('gate-pin').value = '';
+    if(!TENANT.ORG_UUID) await loadTenantConfig();
+    initApp();
+    return;
+  }
 
   // Server-side validation — passwords never in client code
   try {
@@ -4580,6 +4609,7 @@ function updateLastUpdated() {
 // AUDIT LOG
 // ─────────────────────────────────────────────────────────────
 let currentManagerName = '';
+let isDevMode = false;
 let auditCache = [];
 
 // Write a log entry to Supabase
@@ -4666,7 +4696,7 @@ function renderAuditLog() {
         <span style="font-size:10px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-top:2px;min-width:42px">${time}</span>
         <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${bg};color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:72px;text-align:center">${r.category}</span>
         <div style="flex:1;min-width:0">
-          <span style="font-weight:600;font-size:12px;color:var(--navy)">${r.manager_name}</span>
+          <span style="font-weight:600;font-size:12px;color:var(--navy)">${r.manager_name||'(unknown)'}</span>
           <span style="font-size:12px;color:var(--ink-2)"> — ${r.action}</span>
           ${r.detail?`<div style="font-size:11px;color:var(--ink-3);margin-top:2px">${r.detail}</div>`:''}
           ${r.week?`<div style="font-size:10px;color:var(--ink-3)">Week ${r.week}</div>`:''}
@@ -5458,8 +5488,13 @@ async function initApp(){
     const dd=String(mon.getDate()).padStart(2,'0'), mm=String(mon.getMonth()+1).padStart(2,'0'), yy=String(mon.getFullYear()).slice(-2);
     return `${dd}.${mm}.${yy}`;
   })();
+  // Always default to current Monday; only restore saved week if it's today or future
   const savedWeek = STATE.currentWeek;
-  const weekToUse = allWeeks.includes(savedWeek) ? savedWeek : (allWeeks.includes(todayStr) ? todayStr : allWeeks[0]);
+  const savedIsCurrentOrFuture = savedWeek && allWeeks.includes(savedWeek) && (() => {
+    const [ds,ms,ys] = savedWeek.split('.'); const [dt,mt,yt] = todayStr.split('.');
+    return new Date(`20${ys}-${ms}-${ds}`) >= new Date(`20${yt}-${mt}-${dt}`);
+  })();
+  const weekToUse = savedIsCurrentOrFuture ? savedWeek : (allWeeks.includes(todayStr) ? todayStr : allWeeks[0]);
   STATE.currentWeek = weekToUse;
   sel.value = weekToUse;
 
@@ -5470,6 +5505,7 @@ async function initApp(){
   document.getElementById('badge-managers').textContent = (STATE.managers||[]).length;
   updateTopStats();
   applyManagerMode();
+  applyDevMode();
 
   // Auto-admin: if logged in with supervision password at the gate, unlock immediately
   if(sessionStorage.getItem('sks_auto_admin') === '1') {
@@ -5481,6 +5517,14 @@ async function initApp(){
     const liEl = document.getElementById('logged-in-as');
     if(liEl) { liEl.textContent = 'Logged in as ' + loggedInName; liEl.style.display = ''; }
     sessionStorage.removeItem('sks_auto_admin');
+    // Dev mode
+    if(sessionStorage.getItem('sks_dev_mode') === '1') {
+      isDevMode = true;
+      sessionStorage.removeItem('sks_dev_mode');
+      const devBadge = document.getElementById('logged-in-as');
+      if(devBadge) devBadge.textContent = loggedInName + ' [DEV]';
+    }
+    applyDevMode();
     showPage('dashboard');
     mobileNav('dashboard');
   }
