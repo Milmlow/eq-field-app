@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/royce/Downloads/index%20(5).html -->
+<!-- saved from url=(0049)file:///C:/Users/royce/Downloads/index%20(6).html -->
 <html lang="en" style="--navy: #1F335C; --navy-2: #1F335Ccc; --purple: #7C77B9; --purple-lt: #7C77B922;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -651,7 +651,7 @@ body.manager-mode .view-only{display:none}
 <!-- Access gate -->
 <div id="access-gate" class="">
   <div class="gate-card" data-protonpass-form="" style="">
-    <div class="gate-logo"><img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
+    <div class="gate-logo"><img src="./index_files/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
     <div class="gate-title"><span id="gate-org-name">SKS Technologies</span></div>
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
@@ -674,7 +674,7 @@ body.manager-mode .view-only{display:none}
     </div>
     <div class="gate-error" id="gate-err"></div>
     <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px">
-      <input type="checkbox" id="gate-remember" checked style="width:16px;height:16px;accent-color:var(--purple)">
+      <input type="checkbox" id="gate-remember" checked="" style="width:16px;height:16px;accent-color:var(--purple)">
       <label for="gate-remember" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 7 days</label>
     </div>
     <button class="gate-btn" onclick="checkPin()">Enter</button>
@@ -750,9 +750,9 @@ body.manager-mode .view-only{display:none}
 <!-- ── Sidebar ── -->
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
+    <img src="./index_files/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
     <div style="display:flex;align-items:center;height:52px;border-left:1px solid rgba(255,255,255,.15);padding-left:10px;margin-left:2px">
-      <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:30px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">NSW</span>
+      <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:30px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">SKS</span>
     </div>
   </div>
   <div class="nav">
@@ -5087,11 +5087,9 @@ async function respondLeave(status) {
     // If approved, check for roster conflicts then write leave codes
     if(status === 'Approved') {
       // LEV-003: Warn about existing roster entries
+      // Always use date_start → date_end for conflict check
       const leaveDates = [];
-      const _days = typeof req.individual_days === 'string' ? (() => { try { return JSON.parse(req.individual_days); } catch(e) { return null; } })() : req.individual_days;
-      if(_days && Array.isArray(_days) && _days.length) {
-        _days.forEach(d => leaveDates.push(d));
-      } else {
+      if(req.date_start && req.date_end) {
         const d = new Date(req.date_start+'T00:00:00');
         const end = new Date(req.date_end+'T00:00:00');
         while(d <= end) { if(d.getDay()!==0 && d.getDay()!==6) leaveDates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
@@ -5124,16 +5122,10 @@ async function respondLeave(status) {
 
 async function writeLeaveToSchedule(req) {
   // Defensive parse: individual_days may be a JSON string (text col) or array (jsonb col)
-  let parsedDays = req.individual_days;
-  if(typeof parsedDays === 'string') {
-    try { parsedDays = JSON.parse(parsedDays); } catch(e) { parsedDays = null; }
-  }
-
-  // Get all dates that need leave codes
+  // Always use date_start → date_end range to cover all working days.
+  // individual_days is unreliable — for range-mode requests it may only contain the start date.
   let dates = [];
-  if(parsedDays && Array.isArray(parsedDays) && parsedDays.length) {
-    dates = parsedDays.map(d => new Date(d+'T00:00:00'));
-  } else {
+  if(req.date_start && req.date_end) {
     const d = new Date(req.date_start+'T00:00:00');
     const end = new Date(req.date_end+'T00:00:00');
     while(d <= end) {
@@ -5180,14 +5172,9 @@ async function pushApprovedLeaveToRoster() {
   for(const req of approved) {
     try {
       // Parse individual_days defensively
-      let parsedDays = req.individual_days;
-      if(typeof parsedDays === 'string') { try { parsedDays = JSON.parse(parsedDays); } catch(e) { parsedDays = null; } }
-
-      // Build date list
+      // Always use date_start → date_end to cover full leave period
       let dates = [];
-      if(parsedDays && Array.isArray(parsedDays) && parsedDays.length) {
-        dates = parsedDays.map(d => new Date(d+'T00:00:00'));
-      } else if(req.date_start && req.date_end) {
+      if(req.date_start && req.date_end) {
         const d = new Date(req.date_start+'T00:00:00');
         const end = new Date(req.date_end+'T00:00:00');
         while(d <= end) { if(d.getDay()!==0 && d.getDay()!==6) dates.push(new Date(d)); d.setDate(d.getDate()+1); }
