@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/royce/Downloads/index%20(6).html -->
+<!-- saved from url=(0049)file:///C:/Users/royce/Downloads/index%20(7).html -->
 <html lang="en" style="--navy: #1F335C; --navy-2: #1F335Ccc; --purple: #7C77B9; --purple-lt: #7C77B922;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -651,7 +651,7 @@ body.manager-mode .view-only{display:none}
 <!-- Access gate -->
 <div id="access-gate" class="">
   <div class="gate-card" data-protonpass-form="" style="">
-    <div class="gate-logo"><img src="./index_files/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
+    <div class="gate-logo"><img id="gate-logo-img" src="./index_files/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="width:90px;height:auto"></div>
     <div class="gate-title"><span id="gate-org-name">SKS Technologies</span></div>
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
@@ -750,9 +750,9 @@ body.manager-mode .view-only{display:none}
 <!-- ── Sidebar ── -->
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <img src="./index_files/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
+    <img id="sidebar-logo-img" src="./index_files/SKS_Logo_White_Arrows_Clean.png" alt="SKS Technologies" style="height:52px;width:auto;flex-shrink:0;display:block">
     <div style="display:flex;align-items:center;height:52px;border-left:1px solid rgba(255,255,255,.15);padding-left:10px;margin-left:2px">
-      <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:30px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">SKS</span>
+      <span id="sidebar-org-name" style="color:rgba(255,255,255,.6);font-size:30px;font-weight:700;letter-spacing:2px;text-transform:uppercase;line-height:1">NSW</span>
     </div>
   </div>
   <div class="nav">
@@ -2400,9 +2400,9 @@ function applyTenantBranding(org) {
   // Gate screen heading
   const gateTitle = document.getElementById('gate-org-name');
   if (gateTitle) gateTitle.textContent = org.name;
-  // Sidebar region label — show short name
+  // Sidebar region label — always NSW for SKS NSW instance
   const sidebarName = document.getElementById('sidebar-org-name');
-  if (sidebarName) sidebarName.textContent = org.name.split(' ')[0].toUpperCase();
+  if (sidebarName) sidebarName.textContent = 'NSW';
   // Gate sub-heading
   const gateSub = document.getElementById('gate-org-name-sub');
   if (gateSub) gateSub.textContent = org.name + ' — Staff Access';
@@ -2414,6 +2414,31 @@ function applyTenantBranding(org) {
   if (org.accent_colour) {
     document.documentElement.style.setProperty('--purple', org.accent_colour);
     document.documentElement.style.setProperty('--purple-lt', org.accent_colour + '22');
+  }
+  // Load logos from app_config so file uploads can never break them
+  loadLogosFromConfig();
+}
+
+async function loadLogosFromConfig() {
+  try {
+    const res = await fetch(
+      SB_URL + '/rest/v1/app_config?key=in.(logo_colour,logo_white)&select=key,value&org_id=eq.' + TENANT.ORG_UUID,
+      { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } }
+    );
+    const rows = await res.json();
+    if(!rows || !rows.length) return;
+    rows.forEach(row => {
+      if(row.key === 'logo_colour') {
+        const el = document.getElementById('gate-logo-img');
+        if(el) el.src = row.value;
+      }
+      if(row.key === 'logo_white') {
+        const el = document.getElementById('sidebar-logo-img');
+        if(el) el.src = row.value;
+      }
+    });
+  } catch(e) {
+    console.warn('Logo config load failed:', e);
   }
 }
 
