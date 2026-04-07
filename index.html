@@ -2559,7 +2559,7 @@ async function loadFromSupabase() {
 }
 
 // ─── Per-table save functions ─────────────────────────────────
-async function savePersonToSB(person) {
+async function savePersonToSB(person, oldName) {
   const row = { name:person.name, phone:person.phone||null, group:person.group, licence:person.licence||null, agency:person.agency||null, email:person.email||null, pin:person.pin||null };
   try {
     const existing = await sbFetch(`people?id=eq.${person.id}&select=id`);
@@ -2572,6 +2572,16 @@ async function savePersonToSB(person) {
   } catch(e) {
     const res = await sbFetch('people', 'POST', row, 'return=representation');
     if(res && res[0]) person.id = res[0].id;
+  }
+
+  // If person was renamed, update all their schedule rows in Supabase
+  if(oldName && oldName !== person.name) {
+    try {
+      await sbFetch(`schedule?name=eq.${encodeURIComponent(oldName)}`, 'PATCH', { name: person.name });
+      console.log('Renamed schedule rows:', oldName, '->', person.name);
+    } catch(e) {
+      console.error('Failed to update schedule rows for rename:', e);
+    }
   }
 
   auditLog(person._isNew ? `Added person: ${person.name}` : `Updated person: ${person.name}`, 'People', person.group||'', null);
@@ -6524,7 +6534,7 @@ function openAddPerson(){
 
 function editPerson(id){
   if(!isManager){ showToast('Supervision access required'); return; }
-  const p=STATE.people.find(x=>x.id===id); if(!p) return;
+  const p=STATE.people.find(x=>x.id===id||x.id===parseInt(id)); if(!p) return;
   document.getElementById('modal-person-title').textContent='Edit Person';
   document.getElementById('person-edit-id').value=id;
   document.getElementById('person-name').value=p.name;
@@ -6550,9 +6560,18 @@ function savePerson(){
   const newPin=(isManager&&/^\d{4}$/.test(pinRaw))?pinRaw:null;
   if(!name){ showToast('Name is required'); return; }
   let person;
+  let oldName = null;
   if(id){
     person=STATE.people.find(x=>x.id===parseInt(id));
-    if(person){ person.name=name;person.phone=phone;person.group=group;person.licence=licence;person.agency=agency;person.email=email; if(newPin) person.pin=newPin; }
+    if(person){
+      oldName = person.name !== name ? person.name : null; // track rename
+      person.name=name;person.phone=phone;person.group=group;person.licence=licence;person.agency=agency;person.email=email;
+      if(newPin) person.pin=newPin;
+      // If renamed, update schedule rows in STATE too
+      if(oldName){
+        STATE.schedule.forEach(r=>{ if(r.name===oldName) r.name=name; });
+      }
+    }
   } else {
     const newId=Math.max(0,...STATE.people.map(p=>p.id))+1;
     person={id:newId,name,phone,group,licence,agency,email,pin:newPin||null};
@@ -6566,7 +6585,7 @@ function savePerson(){
   renderCurrentPage();
   showToast(id?`${name} updated`:`${name} added`);
   auditLog(id?`Updated: ${name}`:`Added: ${name}`, 'People', `Group: ${group}`, null);
-  savePersonToSB(person).catch(e=>showToast('Save failed — check connection'));
+  savePersonToSB(person, oldName).catch(e=>showToast('Save failed — check connection'));
 }
 
 function confirmRemove(id,name){
