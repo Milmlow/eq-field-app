@@ -248,7 +248,8 @@ td.day-cell{text-align:center}
   *{animation:none!important;transition:none!important}
   html,body{background:white;margin:0;padding:0;font-size:11px}
   .shell{display:block;min-height:0}
-  .content{display:block}
+  .content{display:block;height:auto!important;overflow:visible!important}
+  .page{overflow:visible!important}
 
   /* ── Legend bar: show on print with colour dots ── */
   .legend-bar{display:flex!important;flex-wrap:wrap;gap:6px;padding:8px 12px;margin-bottom:12px;border:1px solid #ddd;border-radius:6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -6574,6 +6575,11 @@ function removePerson(id,name){
   updateTopStats();
   renderCurrentPage();
   showToast(`${name} removed`);
+
+  // Delete from Supabase
+  deletePersonFromSB(id).catch(e=>console.error('Delete person failed:',e));
+  // Clear their schedule rows from DB too
+  sbFetch(`schedule?name=eq.${encodeURIComponent(name)}`, 'DELETE').catch(e=>console.error('Delete schedule failed:',e));
 }
 
 // ─────────────────────────────────────────────────────────────
