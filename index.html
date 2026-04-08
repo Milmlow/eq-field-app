@@ -678,9 +678,9 @@ body.manager-mode .view-only{display:none}
     <div class="gate-sub">NSW Labour Forecast — Staff Access</div>
     <div style="margin-bottom:12px;width:100%">
       <label style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
-      <input type="hidden" id="gate-name" value="Royce Milmlow">
+      <input type="hidden" id="gate-name" value="">
       <div id="gate-selected-name" onclick="toggleGateNamePicker()" style="font-size:15px;padding:12px 14px;width:100%;background:var(--surface);color:var(--ink-4);border:2px solid var(--border);border-radius:10px;font-family:inherit;font-weight:600;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:48px">
-        <span id="gate-selected-text" style="color: rgb(31, 51, 92);">Royce Milmlow</span>
+        <span id="gate-selected-text" style="color:var(--ink-4);font-weight:400">— Tap to select your name —</span>
         <span style="font-size:12px;color:var(--ink-4)">▼</span>
       </div>
       <div id="gate-name-picker" style="margin-top: 6px; background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: rgba(0, 0, 0, 0.12) 0px 8px 24px; display: none;">
@@ -817,7 +817,7 @@ body.manager-mode .view-only{display:none}
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">SKS Technologies Pty Ltd</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">ABN 51 168 906 956 &nbsp;|&nbsp; NSW &nbsp;<span id="version-tag" onclick="openModal(&#39;modal-changelog&#39;)" style="color:rgba(255,255,255,.55);cursor:pointer" title="View changelog">v3.0.1</span></span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">ABN 51 168 906 956 &nbsp;|&nbsp; NSW &nbsp;<span id="version-tag" onclick="openModal(&#39;modal-changelog&#39;)" style="color:rgba(255,255,255,.55);cursor:pointer" title="View changelog">v3.0.4</span></span><br>
       <button onclick="openModal(&#39;modal-privacy&#39;)" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy Notice</button>
       &nbsp;·&nbsp;
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
@@ -2000,7 +2000,7 @@ body.manager-mode .view-only{display:none}
         <p>Roster and schedule data: rolling 12 months. Timesheet data: 7 years (Fair Work Act and tax obligations). Contact information: removed within 30 days of your departure from SKS Technologies.</p>
 
         <p style="font-weight:700;color:var(--navy);font-size:13px;margin:14px 0 6px">6. Your Rights</p>
-        <p>Under the Australian Privacy Act 1988 you have the right to <strong>access</strong>, <strong>correct</strong> or request <strong>deletion</strong> of your personal information. Contact: <a href="mailto:royce.milmlow@sks.com.au" style="color:var(--purple)">royce.milmlow@sks.com.au</a> or 0432 944 014.</p>
+        <p>Under the Australian Privacy Act 1988 you have the right to <strong>access</strong>, <strong>correct</strong> or request <strong>deletion</strong> of your personal information. Contact: <a href="/cdn-cgi/l/email-protection#8ffde0f6eceaa1e2e6e3e2e3e0f8cffce4fca1ece0e2a1eefa" style="color:var(--purple)"><span class="__cf_email__" data-cfemail="25574a5c46400b484c4948494a5265564e560b464a480b4450">[email&#160;protected]</span></a> or 0432 944 014.</p>
         <p style="margin-top:6px">If you are not satisfied with our response, you may lodge a complaint with the <strong>Office of the Australian Information Commissioner (OAIC)</strong> at <a href="https://oaic.gov.au/" target="_blank" style="color:var(--purple)">oaic.gov.au</a> or 1300 363 992.</p>
 
         <p style="font-weight:700;color:var(--navy);font-size:13px;margin:14px 0 6px">7. Access Code</p>
@@ -2306,7 +2306,7 @@ body.manager-mode .view-only{display:none}
 </div>
 
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ─────────────────────────────────────────────────────────────
 // SEED DATA
 // ─────────────────────────────────────────────────────────────
@@ -2322,7 +2322,7 @@ const SEED = {"people":[{"id":1,"name":"Aaron Clohessy","group":"SKS Direct","li
 // ─────────────────────────────────────────────────────────────
 // ─── Supabase config ────────────────────────────────────────
 // ─── Cache busting — increment APP_VERSION on every deploy ───
-const APP_VERSION = '3.0.3';
+const APP_VERSION = '3.0.4';
 (function bustCache() {
   const stored = localStorage.getItem('app_version');
   if (stored !== APP_VERSION) {
@@ -2490,7 +2490,7 @@ let STATE = {
   schedule:    [],
   sites:       [],
   managers:    [],
-  currentWeek: localStorage.getItem('sks_currentWeek') || '30.03.26'
+  currentWeek: localStorage.getItem('sks_currentWeek') || ''
 };
 
 function saveCurrentWeek() {
@@ -5796,15 +5796,16 @@ function updateTopStats(){
     }).map(r => r.name)
   );
   const active = STATE.people.filter(p=>!peopleOnLeave.has(p.name)).length;
-  document.getElementById('stat-active').textContent = `${active} active`;
-  document.getElementById('stat-leave').textContent  = `${peopleOnLeave.size} on leave`;
-  document.getElementById('stat-total').textContent  = `${STATE.people.length} total`;
+  const _setEl = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  _setEl('stat-active', `${active} active`);
+  _setEl('stat-leave',  `${peopleOnLeave.size} on leave`);
+  _setEl('stat-total',  `${STATE.people.length} total`);
   const bySite={};
   sched.forEach(r=>days.forEach(d=>{ const s=r[d]; if(s&&!isLeave(s)&&s.trim()) bySite[s]=(bySite[s]||0)+1; }));
-  document.getElementById('sc-direct').textContent = STATE.people.filter(p=>p.group==='SKS Direct').length;
-  document.getElementById('sc-app').textContent    = STATE.people.filter(p=>p.group==='Apprentice').length;
-  document.getElementById('sc-lh').textContent     = STATE.people.filter(p=>p.group==='Labour Hire').length;
-  document.getElementById('sc-sites').textContent  = Object.keys(bySite).length;
+  _setEl('sc-direct', STATE.people.filter(p=>p.group==='SKS Direct').length);
+  _setEl('sc-app',    STATE.people.filter(p=>p.group==='Apprentice').length);
+  _setEl('sc-lh',     STATE.people.filter(p=>p.group==='Labour Hire').length);
+  _setEl('sc-sites',  Object.keys(bySite).length);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -7845,14 +7846,4 @@ function closeCalPanel(){
 <script>
 // Service worker registration
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => {
-        // Force update check on every load
-        reg.update();
-      })
-      .catch(err => console.warn('SW registration failed:', err));
-  });
-}
-</script>
-</body></html>
+  window.addEventListener('load'
