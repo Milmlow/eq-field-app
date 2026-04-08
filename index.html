@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/royce/Downloads/index%20(7).html -->
+<!-- saved from url=(0049)file:///C:/Users/royce/Downloads/index%20(8).html -->
 <html lang="en" style="--navy: #1F335C; --navy-2: #1F335Ccc; --purple: #7C77B9; --purple-lt: #7C77B922;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -764,7 +764,7 @@ body.manager-mode .view-only{display:none}
   <div class="nav">
     <div class="nav-section">
       <div class="nav-label">Forecast</div>
-      <button class="nav-item" onclick="showPage(&#39;dashboard&#39;)" id="nav-dashboard"><span class="nav-icon">◈</span> Dashboard</button>
+      <button class="nav-item" onclick="showPage(&#39;roster&#39;)" id="nav-dashboard" style="display:none"><span class="nav-icon">◈</span> Dashboard</button>
       <button class="nav-item active" onclick="showPage(&#39;schedule&#39;)" id="nav-schedule"><span class="nav-icon">◷</span> My Schedule</button>
       <button class="nav-item" onclick="showPage(&#39;calendar&#39;)" id="nav-calendar"><span class="nav-icon">📅</span> Calendar</button>
       <button class="nav-item" onclick="showPage(&#39;contacts&#39;)" id="nav-contacts"><span class="nav-icon">◉</span> Contacts <span class="nav-badge" id="badge-contacts">51</span></button>
@@ -844,41 +844,6 @@ body.manager-mode .view-only{display:none}
 
   <!-- ── Dashboard ── -->
   <div class="page hidden" id="page-dashboard">
-    <div id="deploy-version-banner" style="display:flex;align-items:center;justify-content:flex-end;padding:4px 12px 0;gap:6px">
-      <span style="font-size:11px;color:var(--ink-3)">Deployed version:</span>
-      <span onclick="openModal(&#39;modal-changelog&#39;)" title="View changelog" style="background:var(--navy);color:white;font-size:11px;font-weight:700;padding:2px 10px;border-radius:12px;cursor:pointer">v3.0.1</span>
-    </div>
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-card-label">⚡ Direct</div>
-        <div class="stat-card-value" id="sc-direct">34</div>
-        <div class="stat-card-sub">SKS employees</div>
-        <div class="stat-accent-bar" style="background:var(--navy)"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-card-label">🎓 Apprentices</div>
-        <div class="stat-card-value" id="sc-app">9</div>
-        <div class="stat-card-sub">On roster</div>
-        <div class="stat-accent-bar" style="background:var(--purple)"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-card-label">🔧 Labour Hire</div>
-        <div class="stat-card-value" id="sc-lh">8</div>
-        <div class="stat-card-sub">Contractors</div>
-        <div class="stat-accent-bar" style="background:var(--navy-3)"></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-card-label">🏗 Active Sites</div>
-        <div class="stat-card-value" id="sc-sites">19</div>
-        <div class="stat-card-sub">This week</div>
-        <div class="stat-accent-bar" style="background:var(--blue)"></div>
-      </div>
-    </div>
-    <div class="section-header"><div class="section-title">Site Breakdown — Per Day</div></div>
-    <div id="dashboard-sites" style="margin-bottom:20px;overflow-x:auto"></div>
-    <div class="section-header"><div class="section-title">Leave &amp; Absences This Week</div></div>
-    <div id="dashboard-leave" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-    <div id="dashboard-leave-requests" style="margin-top:20px"></div>
   </div>
 
   <!-- ── Weekly Roster ── -->
@@ -1627,7 +1592,7 @@ body.manager-mode .view-only{display:none}
   <button class="mobile-nav-item" id="mnav-contacts" onclick="mobileNav(&#39;contacts&#39;)">
     <span class="mnav-icon">◉</span>Contacts
   </button>
-  <button class="mobile-nav-item" id="mnav-dashboard" onclick="mobileNav(&#39;dashboard&#39;)">
+  <button class="mobile-nav-item" id="mnav-dashboard" onclick="mobileNav(&#39;dashboard&#39;)" style="display:none">
     <span class="mnav-icon">📊</span>Dashboard
   </button>
   <button class="mobile-nav-item" id="mnav-leave" onclick="mobileNav(&#39;leave&#39;)">
@@ -1644,7 +1609,7 @@ body.manager-mode .view-only{display:none}
   <div id="mobile-drawer-panel">
     <div class="drawer-handle"></div>
 
-    <button class="drawer-item" onclick="mobileNav(&#39;dashboard&#39;);closeMobileDrawer()" id="ditem-dashboard">
+    <button class="drawer-item" onclick="mobileNav(&#39;dashboard&#39;);closeMobileDrawer()" id="ditem-dashboard" style="display:none">
       <span class="d-icon">◈</span> Dashboard
     </button>
     <button class="drawer-item" onclick="mobileNav(&#39;calendar&#39;);closeMobileDrawer()" id="ditem-calendar"><span class="d-icon">📅</span> Calendar</button>
@@ -5689,8 +5654,8 @@ async function initApp(){
       if(devBadge) devBadge.textContent = loggedInName + ' [DEV]';
     }
     applyDevMode();
-    showPage('dashboard');
-    mobileNav('dashboard');
+    showPage('roster');
+    mobileNav('roster');
   }
 
   // Check for restored agency session
@@ -5881,7 +5846,7 @@ function renderCurrentPage(){
 // ─────────────────────────────────────────────────────────────
 // DASHBOARD
 // ─────────────────────────────────────────────────────────────
-function renderDashboard(){
+function renderDashboard(){ showPage('roster'); return;
   const week = STATE.currentWeek;
   const days=['mon','tue','wed','thu','fri'];
   const dayLabels=['Mon','Tue','Wed','Thu','Fri'];
