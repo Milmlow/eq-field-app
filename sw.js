@@ -1,7 +1,5 @@
-// SKS Labour Forecast — Service Worker
-// Provides offline caching for the app shell
-
-const CACHE_NAME = 'sks-labour-v1';
+// SKS Labour Forecast — Service Worker v3.0.3
+const CACHE_NAME = 'sks-labour-v3';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
@@ -19,12 +17,15 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: clean up ALL old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.filter((key) => key !== CACHE_NAME).map((key) => {
+          console.log('SW: deleting old cache', key);
+          return caches.delete(key);
+        })
       );
     })
   );
@@ -41,7 +42,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for static assets (fonts, images)
+  // Cache-first for fonts
   if (url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com')) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
@@ -55,7 +56,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for the app shell (HTML)
+  // Network-first for the app shell (always get latest HTML)
   if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
       fetch(event.request)
