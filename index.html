@@ -5360,20 +5360,6 @@ function printLeaveRequests() {
     <div class="footer">SKS Technologies Pty Ltd — ABN 51 168 906 956 — NSW Operations</div>
   
 
-
-<script>
-// Service worker registration
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => {
-        // Force update check on every load
-        reg.update();
-      })
-      .catch(err => console.warn('SW registration failed:', err));
-  });
-}
-</script>
 </body></html>`);
   w.document.close();
   setTimeout(() => w.print(), 300);
