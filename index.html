@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 
-<html lang="en" style="--navy: #1F335C; --navy-2: #1F335Ccc; --purple: #7C77B9; --purple-lt: #7C77B922;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<html lang="en" style="--navy: #1F335C; --navy-2: #1F335Ccc; --purple: #7C77B9; --purple-lt: #7C77B922;"><head>
+<script>
+// Immediate SW + cache killer — runs before anything else
+(function(){
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){ r.unregister(); });
+    });
+  }
+  if('caches' in window){
+    caches.keys().then(function(keys){
+      keys.forEach(function(k){ caches.delete(k); });
+    });
+  }
+})();
+</script>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SKS Technologies — Labour Forecast</title>
