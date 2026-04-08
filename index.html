@@ -3891,7 +3891,7 @@ async function checkPin() {
     const resp = await fetch('/.netlify/functions/verify-pin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: val, name: name, remember: document.getElementById('gate-remember').checked })
+      body: JSON.stringify({ code: val.toUpperCase(), name: name, remember: document.getElementById('gate-remember').checked })
     });
     if(!resp.ok && resp.status === 404) {
       document.getElementById('gate-err').textContent = 'Login service not found. Please redeploy the app or contact Royce.';
