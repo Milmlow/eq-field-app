@@ -26,8 +26,13 @@ async function populateGateDropdown() {
     renderGateNameList();
     return;
   }
+  // Tenant-keyed cache — prevents demo names leaking into SKS picker and
+  // vice versa when the same browser has visited both tenants.
+  const cacheKey = 'eq_gate_names_' + TENANT.ORG_SLUG;
   try {
-    const cached = localStorage.getItem('eq_gate_names');
+    // Clean up the legacy un-keyed cache from earlier versions
+    localStorage.removeItem('eq_gate_names');
+    const cached = localStorage.getItem(cacheKey);
     if (cached) gateNameList = JSON.parse(cached);
   } catch (e) {}
   try {
@@ -35,8 +40,8 @@ async function populateGateDropdown() {
     const managers = await sbFetch('managers?select=name,category&order=name.asc');
     gateNameList   = [];
     if (managers && managers.length) managers.forEach(m => gateNameList.push({ name: m.name, group: 'Supervision', sub: m.category || '' }));
-    if (people   && people.length)   people.forEach(p   => gateNameList.push({ name: p.name, group: p.group || '', sub: '' }));
-    try { localStorage.setItem('eq_gate_names', JSON.stringify(gateNameList)); } catch (e) {}
+    if (people   && people.length)   people.forEach(p   => gateNameList.push({ name: p.name, group: normaliseGroupFromDb(p.group) || '', sub: '' }));
+    try { localStorage.setItem(cacheKey, JSON.stringify(gateNameList)); } catch (e) {}
   } catch (e) { console.warn('EQ[gate] could not load names, using cache:', e && e.message || e); }
   renderGateNameList();
 }
@@ -130,14 +135,55 @@ document.addEventListener('click', function(e) {
 
 async function checkPin() {
   const name = document.getElementById('gate-name').value;
-  const val  = document.getElementById('gate-pin').value.trim();
+  const val  = (document.getElementById('gate-pin').value || '').trim();
 
   if (!name) { document.getElementById('gate-err').textContent = 'Please tap and select your name first.'; return; }
-  if (!val)  { document.getElementById('gate-err').textContent = 'Please enter your access code.'; return; }
 
   sessionStorage.removeItem(ACCESS_KEY);
   sessionStorage.removeItem('eq_logged_in_name');
   sessionStorage.removeItem('eq_auto_admin');
+
+  if (!val) { document.getElementById('gate-err').textContent = 'Please enter your access code.'; return; }
+
+  // Client-side access codes (set by tenant branding). Validates locally so
+  // we don't need the Netlify verify-pin function for simple code-gated
+  // tenants. Staff code = view-only; supervisor code = auto-unlock to
+  // Supervision mode.
+  if (window.__TENANT_CODES__) {
+    const codes = window.__TENANT_CODES__;
+    let role = null;
+    if (codes.staff      && val === codes.staff)      role = 'staff';
+    if (codes.supervisor && val === codes.supervisor) role = 'supervisor';
+    if (role) {
+      sessionStorage.setItem(ACCESS_KEY, '1');
+      sessionStorage.setItem('eq_logged_in_name', name);
+      if (role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+      // Persistent "remember me" for tenant-code gate (no server token).
+      try {
+        const remember = document.getElementById('gate-remember');
+        const days = (window.__TENANT_REMEMBER_DAYS__ || 0);
+        if (remember && remember.checked && days > 0) {
+          const payload = {
+            slug:  TENANT.ORG_SLUG,
+            name:  name,
+            role:  role,
+            exp:   Date.now() + (days * 24 * 60 * 60 * 1000)
+          };
+          localStorage.setItem('eq_local_remember_' + TENANT.ORG_SLUG, JSON.stringify(payload));
+        } else {
+          localStorage.removeItem('eq_local_remember_' + TENANT.ORG_SLUG);
+        }
+      } catch (e) {}
+      document.getElementById('access-gate').classList.add('hidden');
+      document.getElementById('gate-pin').value = '';
+      initApp();
+    } else {
+      document.getElementById('gate-err').textContent = 'Incorrect code. Please try again.';
+      document.getElementById('gate-pin').value = '';
+      document.getElementById('gate-pin').focus();
+    }
+    return;
+  }
 
   // Demo mode
   if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
@@ -206,6 +252,23 @@ async function checkPin() {
 
 async function checkAccess() {
   if (sessionStorage.getItem(ACCESS_KEY) === '1') return true;
+
+  // Local "remember me" restore for tenant-code gate (no server).
+  try {
+    const rawLocal = localStorage.getItem('eq_local_remember_' + TENANT.ORG_SLUG);
+    if (rawLocal) {
+      const p = JSON.parse(rawLocal);
+      if (p && p.exp && Date.now() < p.exp && p.slug === TENANT.ORG_SLUG) {
+        sessionStorage.setItem(ACCESS_KEY, '1');
+        sessionStorage.setItem('eq_logged_in_name', p.name || '');
+        if (p.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+        return true;
+      } else {
+        localStorage.removeItem('eq_local_remember_' + TENANT.ORG_SLUG);
+      }
+    }
+  } catch (e) {}
+
   if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
     const token = localStorage.getItem('eq_remember_token');
     if (token) {
@@ -237,6 +300,7 @@ function logoutUser() {
   sessionStorage.removeItem('eq_auto_admin');
   sessionStorage.removeItem('eq_agency');
   localStorage.removeItem('eq_remember_token');
+  try { localStorage.removeItem('eq_local_remember_' + TENANT.ORG_SLUG); } catch (e) {}
   window.location.reload();
 }
 

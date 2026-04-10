@@ -99,7 +99,7 @@
         <div id="gate-name-list" style="max-height:min(300px,50vh);overflow-y:auto;padding:4px 0"></div>
       </div>
     </div>
-    <div style="width:100%">
+    <div id="gate-pin-wrap" style="width:100%">
       <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
       <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
     </div>
@@ -734,7 +734,7 @@ async function loadFromSupabase() {
       sbFetch('timesheets?select=*'),
     ]);
 
-    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'' }));
+    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'' }));
     STATE.sites  = sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:r.site_lead||'', site_lead_phone:r.site_lead_phone||'' }));
 
     // BUG-004 FIX: raw string key — esc() breaks names with & < > chars

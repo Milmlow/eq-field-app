@@ -264,7 +264,7 @@ async function savePersonToSB(person) {
   return _upsertById('people', person, {
     name:    person.name,
     phone:   person.phone   || null,
-    group:   person.group,
+    group:   (typeof denormaliseGroupForDb === 'function' ? denormaliseGroupForDb(person.group) : person.group),
     licence: person.licence || null,
     agency:  person.agency  || null,
     email:   person.email   || null,
@@ -386,7 +386,7 @@ async function importPeopleToSB(people) {
   const rows = people.map(p => ({
     name:    p.name,
     phone:   p.phone   || null,
-    group:   p.group,
+    group:   (typeof denormaliseGroupForDb === 'function' ? denormaliseGroupForDb(p.group) : p.group),
     email:   p.email   || null,
     licence: p.licence || null,
     agency:  p.agency  || null
