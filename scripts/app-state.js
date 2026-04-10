@@ -191,6 +191,14 @@ function applyTenantBranding() {
   const brand = TENANT_BRANDING[TENANT.ORG_SLUG];
   if (!brand) return;
 
+  // Tenant class on <body> so CSS can scope overrides (e.g. `body.tenant-sks`)
+  if (document && document.body) {
+    document.body.classList.forEach(c => {
+      if (c.indexOf('tenant-') === 0) document.body.classList.remove(c);
+    });
+    document.body.classList.add('tenant-' + TENANT.ORG_SLUG);
+  }
+
   // Gate org name
   if (brand.orgName && orgNameEl) orgNameEl.textContent = brand.orgName;
 
@@ -236,37 +244,8 @@ function applyTenantBranding() {
     }
   }
 
-  // White gate card override — re-skin the dark card to match v3.0.4 look
-  if (brand.whiteGateCard) {
-    const card = document.querySelector('#access-gate .gate-card');
-    if (card) {
-      card.style.background        = '#ffffff';
-      card.style.color              = '#1F335C';
-      card.style.border             = '1px solid rgba(31,51,92,.08)';
-      card.style.boxShadow          = '0 20px 60px rgba(13,27,42,.35)';
-    }
-    // Title + subtitle ink colours
-    const titleEl = document.querySelector('#access-gate .gate-title');
-    const subEl   = document.getElementById('gate-sub');
-    if (titleEl) titleEl.style.color = '#1F335C';
-    if (subEl)   subEl.style.color   = 'rgba(31,51,92,.65)';
-    // Remember-me label — ensure legible on white
-    const remLabel = document.getElementById('gate-remember-label');
-    if (remLabel) remLabel.style.color = 'rgba(31,51,92,.75)';
-    // Agency Access button was invisible on the dark card — force visible ink/border
-    const gateCard = document.querySelector('#access-gate .gate-card');
-    if (gateCard) {
-      gateCard.querySelectorAll('button').forEach(btn => {
-        const txt = (btn.textContent || '').trim();
-        if (txt.startsWith('Agency Access')) {
-          btn.style.color        = '#1F335C';
-          btn.style.border       = '1px solid rgba(31,51,92,.35)';
-          btn.style.background   = '#ffffff';
-          btn.style.fontWeight   = '600';
-        }
-      });
-    }
-  }
+  // White gate card styling is handled via body.tenant-sks CSS in base.css.
+  // Nothing to do here for whiteGateCard — CSS does the work.
 
   // Expose client-side access codes to auth.js. When these are set the gate
   // validates locally instead of POSTing to /.netlify/functions/verify-pin.

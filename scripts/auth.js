@@ -131,6 +131,26 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// Global Enter handler on the gate — submits login from anywhere on the
+// gate card (not just the PIN input), so long as focus isn't inside the
+// name-search box or another input that handles its own Enter.
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter') return;
+  const gate = document.getElementById('access-gate');
+  if (!gate || gate.classList.contains('hidden')) return;
+  // Ignore Enter inside the name-search input (that's for filtering)
+  const t = e.target;
+  if (t && t.id === 'gate-name-search') return;
+  // If user has selected a name, submit — otherwise open picker
+  const hasName = (document.getElementById('gate-name') || {}).value;
+  if (!hasName) {
+    if (typeof toggleGateNamePicker === 'function') toggleGateNamePicker();
+    return;
+  }
+  e.preventDefault();
+  if (typeof checkPin === 'function') checkPin();
+});
+
 // ── PIN check (main gate) ─────────────────────────────────────
 
 async function checkPin() {

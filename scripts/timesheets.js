@@ -81,7 +81,7 @@ async function saveTsCell(name, grp, week, day, job, hrs) {
       row[d + '_hrs'] = parseFloat(hVal) || null;
     }
   });
-  sbFetch('timesheets', 'POST', row, 'resolution=merge-duplicates,return=minimal')
+  sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal')
     .catch(() => showToast('Timesheet save failed — check connection'));
 }
 
@@ -616,7 +616,7 @@ function toggleStaffSplit(day, btn) {
   if (!show) row.querySelectorAll('input').forEach(el => { el.value = ''; onStaffTsCellChange(el); });
 }
 
-function onStaffTsCellChange(el) {
+async function onStaffTsCellChange(el) {
   const { name, group, week, day } = el.dataset;
   if (!name || !day) return;
   const root  = document.getElementById('staff-ts-content');
@@ -653,17 +653,28 @@ function onStaffTsCellChange(el) {
     row[d + '_job'] = entry[d + '_job'] || null;
     row[d + '_hrs'] = entry[d + '_hrs'] != null ? parseFloat(entry[d + '_hrs']) || null : null;
   });
-  sbFetch('timesheets', 'POST', row, 'resolution=merge-duplicates,return=minimal')
-    .then(() => {
-      const newTotal = tsTotalHrs(entry);
-      const totalEl  = document.getElementById('staff-ts-total-display');
-      if (totalEl) {
-        const c = newTotal >= 38 ? 'var(--green)' : newTotal > 0 ? 'var(--amber)' : 'var(--ink-3)';
-        totalEl.style.color = c;
-        totalEl.innerHTML   = `${newTotal > 0 ? newTotal + 'h' : '—'} <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.6)">recorded this week</span>`;
-      }
-    })
-    .catch(() => showToast('Save failed — check connection'));
+  // Only report "save failed" when sbFetch itself rejects. UI updates run in a
+  // separate try so a cosmetic exception never masquerades as a failed save.
+  let saveOk = true;
+  try {
+    await sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal');
+  } catch (err) {
+    saveOk = false;
+    console.error('EQ[ts] staff save failed:', err);
+    showToast('Save failed — check connection');
+  }
+  if (!saveOk) return;
+  try {
+    const newTotal = tsTotalHrs(entry);
+    const totalEl  = document.getElementById('staff-ts-total-display');
+    if (totalEl) {
+      const c = newTotal >= 38 ? 'var(--green)' : newTotal > 0 ? 'var(--amber)' : 'var(--ink-3)';
+      totalEl.style.color = c;
+      totalEl.innerHTML   = `${newTotal > 0 ? newTotal + 'h' : '—'} <span style="font-size:13px;font-weight:500;color:rgba(255,255,255,.6)">recorded this week</span>`;
+    }
+  } catch (uiErr) {
+    console.warn('EQ[ts] staff UI update skipped:', uiErr);
+  }
 }
 
 // ── Job Numbers side panel (supervisor timesheet view) ────────
