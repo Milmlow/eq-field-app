@@ -15,10 +15,25 @@ const HOSTNAME_MAP = {
   '127.0.0.1': 'eq',
 };
 
+// Per-tenant Supabase credentials (public anon keys — safe to embed)
+const TENANT_SUPABASE = {
+  sks: {
+    url: 'https://nspbmirochztcjijmcrx.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zcGJtaXJvY2h6dGNqaWptY3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODg2MjQsImV4cCI6MjA5MDI2NDYyNH0.cpwHUqWr7MKaJFP0K7RMt43CytJ_dnPAH3LJ3xEdEdg'
+  }
+};
+
 function _detectTenantSlug() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('tenant')) return params.get('tenant');
-  return HOSTNAME_MAP[window.location.hostname] || 'eq';
+  const h = window.location.hostname;
+  // Exact match first
+  if (HOSTNAME_MAP[h]) return HOSTNAME_MAP[h];
+  // Substring match for Netlify deploy previews and branch deploys
+  // e.g. deploy-preview-1--sks-nsw-labour.netlify.app, v3-3-2-test--sks-nsw-labour.netlify.app
+  if (h.indexOf('sks-nsw-labour') !== -1) return 'sks';
+  if (h.indexOf('eq-solves-field') !== -1) return 'eq';
+  return 'eq';
 }
 
 // ── Tenant config (populated by loadTenantConfig) ─────────────
@@ -53,11 +68,11 @@ async function loadTenantConfig() {
     return;
   }
 
-  // Live tenant — load config from Supabase app_config table
-  // SB_URL and SB_KEY are injected via Netlify environment or hardcoded per-tenant
-  // For SKS: these are set via Netlify env vars SB_URL and SB_KEY
-  SB_URL = window.__SB_URL__ || '';
-  SB_KEY = window.__SB_KEY__ || '';
+  // Live tenant — resolve Supabase credentials from TENANT_SUPABASE map
+  // (falls back to window.__SB_URL__ / window.__SB_KEY__ for override/testing)
+  const tConfig = TENANT_SUPABASE[TENANT.ORG_SLUG] || {};
+  SB_URL = window.__SB_URL__ || tConfig.url || '';
+  SB_KEY = window.__SB_KEY__ || tConfig.key || '';
 
   if (!SB_URL || !SB_KEY) {
     console.error('Missing Supabase config for tenant:', TENANT.ORG_SLUG);
