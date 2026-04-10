@@ -1,77 +1,70 @@
-// SKS Labour Forecast — Service Worker v3.0.3
-const CACHE_NAME = 'sks-labour-v3';
-const SHELL_ASSETS = [
+// EQ Solves — Field  ·  Service Worker  v3.3.2
+const CACHE = 'eq-field-v3.3.2';
+
+const PRECACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap'
+  '/styles/base.css',
+  '/styles/mobile.css',
+  '/styles/print.css',
+  '/scripts/app-state.js',
+  '/scripts/utils.js',
+  '/scripts/supabase.js',
+  '/scripts/roster.js',
+  '/scripts/people.js',
+  '/scripts/sites.js',
+  '/scripts/managers.js',
+  '/scripts/dashboard.js',
+  '/scripts/batch.js',
+  '/scripts/leave.js',
+  '/scripts/timesheets.js',
+  '/scripts/jobnumbers.js',
+  '/scripts/import-export.js',
+  '/scripts/calendar.js',
+  '/scripts/audit.js',
+  '/scripts/auth.js',
+  '/scripts/trial-dashboard.js',
 ];
 
-// Install: cache the app shell
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_ASSETS);
-    })
-  );
+self.addEventListener('install', event => {
   self.skipWaiting();
-});
-
-// Activate: clean up ALL old caches
-self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => {
-          console.log('SW: deleting old cache', key);
-          return caches.delete(key);
-        })
-      );
-    })
+    caches.open(CACHE).then(cache => cache.addAll(PRECACHE)).catch(() => {})
   );
-  self.clients.claim();
 });
 
-// Fetch: network-first for API calls, cache-first for static assets
-self.addEventListener('fetch', (event) => {
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', event => {
+  // Only cache GET requests for same origin
+  if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
 
-  // Network-only for Supabase API and Netlify functions
-  if (url.hostname.includes('supabase.co') || url.pathname.startsWith('/.netlify/')) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // Cache-first for fonts
-  if (url.hostname.includes('fonts.googleapis.com') || url.hostname.includes('fonts.gstatic.com')) {
+  // Network first for HTML, cache first for assets
+  if (event.request.headers.get('accept').includes('text/html')) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return cached || fetch(event.request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
+      fetch(event.request)
+        .then(res => { const c = res.clone(); caches.open(CACHE).then(cache => cache.put(event.request, c)); return res; })
+        .catch(() => caches.match(event.request))
+    );
+  } else {
+    event.respondWith(
+      caches.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(res => {
+          const c = res.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, c));
+          return res;
         });
       })
     );
-    return;
   }
-
-  // Network-first for the app shell (always get latest HTML)
-  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  // Default: try network, fall back to cache
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
 });

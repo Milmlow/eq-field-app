@@ -15,6 +15,17 @@
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
+# Never cache JS/CSS bundles — force fresh on each version
+[[headers]]
+  for = "/scripts/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
+[[headers]]
+  for = "/styles/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"
+
 # Cache static assets aggressively (fonts, icons, manifest)
 [[headers]]
   for = "/manifest.json"
