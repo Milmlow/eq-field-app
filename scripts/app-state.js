@@ -107,11 +107,58 @@ async function loadTenantConfig() {
   applyTenantBranding();
 }
 
+// Per-tenant visual branding (applied after loadTenantConfig)
+const TENANT_BRANDING = {
+  sks: {
+    orgName: 'SKS Technologies',
+    gateSub: 'NSW Labour Forecast — Staff Access',
+    gateLogo: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="height:56px;width:auto"><polygon points="50,8 88,30 88,70 50,92 12,70 12,30" fill="#1F335C"/><polygon points="50,20 76,35 76,65 50,80 24,65 24,35" fill="#fff"/><polygon points="50,28 68,38 68,62 50,72 32,62 32,38" fill="#1F335C"/><polygon points="42,42 58,42 58,58 42,58" fill="#7C77B9"/></svg>',
+    sidebarLogoHtml: '<div style="display:flex;align-items:center;gap:10px;padding:4px 2px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="height:34px;width:auto;flex-shrink:0"><polygon points="50,8 88,30 88,70 50,92 12,70 12,30" fill="#fff"/><polygon points="50,20 76,35 76,65 50,80 24,65 24,35" fill="#1F335C"/><polygon points="50,28 68,38 68,62 50,72 32,62 32,38" fill="#fff"/><polygon points="42,42 58,42 58,58 42,58" fill="#7C77B9"/></svg><div style="display:flex;flex-direction:column;line-height:1.05"><span style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.6px">SKS</span><span style="color:rgba(255,255,255,.55);font-size:9px;font-weight:600;letter-spacing:.4px;margin-top:2px">NSW LABOUR</span></div></div>',
+    hideDemoCodes: true,
+    clearDefaultName: true,
+  }
+};
+
 function applyTenantBranding() {
   const orgNameEl = document.getElementById('gate-org-name');
   const sidebarEl = document.getElementById('sidebar-org-name');
   if (orgNameEl) orgNameEl.textContent = TENANT.ORG_NAME;
   if (sidebarEl) sidebarEl.textContent = TENANT.ORG_SLUG.toUpperCase();
+
+  const brand = TENANT_BRANDING[TENANT.ORG_SLUG];
+  if (!brand) return;
+
+  // Gate org name
+  if (brand.orgName && orgNameEl) orgNameEl.textContent = brand.orgName;
+
+  // Gate subtitle
+  const gateSubEl = document.getElementById('gate-sub');
+  if (brand.gateSub && gateSubEl) gateSubEl.textContent = brand.gateSub;
+
+  // Gate logo
+  const gateLogoEl = document.getElementById('gate-logo');
+  if (brand.gateLogo && gateLogoEl) gateLogoEl.innerHTML = brand.gateLogo;
+
+  // Hide demo access codes block
+  if (brand.hideDemoCodes) {
+    const demoCodesEl = document.getElementById('gate-demo-codes');
+    if (demoCodesEl) demoCodesEl.style.display = 'none';
+  }
+
+  // Clear pre-filled "Demo Supervisor"
+  if (brand.clearDefaultName) {
+    const hiddenName = document.getElementById('gate-name');
+    const selText = document.getElementById('gate-selected-text');
+    if (hiddenName) hiddenName.value = '';
+    if (selText) { selText.textContent = '— Tap to select your name —'; selText.style.color = 'var(--ink-3)'; }
+  }
+
+  // Sidebar logo swap
+  const sidebarWrap = document.getElementById('sidebar-logo-wrap');
+  if (brand.sidebarLogoHtml && sidebarWrap) sidebarWrap.innerHTML = brand.sidebarLogoHtml;
+
+  // Document title
+  if (brand.orgName) document.title = brand.orgName + ' — Field';
 }
 
 // ── App state ─────────────────────────────────────────────────

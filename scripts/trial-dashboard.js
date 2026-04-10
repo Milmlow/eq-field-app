@@ -650,9 +650,9 @@ function renderTrialDashboard() {
 
       <div class="trial-hdr">
         <div class="trial-brand">
-          <div class="trial-logo">EQ</div>
+          <div class="trial-logo">${(typeof TENANT !== 'undefined' && TENANT.ORG_SLUG === 'sks') ? 'SKS' : 'EQ'}</div>
           <div>
-            <div class="trial-title">Workforce Intelligence</div>
+            <div class="trial-title">${(typeof TENANT !== 'undefined' && TENANT.ORG_SLUG === 'sks') ? 'SKS Technologies' : 'Workforce Intelligence'}</div>
             <div class="trial-sub">${esc(orgLabel)} · Labour Forecast</div>
           </div>
         </div>
