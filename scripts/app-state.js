@@ -16,10 +16,16 @@ const HOSTNAME_MAP = {
 };
 
 // Per-tenant Supabase credentials (public anon keys — safe to embed)
+//
+// orgUuidOverride: legacy rows imported under v3.0.4 were stamped with the
+// demo org UUID. Until a proper data migration re-tags them to the SKS
+// organisations.id, we force v3.3.2's org_id filter to use the legacy UUID
+// so existing SKS rows are visible. Remove this override after migrating.
 const TENANT_SUPABASE = {
   sks: {
     url: 'https://nspbmirochztcjijmcrx.supabase.co',
-    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zcGJtaXJvY2h6dGNqaWptY3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODg2MjQsImV4cCI6MjA5MDI2NDYyNH0.cpwHUqWr7MKaJFP0K7RMt43CytJ_dnPAH3LJ3xEdEdg'
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zcGJtaXJvY2h6dGNqaWptY3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODg2MjQsImV4cCI6MjA5MDI2NDYyNH0.cpwHUqWr7MKaJFP0K7RMt43CytJ_dnPAH3LJ3xEdEdg',
+    orgUuidOverride: '2ec74247-43cd-4529-ac3e-d6c5aa4f9e2d'
   }
 };
 
@@ -91,6 +97,13 @@ async function loadTenantConfig() {
         TENANT.ORG_NAME = rows[0].name || TENANT.ORG_NAME;
       }
     }
+    // Apply legacy org_id override if configured for this tenant.
+    // This lets us run v3.3.2 against a Supabase where existing rows were
+    // stamped with a different (legacy) org_id, without re-tagging data.
+    if (tConfig.orgUuidOverride) {
+      console.info('EQ[tenant] Using legacy org_id override for', TENANT.ORG_SLUG, '→', tConfig.orgUuidOverride);
+      TENANT.ORG_UUID = tConfig.orgUuidOverride;
+    }
     // Load app config (manager password etc)
     const cfgResp = await fetch(`${SB_URL}/rest/v1/app_config?org_id=eq.${TENANT.ORG_UUID}&select=key,value`, {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
@@ -112,10 +125,15 @@ const TENANT_BRANDING = {
   sks: {
     orgName: 'SKS Technologies',
     gateSub: 'NSW Labour Forecast — Staff Access',
-    gateLogo: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="height:56px;width:auto"><polygon points="50,8 88,30 88,70 50,92 12,70 12,30" fill="#1F335C"/><polygon points="50,20 76,35 76,65 50,80 24,65 24,35" fill="#fff"/><polygon points="50,28 68,38 68,62 50,72 32,62 32,38" fill="#1F335C"/><polygon points="42,42 58,42 58,58 42,58" fill="#7C77B9"/></svg>',
-    sidebarLogoHtml: '<div style="display:flex;align-items:center;gap:10px;padding:4px 2px"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="height:34px;width:auto;flex-shrink:0"><polygon points="50,8 88,30 88,70 50,92 12,70 12,30" fill="#fff"/><polygon points="50,20 76,35 76,65 50,80 24,65 24,35" fill="#1F335C"/><polygon points="50,28 68,38 68,62 50,72 32,62 32,38" fill="#fff"/><polygon points="42,42 58,42 58,58 42,58" fill="#7C77B9"/></svg><div style="display:flex;flex-direction:column;line-height:1.05"><span style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.6px">SKS</span><span style="color:rgba(255,255,255,.55);font-size:9px;font-weight:600;letter-spacing:.4px;margin-top:2px">NSW LABOUR</span></div></div>',
+    // Real SKS colour-arrows mark (served from Cloudflare R2 — public bucket)
+    gateLogo: '<img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="height:64px;width:auto;display:block;margin:0 auto" />',
+    // White-text full lockup for the dark sidebar
+    sidebarLogoHtml: '<div style="display:flex;align-items:center;padding:6px 4px"><img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_White_Text_Clean.png" alt="SKS Technologies" style="height:38px;width:auto;display:block" /></div>',
     hideDemoCodes: true,
     clearDefaultName: true,
+    whiteGateCard: true,
+    rememberMeDays: 7,
+    gateDisclaimer: 'This system stores employee names, contact details and work schedules. Access is restricted to authorised SKS Technologies staff only. Sharing this URL or access code outside the company is not permitted.',
   }
 };
 
@@ -156,6 +174,53 @@ function applyTenantBranding() {
   // Sidebar logo swap
   const sidebarWrap = document.getElementById('sidebar-logo-wrap');
   if (brand.sidebarLogoHtml && sidebarWrap) sidebarWrap.innerHTML = brand.sidebarLogoHtml;
+
+  // Remember-me duration label
+  if (brand.rememberMeDays) {
+    const remLabel = document.getElementById('gate-remember-label');
+    if (remLabel) remLabel.textContent = 'Remember me for ' + brand.rememberMeDays + ' days';
+  }
+
+  // Disclaimer footer
+  if (brand.gateDisclaimer) {
+    const discEl = document.getElementById('gate-disclaimer');
+    if (discEl) {
+      discEl.textContent = brand.gateDisclaimer;
+      discEl.style.display = 'block';
+    }
+  }
+
+  // White gate card override — re-skin the dark card to match v3.0.4 look
+  if (brand.whiteGateCard) {
+    const card = document.querySelector('#access-gate .gate-card');
+    if (card) {
+      card.style.background        = '#ffffff';
+      card.style.color              = '#1F335C';
+      card.style.border             = '1px solid rgba(31,51,92,.08)';
+      card.style.boxShadow          = '0 20px 60px rgba(13,27,42,.35)';
+    }
+    // Title + subtitle ink colours
+    const titleEl = document.querySelector('#access-gate .gate-title');
+    const subEl   = document.getElementById('gate-sub');
+    if (titleEl) titleEl.style.color = '#1F335C';
+    if (subEl)   subEl.style.color   = 'rgba(31,51,92,.65)';
+    // Remember-me label — ensure legible on white
+    const remLabel = document.getElementById('gate-remember-label');
+    if (remLabel) remLabel.style.color = 'rgba(31,51,92,.75)';
+    // Agency Access button was invisible on the dark card — force visible ink/border
+    const gateCard = document.querySelector('#access-gate .gate-card');
+    if (gateCard) {
+      gateCard.querySelectorAll('button').forEach(btn => {
+        const txt = (btn.textContent || '').trim();
+        if (txt.startsWith('Agency Access')) {
+          btn.style.color        = '#1F335C';
+          btn.style.border       = '1px solid rgba(31,51,92,.35)';
+          btn.style.background   = '#ffffff';
+          btn.style.fontWeight   = '600';
+        }
+      });
+    }
+  }
 
   // Document title
   if (brand.orgName) document.title = brand.orgName + ' — Field';
