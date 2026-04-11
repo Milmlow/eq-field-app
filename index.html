@@ -44,6 +44,7 @@
 <script src="scripts/import-export.js"></script>
 <script src="scripts/calendar.js"></script>
 <script src="scripts/audit.js"></script>
+<script src="scripts/realtime.js"></script>
 <script src="scripts/auth.js"></script>
 </head>
 <body>
@@ -634,6 +635,35 @@
 <!-- Confirm modal -->
 <div class="modal-overlay" id="modal-confirm" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="confirm-title">Confirm</h3><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div><div class="modal-body"><p id="confirm-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6"></p></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancel</button><button class="btn btn-danger" id="confirm-action">Confirm</button></div></div></div>
 
+<!-- Cell edit conflict modal -->
+<div class="modal-overlay" id="modal-cell-conflict" style="z-index:450">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3>Edit Conflict</h3>
+      <button class="modal-close" onclick="closeModal('modal-cell-conflict')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin-bottom:14px">
+        Another user updated this cell while you were editing. Which value should win?
+      </p>
+      <div id="conflict-meta" style="font-size:11px;color:var(--ink-3);margin-bottom:14px;padding:8px 10px;background:var(--surface-2);border-radius:6px;line-height:1.6"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button id="conflict-keep-mine" class="btn btn-primary" style="padding:14px;flex-direction:column;gap:4px;display:flex;align-items:center">
+          <span style="font-size:11px;opacity:.8;font-weight:500">Use mine</span>
+          <span id="conflict-mine-val" style="font-size:16px;font-weight:700"></span>
+        </button>
+        <button id="conflict-use-theirs" class="btn btn-secondary" style="padding:14px;flex-direction:column;gap:4px;display:flex;align-items:center">
+          <span style="font-size:11px;opacity:.8;font-weight:500">Use theirs</span>
+          <span id="conflict-theirs-val" style="font-size:16px;font-weight:700"></span>
+        </button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-cell-conflict')">Decide later</button>
+    </div>
+  </div>
+</div>
+
 <!-- Manager modal -->
 <div class="modal-overlay" id="modal-manager"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="modal-manager-title">Add Contact</h3><button class="modal-close" onclick="closeModal('modal-manager')">✕</button></div><div class="modal-body"><input type="hidden" id="manager-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Name</label><input class="form-input" id="manager-name" placeholder="e.g. Ian Marston"></div><div class="form-group"><label class="form-label">Category</label><select class="form-select" id="manager-category"><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select></div></div><div class="form-group"><label class="form-label">Role</label><input class="form-input" id="manager-role" placeholder="e.g. Project Manager"></div><div class="form-row"><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="manager-phone" placeholder="04XX XXX XXX"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="manager-email" placeholder="name@example.com" type="email"></div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager')">Cancel</button><button class="btn btn-primary" onclick="saveManager()">Save</button></div></div></div>
 
@@ -1016,6 +1046,9 @@ async function initApp() {
 
   // Start background polling for live tenants
   startPolling();
+
+  // Start Supabase Realtime (live multi-user updates on schedule table).
+  if (typeof startRealtime === 'function') startRealtime();
 }
 
 window.onload = async function() {

@@ -338,61 +338,99 @@ async function deleteSiteFromSB(id) {
 async function saveCellToSB(name, week, day, val) {
   const existing = STATE.schedule.find(r => r.name === name && r.week === week);
 
-  // Conflict detection — check if row was modified by someone else
-  if (existing && existing.id && existing.updated_at) {
-    try {
-      const current = await sbFetch('schedule?id=eq.' + existing.id + '&select=updated_at');
-      if (current && current[0] && current[0].updated_at !== existing.updated_at) {
-        showToast('⚠ This row was modified by someone else. Syncing latest data…');
-        await refreshData();
-        return;
-      }
-    } catch (e) { /* non-blocking */ }
-  }
-
   if (existing && existing.id && !String(existing.id).startsWith('temp')) {
-    // True upsert — UNIQUE (name, week, org_id) constraint exists
+    // ── TRUE COMPARE-AND-SWAP ──────────────────────────────────
+    // PATCH with both id=eq.<id> AND updated_at=eq.<stamp>. PostgREST
+    // returns the updated rows only if the WHERE clause matched — so an
+    // empty array means someone else beat us to it. No TOCTOU window.
     const patch = {}; patch[day] = val || null;
-    await sbFetch(`schedule?id=eq.${existing.id}`, 'PATCH', patch);
-  } else {
-    // No DB row yet — lock to prevent duplicate POSTs for same name+week
-    const lockKey = `${name}||${week}`;
-    if (_sbPendingRows[lockKey]) {
-      await _sbPendingRows[lockKey];
-      const entry = STATE.schedule.find(r => r.name === name && r.week === week);
-      if (entry && entry.id) {
-        const patch = {}; patch[day] = val || null;
-        await sbFetch(`schedule?id=eq.${entry.id}`, 'PATCH', patch);
+    let res;
+    try {
+      if (existing.updated_at) {
+        const enc = encodeURIComponent(existing.updated_at);
+        res = await sbFetch(
+          `schedule?id=eq.${existing.id}&updated_at=eq.${enc}`,
+          'PATCH', patch, 'return=representation'
+        );
+      } else {
+        // First write for this row in this session — no stamp to match on yet.
+        res = await sbFetch(
+          `schedule?id=eq.${existing.id}`,
+          'PATCH', patch, 'return=representation'
+        );
       }
+    } catch (e) {
+      // Network/queue path already handled by sbFetch; bail out.
       return;
     }
-    const row = {
-      name, week,
-      mon: null, tue: null, wed: null, thu: null,
-      fri: null, sat: null, sun: null
-    };
-    if (existing) {
-      Object.assign(row, {
-        mon: existing.mon || null, tue: existing.tue || null,
-        wed: existing.wed || null, thu: existing.thu || null,
-        fri: existing.fri || null, sat: existing.sat || null,
-        sun: existing.sun || null
-      });
+
+    if (Array.isArray(res) && res.length === 0 && existing.updated_at) {
+      // Lost the race — fetch the latest server state and ask the user.
+      try {
+        const latest = await sbFetch('schedule?id=eq.' + existing.id + '&select=*');
+        const server = latest && latest[0];
+        if (server && typeof showCellConflict === 'function') {
+          showCellConflict({
+            name, week, day,
+            mine:   val || null,
+            theirs: server[day] || null,
+            server, local: existing
+          });
+        } else if (typeof refreshData === 'function') {
+          if (typeof showToast === 'function') showToast('⚠ Row updated elsewhere — syncing latest.');
+          await refreshData();
+        }
+      } catch (e) { /* non-blocking */ }
+      return;
     }
-    row[day] = val || null;
-    const postPromise = sbFetch('schedule', 'POST', row, 'return=representation');
-    _sbPendingRows[lockKey] = postPromise;
-    try {
-      const res = await postPromise;
-      if (existing && res && res[0]) {
-        existing.id         = res[0].id;
-        existing.updated_at = res[0].updated_at;
-      }
-      // Update index
-      if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = existing || res[0];
-    } finally {
-      delete _sbPendingRows[lockKey];
+
+    // Success — stamp local row from the returned representation.
+    if (Array.isArray(res) && res[0]) {
+      existing.updated_at = res[0].updated_at;
+      if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
     }
+    return;
+  }
+
+  // No DB row yet — lock to prevent duplicate POSTs for same name+week.
+  // Cross-device safety is provided by the UNIQUE (name, week, org_id)
+  // constraint; this lock handles same-tab double-submits.
+  const lockKey = `${name}||${week}`;
+  if (_sbPendingRows[lockKey]) {
+    await _sbPendingRows[lockKey];
+    const entry = STATE.schedule.find(r => r.name === name && r.week === week);
+    if (entry && entry.id) {
+      const patch = {}; patch[day] = val || null;
+      await sbFetch(`schedule?id=eq.${entry.id}`, 'PATCH', patch, 'return=representation');
+    }
+    return;
+  }
+  const row = {
+    name, week,
+    mon: null, tue: null, wed: null, thu: null,
+    fri: null, sat: null, sun: null
+  };
+  if (existing) {
+    Object.assign(row, {
+      mon: existing.mon || null, tue: existing.tue || null,
+      wed: existing.wed || null, thu: existing.thu || null,
+      fri: existing.fri || null, sat: existing.sat || null,
+      sun: existing.sun || null
+    });
+  }
+  row[day] = val || null;
+  const postPromise = sbFetch('schedule', 'POST', row, 'return=representation');
+  _sbPendingRows[lockKey] = postPromise;
+  try {
+    const res = await postPromise;
+    if (existing && res && res[0]) {
+      existing.id         = res[0].id;
+      existing.updated_at = res[0].updated_at;
+      if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
+    }
+    if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = existing || res[0];
+  } finally {
+    delete _sbPendingRows[lockKey];
   }
 }
 
