@@ -255,6 +255,7 @@ async function checkPin() {
       sessionStorage.setItem('eq_logged_in_name', name);
       if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
       if (data.token) localStorage.setItem('eq_remember_token', data.token);
+      if (data.sessionToken) sessionStorage.setItem('eq_session_token', data.sessionToken);
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
@@ -303,6 +304,7 @@ async function checkAccess() {
           sessionStorage.setItem(ACCESS_KEY, '1');
           sessionStorage.setItem('eq_logged_in_name', data.name);
           if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+          if (data.sessionToken) sessionStorage.setItem('eq_session_token', data.sessionToken);
           return true;
         }
       } catch (e) {}
@@ -319,6 +321,7 @@ function logoutUser() {
   sessionStorage.removeItem('eq_logged_in_name');
   sessionStorage.removeItem('eq_auto_admin');
   sessionStorage.removeItem('eq_agency');
+  sessionStorage.removeItem('eq_session_token');
   localStorage.removeItem('eq_remember_token');
   try { localStorage.removeItem('eq_local_remember_' + TENANT.ORG_SLUG); } catch (e) {}
   window.location.reload();

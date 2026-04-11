@@ -66,7 +66,11 @@ exports.handler = async (event) => {
     if (body.action === 'verify-token') {
       const data = verifyToken(body.token);
       if (data) {
-        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role }) };
+        // Mint a fresh 8h session token so in-app features (EQ Agent)
+        // keep working for the user even though we're validating a
+        // long-lived remember-me token here.
+        const sessionToken = signToken(data.name, data.role, Date.now() + (8 * 60 * 60 * 1000));
+        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }
@@ -98,14 +102,21 @@ exports.handler = async (event) => {
       record.lockedUntil = 0;
       await logAttempt(name, true, ip);
 
+      // Long-lived "remember me" token (7d) for the PIN gate bypass.
       let token = null;
       if (remember) {
-        token = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000)); // 7 days
+        token = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000));
       }
+
+      // Short-lived session token (8h) — ALWAYS issued. Used by
+      // in-app features like EQ Agent so any logged-in user can
+      // call protected Netlify functions without re-auth, but
+      // the token dies when the working day ends.
+      const sessionToken = signToken(name, role, now + (8 * 60 * 60 * 1000));
 
       return {
         statusCode: 200, headers,
-        body: JSON.stringify({ valid: true, role, token })
+        body: JSON.stringify({ valid: true, role, token, sessionToken })
       };
     } else {
       record.count++;

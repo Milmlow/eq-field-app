@@ -1104,12 +1104,7 @@ if ('serviceWorker' in navigator) {
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
-  <div id="eq-agent-key-screen">
-    <p>Enter your Anthropic API key to activate EQ Agent.<br>Stored in session memory only — clears when you close the tab.</p>
-    <input id="eq-agent-key-field" type="password" placeholder="sk-ant-…" autocomplete="off" onkeydown="if(event.key==='Enter') eqAgent.saveKey()">
-    <button id="eq-agent-key-btn" onclick="eqAgent.saveKey()">Activate →</button>
-  </div>
-  <div id="eq-agent-chat" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+  <div id="eq-agent-chat" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
     <div id="eq-agent-messages"></div>
     <div id="eq-agent-quick">
       <button class="eq-qbtn" onclick="eqAgent.send('Who is available this week?')">Who's available?</button>
@@ -1129,28 +1124,25 @@ if ('serviceWorker' in navigator) {
 <script>
 const eqAgent = (function() {
   'use strict';
-  const SESSION_KEY = 'eq_agent_api_key';
-  let panelOpen = false;
+  let panelOpen   = false;
   let chatHistory = [];
+  let greeted     = false;
+
+  function getSessionToken() {
+    // Short-lived 8h token issued by verify-pin on login.
+    // Fall back to the long-lived remember-me token if present.
+    return sessionStorage.getItem('eq_session_token')
+        || localStorage.getItem('eq_remember_token')
+        || null;
+  }
 
   function toggle() {
     panelOpen = !panelOpen;
     document.getElementById('eq-agent-panel').classList.toggle('open', panelOpen);
-    if (panelOpen && sessionStorage.getItem(SESSION_KEY)) showChat();
-  }
-
-  function saveKey() {
-    const key = (document.getElementById('eq-agent-key-field').value || '').trim();
-    if (!key.startsWith('sk-ant-')) { alert("That doesn't look like an Anthropic key — it should start with sk-ant-"); return; }
-    sessionStorage.setItem(SESSION_KEY, key);
-    showChat();
-    addMsg('agent', 'Hi! I\'m the EQ Field Agent.\n\nI can see your current roster, staff list and sites. Try:\n• "Who\'s available Thursday?"\n• "Any gaps at SITE-A this week?"\n• "Suggest fill-ins for Monday"');
-  }
-
-  function showChat() {
-    document.getElementById('eq-agent-key-screen').style.display = 'none';
-    const chat = document.getElementById('eq-agent-chat');
-    chat.style.display = 'flex'; chat.style.flexDirection = 'column'; chat.style.flex = '1'; chat.style.overflow = 'hidden';
+    if (panelOpen && !greeted) {
+      addMsg('agent', 'Hi! I\'m the EQ Field Agent.\n\nI can see your current roster, staff list and sites. Try:\n• "Who\'s available Thursday?"\n• "Any gaps at Equinix this week?"\n• "Suggest fill-ins for Monday"');
+      greeted = true;
+    }
   }
 
   function addMsg(role, text) {
@@ -1180,11 +1172,14 @@ const eqAgent = (function() {
   }
 
   async function send(overrideText) {
-    const input  = document.getElementById('eq-agent-input');
-    const text   = (overrideText || input.value || '').trim();
+    const input = document.getElementById('eq-agent-input');
+    const text  = (overrideText || input.value || '').trim();
     if (!text) return;
-    const apiKey = sessionStorage.getItem(SESSION_KEY);
-    if (!apiKey) { alert('No API key — re-open the panel and enter your key.'); return; }
+    const token = getSessionToken();
+    if (!token) {
+      addMsg('agent', 'Your session has expired. Please log out and log back in.');
+      return;
+    }
     input.value = ''; input.style.height = 'auto';
     addMsg('user', text);
     const sendBtn = document.getElementById('eq-agent-send-btn');
@@ -1192,14 +1187,28 @@ const eqAgent = (function() {
     chatHistory.push({ role:'user', content:text });
     const thinking = addMsg('thinking', 'Thinking');
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('/.netlify/functions/eq-agent', {
         method:  'POST',
-        headers: { 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-        body:    JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:512, system:buildSystemPrompt(), messages:chatHistory })
+        headers: {
+          'Content-Type': 'application/json',
+          'x-eq-token':   token
+        },
+        body: JSON.stringify({
+          system:   buildSystemPrompt(),
+          messages: chatHistory
+        })
       });
-      const data  = await resp.json();
-      if (!resp.ok) throw new Error((data.error&&data.error.message)||('API error '+resp.status));
-      const reply = (data.content&&data.content[0]&&data.content[0].text)||'(no response)';
+      const data = await resp.json();
+      if (!resp.ok) {
+        // 401 → token expired/invalid → ask user to re-login
+        if (resp.status === 401) {
+          thinking.remove();
+          addMsg('agent', 'Your session has expired. Please log out and log back in to continue using EQ Agent.');
+          return;
+        }
+        throw new Error(data.error || ('API error ' + resp.status));
+      }
+      const reply = data.reply || '(no response)';
       chatHistory.push({ role:'assistant', content:reply });
       thinking.remove();
       addMsg('agent', reply);
@@ -1215,10 +1224,9 @@ const eqAgent = (function() {
   document.addEventListener('DOMContentLoaded', function() {
     const ta = document.getElementById('eq-agent-input');
     if (ta) ta.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 90) + 'px'; });
-    if (sessionStorage.getItem(SESSION_KEY)) showChat();
   });
 
-  return { toggle, saveKey, send };
+  return { toggle, send };
 })();
 </script>
 
