@@ -24,6 +24,15 @@ function isLeave(code) {
   return LEAVE_TERMS.some(t => u === t || u.startsWith(t));
 }
 
+// Used by the "Leave & Absences" panels — excludes Public Holidays.
+// PH is a site-wide closure, not someone being absent.
+function isAbsence(code) {
+  if (!code || !code.trim()) return false;
+  const u = code.toUpperCase().trim();
+  if (u === 'PH') return false;
+  return isLeave(code);
+}
+
 // ── Schedule access ───────────────────────────────────────────
 function getWeekSchedule(week) {
   return STATE.schedule.filter(r => r.week === week);
@@ -172,23 +181,14 @@ function renderRosterDayView(people, days, dayLabels, weekDates) {
   const isMobile = window.innerWidth <= 768;
   if (!isMobile) return null; // desktop uses table view
 
-  syncRosterActiveDay();
-  const activeDay   = days[rosterActiveDay];
-  const activeLbl   = dayLabels[rosterActiveDay];
-  const activeDate  = weekDates[rosterActiveDay];
-
   const hint = document.getElementById('roster-swipe-hint');
-  if (hint) hint.style.display = rosterHasInteracted ? 'none' : 'flex';
+  if (hint) hint.style.display = 'none';
 
-  // Day nav pills
-  let html = '<div class="day-pills">';
-  days.forEach((d, i) => {
-    html += `<button class="day-pill${i === rosterActiveDay ? ' active' : ''}" onclick="setRosterDay(${i})">${dayLabels[i]}<span class="day-pill-date">${weekDates[i]}</span></button>`;
-  });
-  html += '</div>';
-
-  // Cards for active day
-  html += `<div class="roster-day-header"><span>${activeLbl} ${activeDate}</span><span>${people.filter(p => { const s = getPersonSchedule(p.name, STATE.currentWeek); return s[activeDay] && !isLeave(s[activeDay]); }).length} on site</span></div>`;
+  // Full-week compact view: one row per person, chip per day (Mon–Fri + sat/sun if used).
+  let html = `<div class="roster-week-hdr">
+    <div class="rwh-day rwh-name">Name</div>
+    ${days.map((d, i) => `<div class="rwh-day"><span class="rwh-lbl">${dayLabels[i]}</span><span class="rwh-date">${weekDates[i]}</span></div>`).join('')}
+  </div>`;
 
   const groups = ['Direct', 'Apprentice', 'Labour Hire'];
   groups.forEach(g => {
@@ -196,16 +196,16 @@ function renderRosterDayView(people, days, dayLabels, weekDates) {
     if (!gp.length) return;
     const gClass = g === 'Apprentice' ? 'apprentice' : g === 'Labour Hire' ? 'labour' : 'direct';
     const gIcon  = g === 'Apprentice' ? '🎓' : g === 'Labour Hire' ? '🔧' : '⚡';
-    html += `<div class="group-strip ${gClass}"><span>${gIcon}</span><span>${g}</span></div>`;
+    html += `<div class="group-strip ${gClass}"><span>${gIcon}</span><span>${g}</span><span class="group-strip-count">${gp.length}</span></div>`;
     gp.forEach(p => {
-      const s    = getPersonSchedule(p.name, STATE.currentWeek);
-      const code = s[activeDay] || '';
-      const col  = siteColor(code);
-      const name = getSiteName(code);
-      html += `<div class="roster-card-mobile">
-        <div class="rcm-name">${esc(p.name)}</div>
-        <div class="rcm-site chip chip-${col}">${code ? esc(code) : '—'}</div>
-        ${code && !isLeave(code) && name !== code ? `<div class="rcm-fullname">${esc(name)}</div>` : ''}
+      const s = getPersonSchedule(p.name, STATE.currentWeek);
+      html += `<div class="roster-week-row">
+        <div class="rwr-name">${esc(p.name)}</div>
+        ${days.map(d => {
+          const code = s[d] || '';
+          const col  = siteColor(code);
+          return `<div class="rwr-cell"><span class="rwr-chip chip-${col}">${code ? esc(code) : '·'}</span></div>`;
+        }).join('')}
       </div>`;
     });
   });

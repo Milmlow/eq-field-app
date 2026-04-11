@@ -171,7 +171,72 @@
   .page { padding-bottom: 72px; }
 
   /* ── Swipe hint ──────────────────────────────────── */
-  #roster-swipe-hint { display: flex; }
+  #roster-swipe-hint { display: none !important; }
+
+  /* ── Mobile roster — full-week compact grid ─────── */
+  .roster-week-hdr {
+    display: flex;
+    gap: 3px;
+    padding: 6px 4px 4px;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    z-index: 2;
+    border-bottom: 1px solid var(--border);
+  }
+  .rwh-day {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .rwh-day.rwh-name { flex: 0 0 78px; align-items: flex-start; padding-left: 6px; }
+  .rwh-lbl  { font-size: 10px; color: var(--navy); font-weight: 800; }
+  .rwh-date { font-size: 8px; color: var(--ink-4); font-weight: 500; margin-top: 1px; }
+
+  .roster-week-row {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    padding: 5px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rwr-name {
+    flex: 0 0 78px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: 4px;
+  }
+  .rwr-cell { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
+  .rwr-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    padding: 4px 4px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .chip-blue   { background: var(--blue-lt);   color: var(--blue); }
+  .chip-green  { background: var(--green-lt);  color: var(--green); }
+  .chip-amber  { background: var(--amber-lt);  color: var(--amber); }
+  .chip-red    { background: var(--red-lt);    color: var(--red); }
+  .chip-purple { background: var(--purple-lt); color: var(--purple); }
+  .chip-grey   { background: var(--surface-2); color: var(--ink-3); }
+  .chip-empty  { background: transparent; color: var(--ink-4); font-weight: 400; }
 
 }
 

@@ -7,6 +7,8 @@
 
 // ── Internals ────────────────────────────────────────────────
 let _sbOnline = true;
+let _sbHealthFails = 0;                 // consecutive health-check failures
+const _SB_HEALTH_FAIL_THRESHOLD = 2;    // require N misses before flipping offline
 const _writeQueue = [];
 const _sbPendingRows = {}; // lock: concurrent POSTs for same name+week
 const MAX_WRITE_RETRIES = 5;
@@ -125,6 +127,7 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
       throw new Error(res.status + ': ' + err);
     }
     _sbOnline = true;
+    _sbHealthFails = 0;
     if (method !== 'GET' && !isDemo) {
       _pendingWriteCount = Math.max(0, _pendingWriteCount - 1);
       if (_pendingWriteCount === 0) _setSaveIndicator('saved');
@@ -215,15 +218,32 @@ function updateOnlineStatus(forceOffline) {
 }
 
 async function checkSupabaseHealth() {
+  // Skip polling entirely when the browser reports offline — no point hammering.
+  if (!navigator.onLine) { updateOnlineStatus(); return; }
+  // Skip when there are no queued writes AND we're currently healthy — reduces
+  // false "cannot reach server" flickers from intermittent CORS / network hiccups.
   try {
     const resp = await fetch(SB_URL + '/rest/v1/', {
       method: 'HEAD',
       headers: { 'apikey': SB_KEY },
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store'
     });
-    _sbOnline = resp.ok;
+    if (resp.ok) {
+      _sbHealthFails = 0;
+      if (!_sbOnline) {
+        _sbOnline = true;
+        flushWriteQueue();
+      }
+    } else {
+      _sbHealthFails++;
+      if (_sbHealthFails >= _SB_HEALTH_FAIL_THRESHOLD) _sbOnline = false;
+    }
   } catch (e) {
-    _sbOnline = false;
+    _sbHealthFails++;
+    // Only flip offline after N consecutive failures — single blips shouldn't
+    // show the "Cannot reach server" banner.
+    if (_sbHealthFails >= _SB_HEALTH_FAIL_THRESHOLD) _sbOnline = false;
   }
   updateOnlineStatus();
 }

@@ -1,22 +1,29 @@
 {
-  "name": "EQ Solves — Field",
-  "short_name": "EQ Field",
-  "description": "Labour forecasting and roster management for field teams",
+  "name": "SKS Labour",
+  "short_name": "SKS Labour",
+  "description": "Labour forecasting and roster management for SKS field teams",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1F335C",
+  "background_color": "#0D1B2A",
   "theme_color": "#1F335C",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjM2IiBmaWxsPSIjMUYzMzVDIi8+PHRleHQgeD0iOTYiIHk9IjEzMCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjkwIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjM0RBOEQ4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5FUTwvdGV4dD48L3N2Zz4=",
+      "src": "icons/favicon-192x192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9Ijg0IiBmaWxsPSIjMUYzMzVDIi8+PHRleHQgeD0iMjU2IiB5PSIzNDUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyNDAiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiMzREE4RDgiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkVRPC90ZXh0Pjwvc3ZnPg==",
+      "src": "icons/favicon-512x512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml"
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ]
 }

@@ -158,11 +158,11 @@ function renderDashboard() {
   const sitesEl = document.getElementById('dashboard-sites');
   if (sitesEl) sitesEl.innerHTML = sitesHtml;
 
-  // Leave summary chips
-  const onLeave = sched.filter(r => days.some(d => isLeave(r[d])));
+  // Leave summary chips — exclude Public Holidays (site-wide, not an absence)
+  const onLeave = sched.filter(r => days.some(d => isAbsence(r[d])));
   const leaveHtml = onLeave.length
     ? onLeave.map(r => {
-        const codes = [...new Set(days.map(d => r[d]).filter(v => v && isLeave(v)))];
+        const codes = [...new Set(days.map(d => r[d]).filter(v => v && isAbsence(v)))];
         const code  = codes[0] || 'LVE';
         return `<span style="background:var(--amber-lt);border:1px solid #FDE68A;border-radius:7px;padding:4px 11px;font-size:11.5px;font-weight:600;color:var(--amber)">${esc(r.name)} <span style="font-size:9px;opacity:.7">${code}</span></span>`;
       }).join('')

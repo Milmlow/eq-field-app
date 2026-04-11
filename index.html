@@ -10,7 +10,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
 <link rel="manifest" href="/manifest.json">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI2IiBmaWxsPSIjMUExQTJFIi8+PHRleHQgeD0iMTYiIHk9IjIyIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZm9udC13ZWlnaHQ9IjcwMCIgZmlsbD0iIzNEQThEOCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RVE8L3RleHQ+PC9zdmc+">
+<!-- SKS Labour — Favicon & Home Screen Icons -->
+<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48x48.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/favicon-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/favicon-512x512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -576,9 +583,7 @@
 <nav id="mobile-nav">
   <button class="mobile-nav-item" id="mnav-roster" onclick="mobileNav('roster')"><span class="mnav-icon">⊞</span>Roster</button>
   <button class="mobile-nav-item active" id="mnav-schedule" onclick="mobileNav('schedule')"><span class="mnav-icon">◷</span>My Week</button>
-  <button class="mobile-nav-item" id="mnav-contacts" onclick="mobileNav('contacts')"><span class="mnav-icon">◉</span>Contacts</button>
   <button class="mobile-nav-item" id="mnav-dashboard" onclick="mobileNav('dashboard')"><span class="mnav-icon">📊</span>Dashboard</button>
-  <button class="mobile-nav-item" id="mnav-leave" onclick="mobileNav('leave')"><span class="mnav-icon">🏖</span>Leave</button>
   <button class="mobile-nav-item" id="mnav-more" onclick="openMobileDrawer()"><span class="mnav-icon">☰</span>More</button>
 </nav>
 
@@ -591,6 +596,8 @@
     <button class="drawer-item" onclick="mobileNav('calendar');closeMobileDrawer()" id="ditem-calendar"><span class="d-icon">📅</span> Calendar</button>
     <button class="drawer-item" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
     <button class="drawer-item" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
+    <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
+    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences</button>
     <div class="drawer-divider"></div>
     <div class="drawer-label">Manage</div>
     <button class="drawer-item edit-only" onclick="mobileNav('editor');closeMobileDrawer()" id="ditem-editor"><span class="d-icon">✎</span> Edit Roster</button>
@@ -600,7 +607,6 @@
     <div class="drawer-divider"></div>
     <div class="drawer-label">Testing</div>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
-    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave <span class="beta-tag">BETA</span></button>
     <button class="drawer-item edit-only" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
     <div class="drawer-divider"></div>
@@ -907,9 +913,9 @@ function refreshPersonSelects() {
 }
 
 // ── Mobile nav ────────────────────────────────────────────────
-// Must match the 5 bottom-bar buttons in <nav id="mobile-nav"> (excluding 'more')
-const MOBILE_NAV_PAGES  = ['roster','schedule','contacts','dashboard','leave'];
-const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','editor','data','help','jobnumbers','leave','timesheets','trial'];
+// Must match the bottom-bar buttons in <nav id="mobile-nav"> (excluding 'more')
+const MOBILE_NAV_PAGES  = ['roster','schedule','dashboard'];
+const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial'];
 
 function mobileNav(id) {
   showPage(id);
