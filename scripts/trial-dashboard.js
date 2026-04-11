@@ -159,11 +159,16 @@
   .kpi-delta.eq{color:var(--t-ink-3);font-weight:500}
 
   /* ── Main grid ──────────────────────────────── */
-  .trial-grid-main{display:grid;grid-template-columns:1.6fr 1fr;gap:18px}
+  .trial-grid-main{display:grid;grid-template-columns:1.6fr 1fr;gap:20px;align-items:stretch}
   @media(max-width:1100px){.trial-grid-main{grid-template-columns:1fr}}
+  .trial-grid-main > .trial-card.site-card{
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .trial-grid-main > .trial-card.site-card .sites-scan{flex:1 1 auto;min-height:0}
+  .trial-grid-main > .right-col{display:flex;flex-direction:column;gap:20px;min-height:0}
 
   /* ── Site list ──────────────────────────────── */
-  .sites-scan{max-height:460px;overflow-y:auto;padding-right:4px;margin:-6px}
+  .sites-scan{overflow-y:auto;padding:2px 8px 6px 0;margin:0 -8px 0 -6px}
   .sites-scan::-webkit-scrollbar{width:6px}
   .sites-scan::-webkit-scrollbar-thumb{background:rgba(0,180,228,.3);border-radius:3px}
   .site-row{
@@ -212,7 +217,9 @@
   .diag .d .l{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t-ink-3);margin-top:6px;font-weight:700}
 
   /* ── Activity feed ──────────────────────────────── */
-  .feed{max-height:220px;overflow-y:auto;font-size:12px}
+  .feed{max-height:240px;overflow-y:auto;font-size:12px}
+  .feed.feed-wide{max-height:300px;display:grid;grid-template-columns:repeat(2,1fr);gap:0 28px}
+  @media(max-width:900px){.feed.feed-wide{grid-template-columns:1fr}}
   .feed .line{
     padding:11px 0;border-bottom:1px solid var(--t-border);
     display:flex;gap:12px;color:var(--t-ink-2);
@@ -503,7 +510,7 @@ function renderTrialDashboard() {
     blue:'#3D7BFF', green:'#10B981', amber:'#FFC857', red:'#FF5267',
     purple:'#8B5CF6', grey:'#6B7D95'
   };
-  const siteRows = sitesSorted.slice(0, 12).map(([abbr, d]) => {
+  const siteRows = sitesSorted.map(([abbr, d]) => {
     const full = (typeof getSiteName === 'function') ? getSiteName(abbr) : abbr;
     const col  = (typeof siteColor === 'function') ? siteColor(abbr) : 'amber';
     const pct  = Math.round((d.total / maxSiteTotal) * 100);
@@ -670,12 +677,12 @@ function renderTrialDashboard() {
       <div class="trial-grid-top">${kpiHtml}</div>
 
       <div class="trial-grid-main">
-        <div class="trial-card" style="min-height:500px">
+        <div class="trial-card site-card">
           <h3>Site Allocation · This Week</h3>
           <div class="sites-scan">${siteRows}</div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="right-col">
           <div class="trial-card">
             <h3>Headcount Trend · 6 Weeks</h3>
             ${sparkSVG}
@@ -695,12 +702,12 @@ function renderTrialDashboard() {
             <div class="heatmap">${heatCells}</div>
             ${diag}
           </div>
-
-          <div class="trial-card">
-            <h3>Recent Activity</h3>
-            <div class="feed">${feedHtml}</div>
-          </div>
         </div>
+      </div>
+
+      <div class="trial-card" style="margin-top:20px">
+        <h3>Recent Activity</h3>
+        <div class="feed feed-wide">${feedHtml}</div>
       </div>
 
       <div class="trial-footer">

@@ -8,7 +8,9 @@
 // ── Internals ────────────────────────────────────────────────
 let _sbOnline = true;
 let _sbHealthFails = 0;                 // consecutive health-check failures
-const _SB_HEALTH_FAIL_THRESHOLD = 2;    // require N misses before flipping offline
+const _SB_HEALTH_FAIL_THRESHOLD = 3;    // require N misses before flipping offline
+let _sbWriteFails = 0;                  // consecutive network-level write failures
+const _SB_WRITE_FAIL_THRESHOLD = 2;     // same, for writes in sbFetch()
 const _writeQueue = [];
 const _sbPendingRows = {}; // lock: concurrent POSTs for same name+week
 const MAX_WRITE_RETRIES = 5;
@@ -128,6 +130,7 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
     }
     _sbOnline = true;
     _sbHealthFails = 0;
+    _sbWriteFails = 0;
     if (method !== 'GET' && !isDemo) {
       _pendingWriteCount = Math.max(0, _pendingWriteCount - 1);
       if (_pendingWriteCount === 0) _setSaveIndicator('saved');
@@ -135,19 +138,32 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
     const text = await res.text();
     return text ? JSON.parse(text) : [];
   } catch (err) {
-    // Queue writes for later if offline (but not 4xx client errors — those will keep failing)
-    const msg = String(err && err.message || err);
+    // Distinguish a genuine network failure (fetch threw — TypeError / AbortError /
+    // DNS / CORS / offline) from an HTTP error response (throw above, msg like
+    // "500: …"). HTTP errors should NOT trip the offline banner — the server is
+    // clearly reachable, the request was just rejected. Only network-level
+    // failures count toward flipping `_sbOnline = false`, and only after N
+    // consecutive strikes so a single blip never shows the banner.
+    const msg           = String(err && err.message || err);
     const isClientError = /^4\d\d:/.test(msg);
+    const isHttpError   = /^\d{3}:/.test(msg);           // any 3xx/4xx/5xx from server
+    const isNetworkFail = !isHttpError;                  // fetch itself threw
+
     if (method !== 'GET' && !isClientError) {
+      // Queue non-GETs so we don't lose user edits — this is safe for both
+      // network blips AND transient 5xx.
       _writeQueue.push({ path, method, body, prefer, retries: 0 });
       try { localStorage.setItem('eq_write_queue', JSON.stringify(_writeQueue)); } catch (e) {}
-      _sbOnline = false;
-      updateOnlineStatus();
       if (!isDemo) {
         _pendingWriteCount = Math.max(0, _pendingWriteCount - 1);
         _setSaveIndicator('error');
       }
-      _sbLog('warn', 'queued', method + ' ' + path);
+      if (isNetworkFail) {
+        _sbWriteFails++;
+        if (_sbWriteFails >= _SB_WRITE_FAIL_THRESHOLD) _sbOnline = false;
+      }
+      updateOnlineStatus();
+      _sbLog('warn', 'queued', method + ' ' + path + ' (' + msg + ')');
       return [];
     }
     throw err;
@@ -220,29 +236,38 @@ function updateOnlineStatus(forceOffline) {
 async function checkSupabaseHealth() {
   // Skip polling entirely when the browser reports offline — no point hammering.
   if (!navigator.onLine) { updateOnlineStatus(); return; }
-  // Skip when there are no queued writes AND we're currently healthy — reduces
-  // false "cannot reach server" flickers from intermittent CORS / network hiccups.
+  // Skip in demo / eq tenants — no DB configured, banner stays hidden.
+  if (_isDemoTenant() || !SB_URL) { return; }
+
+  // Use a real PostgREST endpoint that ALWAYS responds — `people?select=id&limit=1`
+  // is cheap, cache-busted, and returns 200 even for empty tables.
+  // (HEAD on /rest/v1/ can return non-2xx depending on PostgREST build.)
+  const url = SB_URL + '/rest/v1/people?select=id&limit=1';
   try {
-    const resp = await fetch(SB_URL + '/rest/v1/', {
-      method: 'HEAD',
-      headers: { 'apikey': SB_KEY },
-      signal: AbortSignal.timeout(8000),
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'apikey':        SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Accept':        'application/json',
+        'Range-Unit':    'items',
+        'Range':         '0-0'
+      },
+      signal: AbortSignal.timeout(10000),
       cache: 'no-store'
     });
-    if (resp.ok) {
-      _sbHealthFails = 0;
-      if (!_sbOnline) {
-        _sbOnline = true;
-        flushWriteQueue();
-      }
-    } else {
-      _sbHealthFails++;
-      if (_sbHealthFails >= _SB_HEALTH_FAIL_THRESHOLD) _sbOnline = false;
+    // Any response (200, 206 partial-content, even 401/403 auth) means the
+    // server is REACHABLE. The banner is about network reachability, not
+    // authorization. Only a thrown fetch counts as "cannot reach".
+    _sbHealthFails = 0;
+    if (!_sbOnline) {
+      _sbOnline = true;
+      flushWriteQueue();
     }
   } catch (e) {
+    // Network-level failure only (TypeError, AbortError, DNS, etc.)
     _sbHealthFails++;
-    // Only flip offline after N consecutive failures — single blips shouldn't
-    // show the "Cannot reach server" banner.
+    _sbLog('warn', 'health', 'strike ' + _sbHealthFails + '/' + _SB_HEALTH_FAIL_THRESHOLD + ' — ' + (e && e.message || e));
     if (_sbHealthFails >= _SB_HEALTH_FAIL_THRESHOLD) _sbOnline = false;
   }
   updateOnlineStatus();

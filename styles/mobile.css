@@ -171,7 +171,15 @@
   .page { padding-bottom: 72px; }
 
   /* ── Swipe hint ──────────────────────────────────── */
-  #roster-swipe-hint { display: none !important; }
+  #roster-swipe-hint {
+    display: block;
+    text-align: center;
+    font-size: 10px;
+    color: var(--ink-3);
+    padding: 4px 0 6px;
+    opacity: .7;
+    letter-spacing: .3px;
+  }
 
   /* ── Mobile roster — full-week compact grid ─────── */
   .roster-week-hdr {
