@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════════════════════
+   EQ Solves — Field  ·  print.css
+   ═══════════════════════════════════════════════════════ */
+
+@media print {
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  body { font-size: 11px; background: white; }
+
+  .sidebar, #mobile-nav, #mobile-drawer,
+  .topbar-actions, #eq-agent-fab, #eq-agent-panel,
+  #offline-banner, #last-updated-bar,
+  .filter-row, .section-actions,
+  .modal-overlay, #loading-overlay,
+  .toast, .edit-only, .btn,
+  #roster-swipe-hint { display: none !important; }
+
+  .shell   { display: block; height: auto; overflow: visible; }
+  .content { overflow: visible; }
+  .topbar  { display: none; }
+
+  .page { display: block !important; overflow: visible; padding: 0; }
+  .page:not(.print-active) { display: none !important; }
+
+  .roster-card { border: 1px solid #ccc; box-shadow: none; break-inside: avoid; }
+  .stats-row   { break-inside: avoid; }
+  .stat-card   { border: 1px solid #ccc; }
+
+  thead tr { background: #1F335C !important; color: white !important; }
+  tr:nth-child(even) td { background: #f5f5f5 !important; }
+
+  table { page-break-inside: auto; }
+  tr    { page-break-inside: avoid; }
+
+  .chip-blue   { background: #EFF4FF !important; color: #2563EB !important; }
+  .chip-green  { background: #F0FDF4 !important; color: #16A34A !important; }
+  .chip-amber  { background: #FFFBEB !important; color: #D97706 !important; }
+  .chip-red    { background: #FEF2F2 !important; color: #DC2626 !important; }
+  .chip-purple { background: #EEEDF8 !important; color: #7C77B9 !important; }
+  .chip-grey   { background: #F8FAFC !important; color: #64748B !important; }
+
+  #roster-print-header { display: block !important; margin-bottom: 12px; }
+  .legend-bar { display: flex !important; }
+
+  a { text-decoration: none; color: inherit; }
+}
