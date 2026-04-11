@@ -177,59 +177,11 @@ function getRosterPeopleForGroup(group) {
   return sortPeople(filtered, rosterSort.col, rosterSort.dir);
 }
 
-// Attach horizontal swipe handlers to #roster-content once, so swiping L/R
-// moves between weeks. Idempotent — safe to call on every render.
-function _ensureRosterSwipeBound() {
-  const el = document.getElementById('roster-content');
-  if (!el || el._swipeBound) return;
-  el._swipeBound = true;
-
-  let startX = 0, startY = 0, startT = 0, tracking = false;
-
-  el.addEventListener('touchstart', (e) => {
-    if (!e.touches || !e.touches.length) return;
-    // Ignore swipes that start on an input / select / editable cell
-    const tgt = e.target;
-    if (tgt && tgt.closest && tgt.closest('input,select,textarea,button,.rwr-chip[contenteditable]')) return;
-    startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    startT = Date.now();
-    tracking = true;
-  }, { passive: true });
-
-  el.addEventListener('touchmove', (e) => {
-    if (!tracking) return;
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-    // If clearly vertical, abandon — let the page scroll.
-    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 12) tracking = false;
-  }, { passive: true });
-
-  el.addEventListener('touchend', (e) => {
-    if (!tracking) return;
-    tracking = false;
-    const t   = e.changedTouches[0];
-    const dx  = t.clientX - startX;
-    const dy  = t.clientY - startY;
-    const dt  = Date.now() - startT;
-    // Require mostly-horizontal, at least 60px, within 700ms.
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || dt > 700) return;
-    if (typeof slideRosterWeek === 'function') {
-      slideRosterWeek(dx < 0 ? 1 : -1);
-    }
-  }, { passive: true });
-}
-
+// Legacy single-day mobile view — superseded by the unified table view that
+// scrolls horizontally on phones. Kept as a stub so any stale call sites from
+// older bundles still return null and fall through to the desktop renderer.
 function renderRosterDayView(people, days, dayLabels, weekDates) {
-  const isMobile = window.innerWidth <= 768;
-  if (!isMobile) return null; // desktop uses table view
-
-  const hint = document.getElementById('roster-swipe-hint');
-  if (hint) {
-    hint.style.display = '';
-    hint.textContent   = '← Swipe to change week →';
-  }
-  _ensureRosterSwipeBound();
+  return null;
 
   // Full-week compact view: one row per person, chip per day (Mon–Fri + sat/sun if used).
   let html = `<div class="roster-week-hdr">
@@ -277,12 +229,11 @@ function renderRoster() {
   const groups = ['Direct', 'Apprentice', 'Labour Hire'].filter(g => !groupFilter || g === groupFilter);
   const allPeople = groups.flatMap(g => getRosterPeopleForGroup(g));
 
-  if (isMobile) {
-    const mobileHtml = renderRosterDayView(allPeople, days, dayLabels, weekDates);
-    if (mobileHtml) { document.getElementById('roster-content').innerHTML = mobileHtml; return; }
-  }
-
-  // Desktop table view
+  // Unified table view — desktop and mobile both render the same table,
+  // mobile gets horizontal scroll via .table-scroll overflow-x:auto.
+  // Hide the stale swipe hint if present (kept only for old markup compat).
+  const hint = document.getElementById('roster-swipe-hint');
+  if (hint) hint.style.display = 'none';
   const colMap = { blue:'var(--blue)', green:'var(--green)', amber:'var(--amber)', red:'var(--red)', purple:'var(--purple)', grey:'var(--ink-3)', empty:'var(--ink-4)' };
   const bgMap  = { blue:'var(--blue-lt)', green:'var(--green-lt)', amber:'var(--amber-lt)', red:'var(--red-lt)', purple:'var(--purple-lt)', grey:'var(--surface-2)', empty:'transparent' };
 

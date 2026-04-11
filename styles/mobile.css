@@ -170,81 +170,63 @@
   /* ── Page padding for nav ────────────────────────── */
   .page { padding-bottom: 72px; }
 
-  /* ── Swipe hint ──────────────────────────────────── */
-  #roster-swipe-hint {
-    display: block;
-    text-align: center;
-    font-size: 10px;
-    color: var(--ink-3);
-    padding: 4px 0 6px;
-    opacity: .7;
-    letter-spacing: .3px;
-  }
+  /* ── Swipe hint hidden (no longer needed) ────────── */
+  #roster-swipe-hint { display: none !important; }
 
-  /* ── Mobile roster — full-week compact grid ─────── */
-  .roster-week-hdr {
-    display: flex;
-    gap: 3px;
-    padding: 6px 4px 4px;
+  /* ── Mobile roster — horizontally scrollable table ─
+     Same markup as desktop, but the .table-scroll wrapper
+     becomes a horizontally-scrolling viewport so the full
+     week is always visible by scrolling left/right. Sticky
+     name column stays pinned. */
+  #page-roster .table-scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    border-radius: var(--radius);
+  }
+  #page-roster .roster-card table {
+    min-width: 560px;              /* wider than any phone — forces scroll */
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+  }
+  #page-roster .roster-card th,
+  #page-roster .roster-card td {
+    padding: 8px 6px;
+    white-space: nowrap;
+  }
+  #page-roster .roster-card th.name-col,
+  #page-roster .roster-card td.name-col {
     position: sticky;
-    top: 0;
+    left: 0;
+    z-index: 3;
     background: var(--surface);
-    z-index: 2;
-    border-bottom: 1px solid var(--border);
-  }
-  .rwh-day {
-    flex: 1 1 0;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    font-weight: 700;
-    color: var(--ink-3);
-    text-transform: uppercase;
-    letter-spacing: .04em;
-  }
-  .rwh-day.rwh-name { flex: 0 0 78px; align-items: flex-start; padding-left: 6px; }
-  .rwh-lbl  { font-size: 10px; color: var(--navy); font-weight: 800; }
-  .rwh-date { font-size: 8px; color: var(--ink-4); font-weight: 500; margin-top: 1px; }
-
-  .roster-week-row {
-    display: flex;
-    gap: 3px;
-    align-items: center;
-    padding: 5px 4px;
-    border-bottom: 1px solid var(--border);
-  }
-  .rwr-name {
-    flex: 0 0 78px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--navy);
+    min-width: 120px;
+    max-width: 140px;
+    text-align: left;
+    box-shadow: 2px 0 4px -2px rgba(13, 27, 42, .12);
+    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    padding-left: 4px;
   }
-  .rwr-cell { flex: 1 1 0; min-width: 0; display: flex; justify-content: center; }
-  .rwr-chip {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 30px;
-    padding: 4px 4px;
-    border-radius: 5px;
+  #page-roster .roster-card th.name-col { z-index: 4; background: var(--surface-2); }
+  #page-roster .roster-card th.center,
+  #page-roster .roster-card td.center {
+    min-width: 56px;
+    scroll-snap-align: start;
+  }
+  #page-roster .roster-card th.center {
     font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
+    background: var(--surface-2);
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
-  .chip-blue   { background: var(--blue-lt);   color: var(--blue); }
-  .chip-green  { background: var(--green-lt);  color: var(--green); }
-  .chip-amber  { background: var(--amber-lt);  color: var(--amber); }
-  .chip-red    { background: var(--red-lt);    color: var(--red); }
-  .chip-purple { background: var(--purple-lt); color: var(--purple); }
-  .chip-grey   { background: var(--surface-2); color: var(--ink-3); }
-  .chip-empty  { background: transparent; color: var(--ink-4); font-weight: 400; }
+  /* Group strip sits above scrollable table — full width, not scrolled */
+  #page-roster .group-strip { position: relative; z-index: 5; }
+  /* Make the whole roster page slightly tighter on phone */
+  #page-roster .roster-card { padding: 0; }
 
 }
 
