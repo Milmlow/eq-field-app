@@ -1129,9 +1129,12 @@ const eqAgent = (function() {
   let greeted     = false;
 
   function getSessionToken() {
-    // Short-lived 8h token issued by verify-pin on login.
-    // Fall back to the long-lived remember-me token if present.
-    return sessionStorage.getItem('eq_session_token')
+    // 7-day agent token in localStorage (preferred — survives reloads
+    // and works for tenant-code-gated tenants like SKS that don't go
+    // through the server-side PIN flow on every login).
+    // Fallbacks: in-tab session token, then long-lived remember-me token.
+    return localStorage.getItem('eq_agent_token')
+        || sessionStorage.getItem('eq_session_token')
         || localStorage.getItem('eq_remember_token')
         || null;
   }
@@ -1177,7 +1180,7 @@ const eqAgent = (function() {
     if (!text) return;
     const token = getSessionToken();
     if (!token) {
-      addMsg('agent', 'Your session has expired. Please log out and log back in.');
+      addMsg('agent', 'Agent not authorised yet. Click your name in the top-right → Log out, then log back in with your PIN. (One-time setup after this update.)');
       return;
     }
     input.value = ''; input.style.height = 'auto';
@@ -1203,7 +1206,7 @@ const eqAgent = (function() {
         // 401 → token expired/invalid → ask user to re-login
         if (resp.status === 401) {
           thinking.remove();
-          addMsg('agent', 'Your session has expired. Please log out and log back in to continue using EQ Agent.');
+          addMsg('agent', 'Agent session expired. Log out and log back in to refresh your access.');
           return;
         }
         throw new Error(data.error || ('API error ' + resp.status));

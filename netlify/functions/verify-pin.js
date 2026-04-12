@@ -69,7 +69,7 @@ exports.handler = async (event) => {
         // Mint a fresh 8h session token so in-app features (EQ Agent)
         // keep working for the user even though we're validating a
         // long-lived remember-me token here.
-        const sessionToken = signToken(data.name, data.role, Date.now() + (8 * 60 * 60 * 1000));
+        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
         return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
@@ -108,11 +108,13 @@ exports.handler = async (event) => {
         token = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000));
       }
 
-      // Short-lived session token (8h) — ALWAYS issued. Used by
-      // in-app features like EQ Agent so any logged-in user can
-      // call protected Netlify functions without re-auth, but
-      // the token dies when the working day ends.
-      const sessionToken = signToken(name, role, now + (8 * 60 * 60 * 1000));
+      // 7-day session token — ALWAYS issued. Used by in-app
+      // features like EQ Agent so any logged-in user can call
+      // protected Netlify functions without re-auth. 7 days
+      // matches the long-lived remember-me window so a user who
+      // stays logged in across the week never gets locked out
+      // of the agent mid-session.
+      const sessionToken = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000));
 
       return {
         statusCode: 200, headers,
