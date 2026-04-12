@@ -51,7 +51,7 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.3.2
+  EQ Solves — Field  v3.3.3
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   WHAT LIVES WHERE
@@ -235,7 +235,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.3.2</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.3.3</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
@@ -259,7 +259,7 @@
     <span class="pill pill-amber" id="stat-leave">— on leave</span>
     <span class="pill pill-blue" id="stat-total">— total</span>
     <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshData()" title="Refresh data">↻ Sync</button>
+      <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshData()" title="Refresh data"><span class="hide-mobile">↻ Sync</span><span class="show-mobile">↻</span></button>
       <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print</button>
       <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ CSV</button>
     </div>
@@ -581,11 +581,12 @@
 <!-- ═══════════════════════════════════════════════════════════
      MOBILE BOTTOM NAV + DRAWER
      ═══════════════════════════════════════════════════════════ -->
-<nav id="mobile-nav">
-  <button class="mobile-nav-item" id="mnav-roster" onclick="mobileNav('roster')"><span class="mnav-icon">⊞</span>Roster</button>
-  <button class="mobile-nav-item active" id="mnav-schedule" onclick="mobileNav('schedule')"><span class="mnav-icon">◷</span>My Week</button>
-  <button class="mobile-nav-item" id="mnav-dashboard" onclick="mobileNav('dashboard')"><span class="mnav-icon">📊</span>Dashboard</button>
-  <button class="mobile-nav-item" id="mnav-more" onclick="openMobileDrawer()"><span class="mnav-icon">☰</span>More</button>
+<nav id="mobile-nav" aria-label="Main navigation">
+  <button class="mobile-nav-item active" id="mnav-dashboard" onclick="mobileNav('dashboard')" aria-label="Dashboard"><span class="mnav-icon">📊</span>Home</button>
+  <button class="mobile-nav-item" id="mnav-roster" onclick="mobileNav('roster')" aria-label="Roster"><span class="mnav-icon">⊞</span>Roster</button>
+  <button class="mobile-nav-item" id="mnav-schedule" onclick="mobileNav('schedule')" aria-label="My Week"><span class="mnav-icon">◷</span>My Week</button>
+  <button class="mobile-nav-item" id="mnav-calendar" onclick="mobileNav('calendar')" aria-label="Calendar"><span class="mnav-icon">📅</span>Calendar</button>
+  <button class="mobile-nav-item" id="mnav-more" onclick="openMobileDrawer()" aria-label="More options"><span class="mnav-icon">☰</span>More</button>
 </nav>
 
 <div id="mobile-drawer">
@@ -598,7 +599,6 @@
     <button class="drawer-item" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
     <button class="drawer-item" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
     <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
-    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences</button>
     <div class="drawer-divider"></div>
     <div class="drawer-label">Manage</div>
     <button class="drawer-item edit-only" onclick="mobileNav('editor');closeMobileDrawer()" id="ditem-editor"><span class="d-icon">✎</span> Edit Roster</button>
@@ -607,6 +607,7 @@
     <button class="drawer-item" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
     <div class="drawer-divider"></div>
     <div class="drawer-label">Testing</div>
+    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
@@ -944,7 +945,7 @@ function refreshPersonSelects() {
 
 // ── Mobile nav ────────────────────────────────────────────────
 // Must match the bottom-bar buttons in <nav id="mobile-nav"> (excluding 'more')
-const MOBILE_NAV_PAGES  = ['roster','schedule','dashboard'];
+const MOBILE_NAV_PAGES  = ['dashboard','roster','schedule','calendar'];
 const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial'];
 
 function mobileNav(id) {
@@ -960,6 +961,43 @@ function mobileNav(id) {
 
 function openMobileDrawer()  { const d = document.getElementById('mobile-drawer'); if (d) { d.classList.add('open'); updateMobileLock(); } }
 function closeMobileDrawer() { const d = document.getElementById('mobile-drawer'); if (d) d.classList.remove('open'); }
+
+// ── Swipe-down-to-close for mobile drawer ──────────────────
+(function() {
+  let startY = 0, currentY = 0, dragging = false;
+  const panel = () => document.getElementById('mobile-drawer-panel');
+  const drawer = () => document.getElementById('mobile-drawer');
+
+  document.addEventListener('touchstart', function(e) {
+    const p = panel();
+    if (!p || !drawer()?.classList.contains('open')) return;
+    if (!p.contains(e.target)) return;
+    // Only start drag if at scroll top or on the handle
+    if (p.scrollTop > 0 && !e.target.closest('.drawer-handle')) return;
+    startY = e.touches[0].clientY;
+    currentY = startY;
+    dragging = true;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    currentY = e.touches[0].clientY;
+    const dy = currentY - startY;
+    if (dy > 0) {
+      const p = panel();
+      if (p) p.style.transform = `translateY(${dy}px)`;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', function() {
+    if (!dragging) return;
+    dragging = false;
+    const dy = currentY - startY;
+    const p = panel();
+    if (p) p.style.transform = '';
+    if (dy > 80) closeMobileDrawer();
+  }, { passive: true });
+})();
 
 // ── Help tabs ─────────────────────────────────────────────────
 function showHelpTab(tab) {

@@ -1,16 +1,59 @@
 /* ═══════════════════════════════════════════════════════
    EQ Solves — Field  ·  mobile.css
+   v3.3.3 — mobile polish pass
    ═══════════════════════════════════════════════════════ */
 
 @media (max-width: 768px) {
 
+  /* ── Visibility helpers ───────────────────────────── */
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: inline !important; }
+
   /* ── Layout ──────────────────────────────────────── */
   .sidebar   { display: none; }
   .content   { margin-left: 0 !important; }
-  .topbar    { padding: 8px 12px; gap: 6px; }
-  .topbar-title { font-size: 15px; }
+  .topbar    {
+    padding: 8px 12px;
+    gap: 6px;
+    flex-wrap: nowrap;            /* single row on mobile */
+    overflow: hidden;
+  }
+  .topbar-title { font-size: 15px; flex-shrink: 0; }
+
+  /* Hide stat pills + action buttons — declutter mobile header */
+  .topbar .pill { display: none; }
   .topbar-actions .btn { display: none; }
+
+  /* Show a compact sync icon on mobile */
+  .topbar-actions .btn#refresh-btn {
+    display: inline-flex;
+    min-height: 36px;
+    min-width: 36px;
+    padding: 0;
+    font-size: 16px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  /* Week picker — compact but tappable */
+  .topbar-week {
+    flex: 1;
+    justify-content: center;
+    min-height: 38px;
+    padding: 4px 8px;
+  }
+  .topbar-week button { min-width: 32px; min-height: 32px; font-size: 18px; }
+
   .page      { padding: 12px; }
+
+  /* ── Last updated bar — slimmer on mobile ────────── */
+  #last-updated-bar {
+    padding: 4px 12px;
+    font-size: 11px;
+    gap: 6px;
+  }
+  #last-updated-bar span { font-size: 11px !important; }
 
   /* ── Stats ───────────────────────────────────────── */
   .stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -24,24 +67,55 @@
 
   /* ── Filter row ──────────────────────────────────── */
   .filter-row { gap: 6px; }
-  .search-wrap { max-width: 100%; }
+  .search-wrap { max-width: 100%; min-width: 0; flex: 1 1 100%; }
+  .filter-select { flex: 1 1 45%; min-width: 0; font-size: 13px; }
 
   /* ── Section header ──────────────────────────────── */
-  .section-header { flex-direction: column; align-items: flex-start; }
+  .section-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .section-header > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-left: 0 !important;
+  }
+  /* Dashboard filter inputs — stack on mobile */
+  #dash-site-filter  { width: 100% !important; flex: 1 1 100%; }
+  #dash-group-filter { width: auto !important; flex: 1 1 60%; }
+
+  /* ── Section actions — wrap buttons ──────────────── */
+  .section-actions { flex-wrap: wrap; gap: 6px; }
 
   /* ── Form rows ───────────────────────────────────── */
   .form-row { flex-direction: column; gap: 0; }
 
-  /* ── Modal ───────────────────────────────────────── */
-  .modal-overlay { padding: 10px; align-items: flex-end; }
-  .modal { border-radius: 16px 16px 0 0; max-height: 85vh; }
+  /* ── Buttons — min touch target ──────────────────── */
+  .btn { min-height: 44px; padding: 10px 16px; font-size: 13px; }
+  .btn-sm { min-height: 36px; padding: 7px 12px; font-size: 12px; }
+  .btn-icon { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  .modal-close { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; }
+
+  /* ── Forms — larger inputs on mobile ─────────────── */
+  .form-input, .form-select { font-size: 16px; padding: 10px 12px; }
+  /* 16px prevents iOS zoom-on-focus */
+
+  /* ── Modal — bottom sheet ────────────────────────── */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    border-radius: 16px 16px 0 0;
+    max-height: 90vh;
+    max-width: 100%;
+    width: 100%;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .modal-body { padding: 16px; }
+  .modal-footer { padding: 12px 16px env(safe-area-inset-bottom, 12px); }
 
   /* ── Toast ───────────────────────────────────────── */
-  .toast { bottom: 90px; font-size: 12px; }
+  .toast { bottom: 80px; font-size: 12px; }
 
   /* ── EQ Agent ────────────────────────────────────── */
-  #eq-agent-fab    { bottom: 80px; }
-  #eq-agent-panel  { bottom: 132px; width: calc(100vw - 32px); right: 16px; }
+  #eq-agent-fab    { bottom: 72px; }
+  #eq-agent-panel  { bottom: 124px; width: calc(100vw - 32px); right: 16px; }
 
   /* ── Mobile bottom nav ───────────────────────────── */
   #mobile-nav {
@@ -54,7 +128,7 @@
     background: white;
     border-top: 1px solid var(--border);
     z-index: 100;
-    padding: 0 4px;
+    padding: 0 2px env(safe-area-inset-bottom, 0px);  /* iPhone notch safe */
     align-items: stretch;
     box-shadow: 0 -2px 10px rgba(0,0,0,.08);
   }
@@ -73,17 +147,20 @@
     font-weight: 600;
     color: var(--ink-4);
     cursor: pointer;
-    padding: 4px 2px;
-    transition: color .12s;
+    padding: 4px 1px;
+    min-width: 0;                             /* allow flex shrink for 5 items */
+    transition: color .12s, transform .1s;
     text-transform: uppercase;
-    letter-spacing: .3px;
+    letter-spacing: .2px;
     border-top: 2px solid transparent;
+    -webkit-tap-highlight-color: transparent;
   }
+  .mobile-nav-item:active { transform: scale(.92); opacity: .7; }
   .mobile-nav-item.active {
     color: var(--navy);
     border-top-color: var(--navy);
   }
-  .mnav-icon { font-size: 18px; line-height: 1; }
+  .mnav-icon { font-size: 19px; line-height: 1; }
 
   /* ── Mobile drawer ───────────────────────────────── */
   #mobile-drawer {
@@ -116,6 +193,8 @@
     transition: transform .25s cubic-bezier(.4,0,.2,1);
     max-height: 80vh;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;             /* stops pull-to-refresh on drawer scroll */
   }
   #mobile-drawer.open #mobile-drawer-panel { transform: translateY(0); }
 
@@ -131,23 +210,26 @@
     align-items: center;
     gap: 12px;
     width: 100%;
-    padding: 13px 20px;
+    padding: 14px 20px;                       /* was 13px — meets 44px min */
+    min-height: 48px;                         /* explicit touch target */
     background: none;
     border: none;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 15px;                          /* was 14px */
     font-weight: 500;
     color: var(--ink);
     cursor: pointer;
     text-align: left;
+    -webkit-tap-highlight-color: transparent;
   }
+  .drawer-item:active { background: var(--surface-2); }
   .drawer-item:hover  { background: var(--surface-2); }
   .drawer-item.active-page { color: var(--navy); font-weight: 700; }
   .drawer-item.edit-only   { display: none; }
   .manager-mode .drawer-item.edit-only { display: flex; }
   .drawer-item.locked   { color: var(--ink-3); }
   .drawer-item.unlocked { color: var(--green); }
-  .d-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+  .d-icon { font-size: 20px; width: 26px; text-align: center; flex-shrink: 0; }
   .drawer-divider { height: 1px; background: var(--border); margin: 4px 0; }
   .drawer-label {
     font-size: 10px;
@@ -155,7 +237,7 @@
     text-transform: uppercase;
     letter-spacing: .08em;
     color: var(--ink-3);
-    padding: 8px 20px 4px;
+    padding: 10px 20px 4px;                   /* was 8px top — a bit more room */
   }
   .drawer-item .beta-tag {
     font-size: 9px;
@@ -168,10 +250,21 @@
   }
 
   /* ── Page padding for nav ────────────────────────── */
-  .page { padding-bottom: 72px; }
+  .page { padding-bottom: 76px; }             /* accounts for nav + safe area */
 
   /* ── Swipe hint hidden (no longer needed) ────────── */
   #roster-swipe-hint { display: none !important; }
+
+  /* ── Active page indicator — subtle dot under icon ── */
+  .mobile-nav-item.active .mnav-icon::after {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--navy);
+    margin: 2px auto 0;
+  }
 
   /* ── Mobile roster — horizontally scrollable table ─
      Same markup as desktop, but the .table-scroll wrapper
@@ -189,11 +282,11 @@
     min-width: 560px;              /* wider than any phone — forces scroll */
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 12px;
+    font-size: 13px;                          /* was 12px — easier to read */
   }
   #page-roster .roster-card th,
   #page-roster .roster-card td {
-    padding: 8px 6px;
+    padding: 10px 8px;                        /* was 8px 6px — larger touch target */
     white-space: nowrap;
   }
   #page-roster .roster-card th.name-col,
@@ -202,10 +295,10 @@
     left: 0;
     z-index: 3;
     background: var(--surface);
-    min-width: 120px;
-    max-width: 140px;
+    min-width: 110px;                         /* was 120 — saves space on 320px */
+    max-width: 130px;                         /* was 140 — tighter for small phones */
     text-align: left;
-    box-shadow: 2px 0 4px -2px rgba(13, 27, 42, .12);
+    box-shadow: 2px 0 6px -2px rgba(13, 27, 42, .15);  /* slightly stronger shadow */
     font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -213,11 +306,15 @@
   #page-roster .roster-card th.name-col { z-index: 4; background: var(--surface-2); }
   #page-roster .roster-card th.center,
   #page-roster .roster-card td.center {
-    min-width: 56px;
+    min-width: 58px;                          /* was 56 — slightly wider cells */
     scroll-snap-align: start;
+    text-align: center;
+  }
+  #page-roster .roster-card td.center {
+    cursor: pointer;                          /* hint that cells are tappable */
   }
   #page-roster .roster-card th.center {
-    font-size: 10px;
+    font-size: 11px;                          /* was 10px */
     background: var(--surface-2);
     position: sticky;
     top: 0;
@@ -228,6 +325,26 @@
   /* Make the whole roster page slightly tighter on phone */
   #page-roster .roster-card { padding: 0; }
 
+  /* ── Scroll fade hint (right edge) ───────────────── */
+  #page-roster .table-scroll {
+    position: relative;
+  }
+  #page-roster .table-scroll::after {
+    content: '';
+    position: sticky;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    background: linear-gradient(to right, transparent, rgba(255,255,255,.6));
+    pointer-events: none;
+    z-index: 4;
+    display: block;
+    float: right;
+    height: 100%;
+    margin-top: -100%;
+  }
+
 }
 
 @media (max-width: 480px) {
@@ -237,4 +354,22 @@
   .gate-card { padding: 24px 18px; }
   .modal-footer { flex-direction: column-reverse; }
   .modal-footer .btn { width: 100%; justify-content: center; }
+
+  /* ── Narrow phone refinements ────────────────────── */
+  .topbar-title { font-size: 14px; }
+  .page { padding: 10px; }
+  #page-roster .roster-card th.name-col,
+  #page-roster .roster-card td.name-col {
+    min-width: 90px;
+    max-width: 110px;
+    font-size: 11px;
+  }
+}
+
+/* ── 320px emergency overrides ─────────────────────── */
+@media (max-width: 340px) {
+  .mobile-nav-item { font-size: 8px; letter-spacing: 0; padding: 3px 0; }
+  .mnav-icon { font-size: 16px; }
+  #mobile-nav { height: 54px; }
+  #page-roster .roster-card td.name-col { min-width: 80px; max-width: 95px; }
 }

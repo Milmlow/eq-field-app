@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.3.2';
+const APP_VERSION = '3.3.3';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -102,7 +102,8 @@ async function loadTenantConfig() {
   try {
     const slug = TENANT.ORG_SLUG;
     const resp = await fetch(`${SB_URL}/rest/v1/organisations?slug=eq.${slug}&select=*`, {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
+      credentials: 'omit'
     });
     if (resp.ok) {
       const rows = await resp.json();
@@ -113,7 +114,8 @@ async function loadTenantConfig() {
     }
     // Load app config (manager password etc)
     const cfgResp = await fetch(`${SB_URL}/rest/v1/app_config?org_id=eq.${TENANT.ORG_UUID}&select=key,value`, {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
+      credentials: 'omit'
     });
     if (cfgResp.ok) {
       const cfg = await cfgResp.json();

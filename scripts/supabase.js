@@ -8,9 +8,12 @@
 // ── Internals ────────────────────────────────────────────────
 let _sbOnline = true;
 let _sbHealthFails = 0;                 // consecutive health-check failures
-const _SB_HEALTH_FAIL_THRESHOLD = 3;    // require N misses before flipping offline
+const _SB_HEALTH_FAIL_THRESHOLD = 5;    // require N misses before flipping offline
+                                        // (raised from 3 — Brave iOS shields can
+                                        //  block cross-origin fetches transiently)
 let _sbWriteFails = 0;                  // consecutive network-level write failures
-const _SB_WRITE_FAIL_THRESHOLD = 2;     // same, for writes in sbFetch()
+const _SB_WRITE_FAIL_THRESHOLD = 3;     // same, for writes in sbFetch()
+let _sbHealthRetryTimer = null;         // quick-retry after first health miss
 const _writeQueue = [];
 const _sbPendingRows = {}; // lock: concurrent POSTs for same name+week
 const MAX_WRITE_RETRIES = 5;
@@ -107,7 +110,7 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
     'Content-Type':  'application/json',
     'Prefer':        prefer
   };
-  const fetchOpts = { method, headers };
+  const fetchOpts = { method, headers, credentials: 'omit' };
   if (resolvedBody) {
     fetchOpts.body = typeof resolvedBody === 'string'
       ? resolvedBody
@@ -219,7 +222,14 @@ function updateOnlineStatus(forceOffline) {
     banner.classList.add('show');
     banner.textContent = !navigator.onLine
       ? '⚠ No internet connection — changes are queued locally.'
-      : '⚠ Cannot reach server — changes are queued locally. Check your network.';
+      : '⚠ Cannot reach server — tap to retry.';
+    // Make banner tappable — force an immediate health check + flush
+    banner.onclick = banner.onclick || function () {
+      banner.textContent = '⟳ Checking connection…';
+      _sbHealthFails = 0;
+      _sbOnline = true;
+      checkSupabaseHealth().then(() => flushWriteQueue());
+    };
   } else {
     banner.classList.remove('show');
   }
@@ -254,12 +264,14 @@ async function checkSupabaseHealth() {
         'Range':         '0-0'
       },
       signal: AbortSignal.timeout(10000),
-      cache: 'no-store'
+      cache: 'no-store',
+      credentials: 'omit'        // reduces Brave-shield cross-origin heuristics
     });
     // Any response (200, 206 partial-content, even 401/403 auth) means the
     // server is REACHABLE. The banner is about network reachability, not
     // authorization. Only a thrown fetch counts as "cannot reach".
     _sbHealthFails = 0;
+    clearTimeout(_sbHealthRetryTimer);
     if (!_sbOnline) {
       _sbOnline = true;
       flushWriteQueue();
@@ -269,6 +281,12 @@ async function checkSupabaseHealth() {
     _sbHealthFails++;
     _sbLog('warn', 'health', 'strike ' + _sbHealthFails + '/' + _SB_HEALTH_FAIL_THRESHOLD + ' — ' + (e && e.message || e));
     if (_sbHealthFails >= _SB_HEALTH_FAIL_THRESHOLD) _sbOnline = false;
+    // Quick retry after first failure — catches transient Brave/iOS blocks
+    // without waiting the full 30s poll interval.
+    if (_sbHealthFails <= 2) {
+      clearTimeout(_sbHealthRetryTimer);
+      _sbHealthRetryTimer = setTimeout(checkSupabaseHealth, 5000);
+    }
   }
   updateOnlineStatus();
 }

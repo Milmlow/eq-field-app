@@ -1,5 +1,7 @@
 # EQ Solves — Field  ·  Deploy Instructions
-## v3.1.0 — Modularised April 2026
+## v3.3.3 — April 2026
+
+> **Local repo path:** `C:\Projects\sks-nsw-labour`
 
 ---
 
@@ -37,12 +39,12 @@ The following scripts were **already in the repo** and are NOT included here
 
 ### 1. Copy the new scripts into the repo
 
-On the Beelink, open `C:\Users\EQ\eq-field-app\scripts\` and drop in all 13 `.js` files
+On the Beelink, open `C:\Projects\sks-nsw-labour\scripts\` and drop in all 13 `.js` files
 from this zip. Don't touch `app-state.js`, `utils.js`, or `roster.js`.
 
 ### 2. Replace index.html
 
-Copy the `index.html` from this zip into `C:\Users\EQ\eq-field-app\`, replacing the
+Copy the `index.html` from this zip into `C:\Projects\sks-nsw-labour\`, replacing the
 existing file.
 
 > **If you've made custom changes** to the existing index.html (seed data tweaks, branding,
@@ -76,10 +78,10 @@ auth.js           ← new
 
 ### 4. Push to GitHub
 
-Open Command Prompt on the Beelink:
+Open Command Prompt locally:
 
 ```
-cd C:\Users\EQ\eq-field-app
+cd C:\Projects\sks-nsw-labour
 git add .
 git commit -m "v3.1.0 — modularise: extract 13 script files, ~4000 lines from inline JS"
 git push
@@ -118,7 +120,7 @@ Common issues:
 - **"X is already defined"** — a function exists in both index.html and a new script.
   Delete it from index.html.
 - **Blank page** — syntax error in one of the new scripts. Run `node --check scripts/X.js`
-  on the Beelink to find it.
+  locally to find it.
 
 ---
 
