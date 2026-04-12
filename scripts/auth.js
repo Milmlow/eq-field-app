@@ -187,6 +187,10 @@ async function checkPin() {
             slug:  TENANT.ORG_SLUG,
             name:  name,
             role:  role,
+            // Store the code so checkAccess() can re-mint a server-side
+            // session token on auto-restore (needed for EQ Agent etc).
+            // Local-only — never leaves the user's browser.
+            code:  val,
             exp:   Date.now() + (days * 24 * 60 * 60 * 1000)
           };
           localStorage.setItem('eq_local_remember_' + TENANT.ORG_SLUG, JSON.stringify(payload));
@@ -313,6 +317,32 @@ async function checkAccess() {
         sessionStorage.setItem(ACCESS_KEY, '1');
         sessionStorage.setItem('eq_logged_in_name', p.name || '');
         if (p.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+        // Re-mint a server-side session token for EQ Agent etc.
+        // Only possible if the stored payload includes the code (newer
+        // logins do; older ones won't until the user logs in again).
+        if (p.code && TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
+          (async () => {
+            try {
+              const resp = await fetch('/.netlify/functions/verify-pin', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ code: p.code, name: p.name, remember: false })
+              });
+              const data = await resp.json();
+              if (data && data.valid && data.sessionToken) {
+                localStorage.setItem('eq_agent_token', data.sessionToken);
+                sessionStorage.setItem('eq_session_token', data.sessionToken);
+                console.info('EQ[auth] agent token re-minted on restore');
+              } else {
+                console.warn('EQ[auth] restore re-mint failed:', data);
+              }
+            } catch (e) {
+              console.warn('EQ[auth] restore re-mint error:', e && e.message || e);
+            }
+          })();
+        } else if (!p.code) {
+          console.info('EQ[auth] restored from legacy remember-me (no code stored) — log out and back in once to enable EQ Agent');
+        }
         return true;
       } else {
         localStorage.removeItem('eq_local_remember_' + TENANT.ORG_SLUG);
