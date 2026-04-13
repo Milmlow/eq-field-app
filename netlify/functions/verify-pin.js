@@ -40,8 +40,8 @@ function hashCode(code) {
   return crypto.createHmac('sha256', SECRET_SALT).update(code).digest('hex');
 }
 
-const STAFF_HASH   = '1b2e74d160a514b52a35ad24f86a99416ba8e69367be5a99e86b801540ab9762';
-const MANAGER_HASH = '787b9ed62dcb4b8edc875be85725fffe063fe1716eca1933768b64d96eb45220';
+const STAFF_HASH   = '6c0d930698417257c42bf6e4388e32764e601829d03d7596262f24e4c12991a7';
+const MANAGER_HASH = '80b761e2be63fad0874dff5b4bbb3a2bf321f8bd65a806a97a6073d0dc9cd0f6';
 
 // ── Rate limiting (in-memory, best-effort) ───────────────────
 const attempts = {};
