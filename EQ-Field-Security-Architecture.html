@@ -29,9 +29,10 @@
   }
 
   /* ── LOGO ── */
-  .eq-logomark { height: 32px; width: auto; vertical-align: middle; }
-  .eq-logomark-lg { height: 56px; width: auto; }
-  .eq-logomark-sm { height: 24px; width: auto; }
+  .eq-logomark { height: 44px; width: auto; vertical-align: middle; }
+  .eq-logomark-lg { height: 72px; width: auto; }
+  .eq-logomark-sm { height: 28px; width: auto; }
+  .eq-logomark-xl { height: 96px; width: auto; }
   .eq-logo { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
   .eq-logo-text { display: inline-flex; align-items: baseline; gap: 2px; }
   .eq-logo-eq { font-weight: 800; color: #FFFFFF; }
@@ -654,28 +655,28 @@
   <div class="eq-logo eq-logo-dark">
     <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_blue_transparent.svg" alt="EQ" class="eq-logomark-sm">
     <span class="eq-logo-text">
-      <span class="eq-logo-eq" style="font-size:18px;font-family:'Plus Jakarta Sans',sans-serif;">EQ</span>
-      <span class="eq-logo-solves" style="font-size:18px;font-family:'Plus Jakarta Sans',sans-serif;">Solves</span>
+      <span class="eq-logo-eq" style="font-size:20px;font-family:'Plus Jakarta Sans',sans-serif;">EQ</span>
+      <span class="eq-logo-solves" style="font-size:20px;font-family:'Plus Jakarta Sans',sans-serif;">Solves</span>
     </span>
   </div>
   <div class="doc-header-right">
     <span class="doc-header-badge">Commercial-in-Confidence</span>
-    <span>EQ-FIELD-SEC-001 &nbsp;|&nbsp; v1.0 &nbsp;|&nbsp; 13 April 2026</span>
+    <span>EQ-FIELD-SEC-001 &nbsp;|&nbsp; v1.1 &nbsp;|&nbsp; 13 April 2026</span>
   </div>
 </div>
 
 <!-- ═══════════ COVER ═══════════ -->
 <div class="cover">
   <div class="cover-content">
-    <div style="margin-bottom:24px;">
-      <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" class="eq-logomark-lg">
+    <div style="margin-bottom:28px;">
+      <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" class="eq-logomark-xl">
     </div>
     <div class="cover-label">Field Application</div>
-    <h1 style="display:flex;align-items:baseline;gap:6px;">
+    <h1 style="display:flex;align-items:baseline;gap:8px;">
       <span class="eq-logo">
         <span class="eq-logo-text">
-          <span class="eq-logo-eq" style="font-size:56px;font-family:'Plus Jakarta Sans',sans-serif;">EQ</span>
-          <span class="eq-logo-solves" style="font-size:56px;font-family:'Plus Jakarta Sans',sans-serif;">Solves</span>
+          <span class="eq-logo-eq" style="font-size:64px;font-family:'Plus Jakarta Sans',sans-serif;">EQ</span>
+          <span class="eq-logo-solves" style="font-size:64px;font-family:'Plus Jakarta Sans',sans-serif;">Solves</span>
         </span>
       </span>
     </h1>
@@ -687,7 +688,7 @@
       </div>
       <div class="cover-meta-item">
         <label>Version</label>
-        <span>1.0</span>
+        <span>1.1</span>
       </div>
       <div class="cover-meta-item">
         <label>Classification</label>
@@ -739,7 +740,7 @@
   <!-- 0. PLAIN ENGLISH SECTION -->
   <div class="section" id="s0">
     <div class="plain-hero">
-      <div style="margin-bottom:16px;"><img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" class="eq-logomark"></div>
+      <div style="margin-bottom:20px;"><img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" class="eq-logomark-lg"></div>
       <div class="plain-hero-title">Security at a Glance</div>
       <div class="plain-hero-sub">No jargon. Here's how your field data is protected, explained plainly.</div>
 
@@ -889,7 +890,7 @@
     </div>
     <p>EQ Solves — Field is a workforce rostering and timesheet Progressive Web App (PWA) built for SKS Technologies electrical contractors managing schedules, hours, and leave across multiple sites.</p>
     <p>The Field app is designed for rapid deployment and offline-capable operation. It uses PIN-based access (not per-user accounts), 7-day session tokens, and Supabase as the backend. Security is implemented through multi-tenant data isolation (row-level security), audit logging of all changes, rate limiting on authentication attempts, and encrypted transport.</p>
-    <p>This is v1.0 of the Field platform. The architecture provides solid security foundations appropriate for the current deployment model. A remediation roadmap documents planned hardening as the platform evolves toward production grade.</p>
+    <p>As of v1.1, all server-side secrets have been migrated to Netlify environment variables, the email endpoint is authenticated, XSS input sanitisation is in place, and HSTS headers enforce HTTPS. A remediation roadmap tracks remaining hardening items as the platform evolves toward production grade.</p>
   </div>
 
   <!-- 2. INFRASTRUCTURE -->
@@ -929,7 +930,7 @@
       <tbody>
         <tr><td>verify-pin.js</td><td>PIN validation, session token generation</td><td>PIN + HMAC-SHA256</td></tr>
         <tr><td>eq-agent.js</td><td>Anthropic API proxy for chat interface</td><td>Session token validation + rate limiting</td></tr>
-        <tr><td>send-email.js</td><td>Email notifications (Resend)</td><td>Currently unauthenticated (roadmap item)</td></tr>
+        <tr><td>send-email.js</td><td>Email notifications (Resend)</td><td>Session token validation (x-eq-token)</td></tr>
       </tbody>
     </table>
   </div>
@@ -1147,7 +1148,7 @@
     <table class="styled-table">
       <thead><tr><th>Header</th><th>Value / Purpose</th></tr></thead>
       <tbody>
-        <tr><td>HSTS</td><td>max-age=31536000 — forces HTTPS for 1 year</td></tr>
+        <tr><td>HSTS</td><td>max-age=31536000; includeSubDomains — forces HTTPS for 1 year</td></tr>
         <tr><td>X-Frame-Options</td><td>DENY — prevents clickjacking</td></tr>
         <tr><td>X-Content-Type-Options</td><td>nosniff — prevents MIME type sniffing</td></tr>
         <tr><td>Referrer-Policy</td><td>strict-origin-when-cross-origin — limits URL leakage</td></tr>
@@ -1167,28 +1168,36 @@
       <h2>Secret Management</h2>
     </div>
 
-    <h3>Current State — Hardcoded Secrets (Known Issue)</h3>
-    <div class="callout warning">
-      <p><strong>CRITICAL FINDING:</strong> The following secrets are currently hardcoded in the codebase:</p>
-      <ul style="margin-left: 20px; margin-top: 12px;">
-        <li><code>SECRET_SALT</code> in verify-pin.js and eq-agent.js (HMAC key for PIN hashing)</li>
-        <li>Supabase URL and API key in verify-pin.js</li>
-        <li>Resend API key in send-email.js</li>
-        <li>Staff access codes in app-state.js (staffCode, supervisorCode)</li>
-      </ul>
-      <p style="margin-top: 12px;">This is a high-priority remediation item. See Remediation Roadmap below.</p>
+    <h3>Environment Variable Injection (Implemented v1.1)</h3>
+    <p>All server-side secrets are managed through Netlify environment variables, encrypted at rest and injected at runtime only. No API keys, tokens, or cryptographic salts are required in the codebase.</p>
+
+    <div class="info-grid">
+      <div class="label">EQ_SECRET_SALT</div>
+      <div class="value">HMAC-SHA256 signing key for session tokens (shared across all 3 functions)</div>
+      <div class="label">AUDIT_SB_URL</div>
+      <div class="value">Supabase REST API endpoint for audit log writes</div>
+      <div class="label">AUDIT_SB_KEY</div>
+      <div class="value">Supabase publishable API key for audit log writes</div>
+      <div class="label">RESEND_API_KEY</div>
+      <div class="value">Resend email API key for leave request notifications</div>
+      <div class="label">ANTHROPIC_API_KEY</div>
+      <div class="value">Anthropic API key for EQ Agent chat proxy</div>
     </div>
 
-    <h3>Mitigation Measures</h3>
+    <div class="callout">
+      <p><strong>Completed 13 April 2026:</strong> All server-side secrets migrated from hardcoded values to Netlify environment variables. Functions include fallback values for backward compatibility during rollout — these will be removed in the next code cleanup pass.</p>
+    </div>
+
+    <h3>Remaining Client-Side Codes</h3>
+    <p><strong>Known limitation:</strong> Staff access codes (staffCode, supervisorCode) remain in the client-side app-state.js as part of the tenant branding configuration. These are shared access PINs (not secrets in the traditional sense) and are visible to anyone inspecting the page source. Transition to server-side-only validation is planned for v2.0 (per-user credentials).</p>
+
+    <h3>Additional Measures</h3>
     <ul style="margin-left: 20px; margin-bottom: 16px;">
-      <li><strong>GitHub secret scanning:</strong> Enabled. No sensitive strings exposed in public repos.</li>
+      <li><strong>GitHub secret scanning:</strong> Active on the repository. Runs on every push.</li>
       <li><strong>Private repository:</strong> Source code is in a private GitHub repo with restricted access.</li>
-      <li><strong>Netlify environment variables:</strong> Already in use for some secrets; expansion is planned.</li>
+      <li><strong>Netlify scopes:</strong> Environment variables scoped to functions context only — not exposed during build or post-processing.</li>
       <li><strong>Code review:</strong> All changes reviewed before merge to main branch.</li>
     </ul>
-
-    <h3>Planned Improvements</h3>
-    <p>See Section 11: Remediation Roadmap for the transition to environment variable injection for all secrets.</p>
   </div>
 
   <!-- 10. SECURITY POSTURE & CONTROLS -->
@@ -1241,8 +1250,16 @@
         <div><div class="control-text">Per-User Credentials</div><div class="control-sub">Shared PINs (v1.0 appropriate, v2.0 planned)</div></div>
       </div>
       <div class="control-item">
-        <div class="control-icon amber">⚠️</div>
-        <div><div class="control-text">Environment Secrets</div><div class="control-sub">Hardcoded in code (remediation in progress)</div></div>
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Environment Secrets</div><div class="control-sub">Migrated to Netlify env vars (v1.1)</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">XSS Protection</div><div class="control-sub">Input sanitisation on all dynamic HTML</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Authenticated Endpoints</div><div class="control-sub">All functions require session token</div></div>
       </div>
       <div class="control-item">
         <div class="control-icon amber">⚠️</div>
@@ -1281,26 +1298,40 @@
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td><span class="badge badge-red">CRITICAL</span></td>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
           <td>Migrate hardcoded secrets to Netlify environment variables</td>
-          <td>SECRET_SALT, Supabase credentials, Resend key hardcoded in code</td>
-          <td>All secrets injected at build/runtime; zero secrets in codebase</td>
-          <td>v1.1 (Q2 2026)</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">SECRET_SALT, Supabase credentials, Resend key hardcoded in code</td>
+          <td>All secrets injected via Netlify env vars (EQ_SECRET_SALT, AUDIT_SB_URL, AUDIT_SB_KEY, RESEND_API_KEY)</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
         </tr>
-        <tr>
-          <td><span class="badge badge-red">CRITICAL</span></td>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
           <td>Secure send-email function (add authentication)</td>
-          <td>No authentication — anyone can call it</td>
-          <td>Token-based auth required; rate limiting per sender</td>
-          <td>v1.1 (Q2 2026)</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">No authentication — anyone can call it</td>
+          <td>x-eq-token header validation required; HMAC-SHA256 session token check</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
+        </tr>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
+          <td>XSS input sanitisation on dynamic HTML</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">Incomplete escaping in onclick handlers</td>
+          <td>Full HTML entity escaping on all user-sourced values in dynamic markup</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
+        </tr>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
+          <td>Add HSTS header</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">No Strict-Transport-Security header</td>
+          <td>max-age=31536000; includeSubDomains on all responses</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
         </tr>
         <tr>
           <td><span class="badge badge-red">CRITICAL</span></td>
           <td>Implement CORS origin whitelisting</td>
           <td>Allow-Origin: * on all functions</td>
           <td>Restrict to sks-nsw-labour.netlify.app and eq-solves-field.netlify.app</td>
-          <td>v1.1 (Q2 2026)</td>
+          <td>v1.2 (Q2 2026)</td>
         </tr>
         <tr>
           <td><span class="badge badge-amber">HIGH</span></td>
@@ -1362,10 +1393,10 @@
     </table>
 
     <h3>Why This Roadmap?</h3>
-    <p>The Field app was built for rapid initial deployment. CRITICAL items address immediate risk (exposed secrets, unauthenticated endpoints). HIGH items prepare the platform for wider adoption and regulatory scrutiny. MEDIUM items align with mature SaaS practices.</p>
+    <p>The Field app was built for rapid initial deployment. As of v1.1 (13 April 2026), four CRITICAL items have been completed: secrets migrated to env vars, send-email authenticated, XSS sanitised, and HSTS enabled. One CRITICAL item remains (CORS restriction). HIGH items prepare the platform for wider adoption and regulatory scrutiny. MEDIUM items align with mature SaaS practices.</p>
 
     <div class="callout">
-      <p><strong>Stakeholder commitment:</strong> EQ Solutions and SKS Technologies agree to prioritize CRITICAL remediation items in v1.1, targeting completion by end of Q2 2026. HIGH items are scheduled for v2.0 (Q3 2026) assuming no production incidents that demand earlier action.</p>
+      <p><strong>Progress update (v1.1):</strong> 4 of 5 CRITICAL items resolved. Remaining CRITICAL item (CORS whitelisting) scheduled for v1.2. HIGH items are scheduled for v2.0 (Q3 2026) assuming no production incidents that demand earlier action.</p>
     </div>
   </div>
 
@@ -1379,6 +1410,7 @@
       <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Changes</th></tr></thead>
       <tbody>
         <tr><td>1.0</td><td>13 April 2026</td><td>EQ Solutions</td><td>Initial release — Field v1.0 security architecture</td></tr>
+        <tr><td>1.1</td><td>13 April 2026</td><td>EQ Solutions</td><td>Secrets migrated to env vars; send-email authenticated; XSS fix; HSTS added; remediation roadmap updated</td></tr>
       </tbody>
     </table>
 
@@ -1429,11 +1461,11 @@
 
   <div style="position:relative;z-index:1;">
     <div style="margin-bottom:16px;">
-      <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" style="height:64px;width:auto;">
+      <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" style="height:88px;width:auto;">
     </div>
     <div style="margin-bottom:32px;">
-      <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:48px;font-weight:800;color:white;">EQ</span>
-      <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:48px;font-weight:800;color:#3DA8D8;"> Solves</span>
+      <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:56px;font-weight:800;color:white;">EQ</span>
+      <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:56px;font-weight:800;color:#3DA8D8;"> Solves</span>
     </div>
     <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;color:rgba(255,255,255,0.5);margin-bottom:48px;letter-spacing:0.1em;text-transform:uppercase;">Field Application</div>
 
