@@ -1,152 +1,140 @@
-# EQ Solves — Field  ·  Deploy Instructions
-## v3.3.4 — April 2026
+# EQ Solves — Field  ·  Deploy & Operations
+## v3.3.5 — April 2026
 
 > **Local repo path:** `C:\Projects\sks-nsw-labour`
+> **Live site:** https://sks-nsw-labour.netlify.app
+> **Demo site:** https://eq-solves-field.netlify.app
 
 ---
 
-## What's in this zip
-
-```
-eq-field-deploy.zip
-├── index.html              ← Updated — now ~300 lines of inline JS (was ~4,000)
-├── DEPLOY.md               ← This file
-└── scripts/
-    ├── supabase.js         ← NEW: sbFetch, write queue, all save/delete helpers
-    ├── people.js           ← NEW: people CRUD + contacts render
-    ├── sites.js            ← NEW: sites CRUD + sites grid
-    ├── managers.js         ← NEW: supervision CRUD + render
-    ├── dashboard.js        ← NEW: renderDashboard
-    ├── batch.js            ← NEW: batch fill, copy last week, cleanup codes
-    ├── leave.js            ← NEW: all leave request functions
-    ├── timesheets.js       ← NEW: all timesheet functions + staff self-entry
-    ├── jobnumbers.js       ← NEW: job numbers CRUD + CSV
-    ├── import-export.js    ← NEW: backup/restore, all CSV import/export
-    ├── calendar.js         ← NEW: monthly calendar view + side panel
-    ├── audit.js            ← NEW: audit log write + modal + export
-    └── auth.js             ← NEW: gate, PIN check, agency, supervisor password
-```
-
-The following scripts were **already in the repo** and are NOT included here
-(don't delete them):
-- `scripts/app-state.js`
-- `scripts/utils.js`
-- `scripts/roster.js`
-
----
-
-## Steps
-
-### 1. Copy the new scripts into the repo
-
-On the Beelink, open `C:\Projects\sks-nsw-labour\scripts\` and drop in all 13 `.js` files
-from this zip. Don't touch `app-state.js`, `utils.js`, or `roster.js`.
-
-### 2. Replace index.html
-
-Copy the `index.html` from this zip into `C:\Projects\sks-nsw-labour\`, replacing the
-existing file.
-
-> **If you've made custom changes** to the existing index.html (seed data tweaks, branding,
-> Netlify function URLs), check those before overwriting and re-apply them to the new file.
-> The main things to check:
-> - `SEED` data in `scripts/app-state.js` (not in index.html anymore)
-> - Any hardcoded org names or colours in the HTML
-
-### 3. Verify the scripts folder
-
-Your `scripts/` folder should now contain exactly these files:
-
-```
-app-state.js      ← existing
-utils.js          ← existing
-roster.js         ← existing
-supabase.js       ← new
-people.js         ← new
-sites.js          ← new
-managers.js       ← new
-dashboard.js      ← new
-batch.js          ← new
-leave.js          ← new
-timesheets.js     ← new
-jobnumbers.js     ← new
-import-export.js  ← new
-calendar.js       ← new
-audit.js          ← new
-auth.js           ← new
-```
-
-### 4. Push to GitHub
-
-Open Command Prompt locally:
+## Quick deploy
 
 ```
 cd C:\Projects\sks-nsw-labour
 git add .
-git commit -m "v3.1.0 — modularise: extract 13 script files, ~4000 lines from inline JS"
+git commit -m "v3.3.5 — description of changes"
 git push
 ```
 
-Netlify will auto-deploy both sites in ~30 seconds.
+Netlify auto-deploys both sites in ~30 seconds.
 
-### 5. Test
+---
 
-Open **eq-solves-field.netlify.app** and check:
+## Netlify environment variables (required)
+
+These are set in **Netlify → Site Settings → Environment Variables** and injected into
+Netlify Functions at runtime. The functions will **fail explicitly** if any are missing.
+
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `EQ_SECRET_SALT` | verify-pin, eq-agent, send-email | HMAC-SHA256 signing key for session tokens |
+| `AUDIT_SB_URL` | verify-pin, eq-agent | Supabase REST URL for audit log writes |
+| `AUDIT_SB_KEY` | verify-pin, eq-agent | Supabase publishable key for audit logging |
+| `RESEND_API_KEY` | send-email | Resend email API key |
+| `ANTHROPIC_API_KEY` | eq-agent | Anthropic API key for EQ Agent chat |
+
+> **Important:** No secrets are hardcoded in the codebase. If you rotate a key,
+> update the Netlify env var and redeploy. Rotating `EQ_SECRET_SALT` will
+> invalidate all existing session tokens (users must re-login).
+
+---
+
+## Netlify Functions
+
+| Function | Auth | Purpose |
+|----------|------|---------|
+| `verify-pin.js` | PIN + HMAC-SHA256 | PIN validation, session token generation, remember-me |
+| `eq-agent.js` | x-eq-token header | Anthropic API proxy for EQ Agent chat |
+| `send-email.js` | x-eq-token header | Leave request email notifications (Resend) |
+
+All functions enforce **CORS origin whitelisting** — only requests from
+`sks-nsw-labour.netlify.app`, `eq-solves-field.netlify.app`, and `localhost`
+(dev) are accepted. Branch deploys are auto-permitted via subdomain matching.
+
+---
+
+## Security headers (netlify.toml)
+
+| Header | Value |
+|--------|-------|
+| Strict-Transport-Security | max-age=31536000; includeSubDomains |
+| X-Frame-Options | DENY |
+| X-Content-Type-Options | nosniff |
+| Referrer-Policy | strict-origin-when-cross-origin |
+| Permissions-Policy | camera=(), microphone=(), geolocation=(self), payment=() |
+| Content-Security-Policy | self + Supabase + Google Fonts + R2 bucket |
+
+---
+
+## Scripts folder
+
+```
+scripts/
+├── app-state.js      ← Global state, tenant config, seed data
+├── utils.js          ← Helpers: esc, toast, modal, CSV
+├── supabase.js       ← sbFetch, write queue, upsert helpers
+├── roster.js         ← Roster grid render + cell editing
+├── people.js         ← People CRUD + contacts
+├── sites.js          ← Sites CRUD + grid
+├── managers.js       ← Supervision CRUD
+├── dashboard.js      ← Dashboard render
+├── batch.js          ← Batch fill, copy last week
+├── leave.js          ← Leave requests + email notifications
+├── timesheets.js     ← Timesheet render, quick-fill, batch fill
+├── jobnumbers.js     ← Job numbers CRUD + CSV
+├── trial-dashboard.js← Trial dashboard view
+├── import-export.js  ← Backup/restore, CSV import/export
+├── calendar.js       ← Monthly calendar view
+├── audit.js          ← Audit log write + modal + export
+├── realtime.js       ← Supabase Realtime subscriptions
+└── auth.js           ← Gate, PIN check, agency, supervisor auth
+```
+
+---
+
+## Version history
+
+| Version | Date | Changes |
+|---------|------|---------|
+| v3.3.5 | 13 Apr 2026 | **Security hardening:** env vars (no fallbacks), CORS whitelisting, send-email auth, HSTS, XSS fix, input validation, agent audit logging, error response sanitisation |
+| v3.3.4 | 13 Apr 2026 | Privacy notice (APP compliance), security headers (CSP etc.), mobile nav polish, drawer reorg, timesheet quick-fill + Promise.all batch saves |
+| v3.3.3 | 12 Apr 2026 | Mobile polish: 5-tab bottom nav, swipe drawer, logout button, responsive filters |
+| v3.2.0 | 10 Apr 2026 | Code hygiene: Supabase upsert refactor, structured logging, dead code removal |
+| v3.1.0 | Apr 2026 | Modularisation: extracted 13 script files from inline JS |
+
+---
+
+## Testing checklist
 
 | Test | Expected |
 |------|----------|
 | Gate loads | Name picker and PIN field visible |
-| Staff login (PIN: `demo`) | My Schedule view |
-| Supervisor login (PIN: `demo1234`) | Dashboard, lock shows 🔓 |
-| Weekly Roster | Roster grid renders |
-| Edit Roster | Cells editable, saves show toast |
-| Batch Fill | Modal opens, applies codes |
-| Copy Last Week | Modal confirm (not browser confirm()) |
-| Leave → New Request | Modal opens, submit works |
-| Timesheets | Grid renders for Apprentice + Labour Hire |
-| Calendar | Monthly grid renders, click opens panel |
-| Job Numbers | Table renders |
-| Import/Export | Backup download works |
-| Audit Log | Loads from Supabase |
-| Agency Access | Timesheets-only view |
-
-### 6. If something breaks
-
-Open browser DevTools → Console. The error will name the missing or redefined function.
-
-Common issues:
-- **"X is not defined"** — a function was deleted from index.html but its script tag is
-  missing or in the wrong load order. Check the 16 `<script>` tags in `<head>`.
-- **"X is already defined"** — a function exists in both index.html and a new script.
-  Delete it from index.html.
-- **Blank page** — syntax error in one of the new scripts. Run `node --check scripts/X.js`
-  locally to find it.
+| Staff login (PIN: `2026`) | My Schedule view |
+| Supervisor login (PIN: `SKSNSW`) | Dashboard, lock shows unlocked |
+| Weekly Roster | Grid renders with sticky name column |
+| Timesheets | Combined table, quick-fill row visible (supervisor) |
+| Leave → New Request | Modal opens, submit sends email |
+| EQ Agent | Chat works, responses appear |
+| Calendar | Monthly grid renders |
+| Audit Log | Loads entries from Supabase |
+| Mobile drawer | Swipe down to close, sections visible |
+| CORS check | DevTools network tab shows correct `Access-Control-Allow-Origin` |
 
 ---
 
-## Bug fixes included in v3.1.0
+## Troubleshooting
 
-| Bug | Fix |
-|-----|-----|
-| BUG-001 | `saveManager()` dupe check used wrong variable + wrong array |
-| BUG-003 | `removePerson()` never called `deletePersonFromSB()` — person reappeared on sync |
-| BUG-004 | Schedule dedup used `esc()` as map key — broke names with `&` `<` `>` |
-| BUG-005 | `leaveRequests` was undefined when `confirmRemoveManager()` ran |
-| BUG-009 | `copyLastWeek()` used `confirm()` — broken in iOS PWA standalone |
-| BUG-011 | Write queue had no retry limit — infinite loop on invalid requests |
-| BUG-013 | `showImportConfirm()` didn't escape summary string |
-| BUG-014 | `respondLeave()` read `leave-respond-id` twice |
-| BUG-016 | `toCSV()` wasn't always defined — exports silently failed |
-| SEC-002 | Supervisor password now validated server-side for production tenants |
-| SEC-004 | Manager remove buttons now use `data-` attributes (XSS fix) |
-| PERF    | `STATE.scheduleIndex` built on load for O(1) schedule lookups |
+| Issue | Fix |
+|-------|-----|
+| "Server misconfigured — missing EQ_SECRET_SALT" | Set the env var in Netlify and redeploy |
+| "Not authenticated — please log in again" | Session expired or token invalid — re-login |
+| 401 on send-email | Ensure leave.js passes `x-eq-token` header |
+| CORS error in console | Origin not in whitelist — check function ALLOWED_ORIGINS |
+| Blank page | Syntax error — run `node --check scripts/X.js` locally |
 
-## Supabase schema updates applied today
+---
 
-- `idx_schedule_name_week` + `idx_schedule_org_week` — faster roster queries
-- `updated_at` triggers on `schedule`, `people`, `sites` — conflict detection works
-- `idx_audit_log_created` + `idx_audit_log_org_cat` — faster audit queries
-- `idx_leave_requests_status` — faster pending leave queries
-- `idx_timesheets_name_week` — faster timesheet lookups
-- Fixed `timesheets` unique constraint to include `org_id`
-- `idx_sites_abbr_org` — enforces unique abbreviations per org at DB level
+## Security documentation
+
+See `EQ-Field-Security-Architecture.html` (v1.1) for the full security architecture
+document, suitable for presentation to SKS Technologies senior management.
