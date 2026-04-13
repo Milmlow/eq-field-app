@@ -70,7 +70,8 @@ function renderGateNameList(filter) {
       <div class="gate-grp-items">`;
       gm.forEach(p => {
         const initial = p.name.charAt(0).toUpperCase();
-        html += `<div onclick="selectGateName('${p.name.replace(/'/g, "\\'")}')" style="padding:14px 16px;font-size:15px;font-weight:600;color:#1F335C;cursor:pointer;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px" onmouseover="this.style.background='#F0F4F8'" onmouseout="this.style.background=''">
+        const safeName = p.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        html += `<div onclick="selectGateName('${safeName}')" style="padding:14px 16px;font-size:15px;font-weight:600;color:#1F335C;cursor:pointer;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:10px" onmouseover="this.style.background='#F0F4F8'" onmouseout="this.style.background=''">
           <span style="width:34px;height:34px;border-radius:50%;background:${color};color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${initial}</span>
           ${esc(p.name)}
         </div>`;

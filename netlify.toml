@@ -36,6 +36,8 @@
 [[headers]]
   for = "/*"
   [headers.values]
+    # Force HTTPS for 1 year (includeSubDomains for Netlify subdomains)
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     # Prevent clickjacking — disallow embedding in iframes
     X-Frame-Options = "DENY"
     # Prevent MIME-type sniffing
