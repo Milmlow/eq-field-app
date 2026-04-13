@@ -1293,4 +1293,45 @@ const eqAgent = (function() {
       const resp = await fetch('/.netlify/functions/eq-agent', {
         method:  'POST',
         headers: {
-          'Content-Type': 'application/j
+          'Content-Type': 'application/json',
+          'x-eq-token':   token
+        },
+        body: JSON.stringify({
+          system:   buildSystemPrompt(),
+          messages: chatHistory
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        // 401 → token expired/invalid → ask user to re-login
+        if (resp.status === 401) {
+          thinking.remove();
+          addMsg('agent', 'Agent session expired. Log out and log back in to refresh your access.');
+          return;
+        }
+        throw new Error(data.error || ('API error ' + resp.status));
+      }
+      const reply = data.reply || '(no response)';
+      chatHistory.push({ role:'assistant', content:reply });
+      thinking.remove();
+      addMsg('agent', reply);
+      if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+    } catch(err) {
+      thinking.remove();
+      addMsg('agent', 'Error: ' + err.message);
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const ta = document.getElementById('eq-agent-input');
+    if (ta) ta.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 90) + 'px'; });
+  });
+
+  return { toggle, send };
+})();
+</script>
+
+</body>
+</html>
