@@ -363,11 +363,13 @@
   </div>
 
   <div class="page hidden" id="page-timesheets">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-      <div class="group-tabs" style="margin-bottom:0">
-        <button class="group-tab active" id="ts-tab-app" onclick="setTsTab('app')">🎓 Apprentice</button>
-        <button class="group-tab" id="ts-tab-lh" onclick="setTsTab('lh')">🔧 Labour Hire</button>
-      </div>
+    <div class="filter-row" style="margin-bottom:14px">
+      <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="ts-search" placeholder="Search name…" oninput="renderTimesheets()"></div>
+      <select class="filter-select" id="ts-group-filter" onchange="renderTimesheets()">
+        <option value="">All Groups</option>
+        <option value="Apprentice">🎓 Apprentice</option>
+        <option value="Labour Hire">🔧 Labour Hire</option>
+      </select>
       <div style="display:flex;gap:6px;margin-left:auto">
         <button id="ts-job-panel-btn" class="btn btn-secondary btn-sm" onclick="toggleTsJobPanel()">🔢 Job Numbers</button>
         <button class="btn btn-secondary btn-sm edit-only" onclick="openTsBatch()">⚡ Batch Fill</button>
@@ -1291,45 +1293,4 @@ const eqAgent = (function() {
       const resp = await fetch('/.netlify/functions/eq-agent', {
         method:  'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-eq-token':   token
-        },
-        body: JSON.stringify({
-          system:   buildSystemPrompt(),
-          messages: chatHistory
-        })
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        // 401 → token expired/invalid → ask user to re-login
-        if (resp.status === 401) {
-          thinking.remove();
-          addMsg('agent', 'Agent session expired. Log out and log back in to refresh your access.');
-          return;
-        }
-        throw new Error(data.error || ('API error ' + resp.status));
-      }
-      const reply = data.reply || '(no response)';
-      chatHistory.push({ role:'assistant', content:reply });
-      thinking.remove();
-      addMsg('agent', reply);
-      if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
-    } catch(err) {
-      thinking.remove();
-      addMsg('agent', 'Error: ' + err.message);
-    } finally {
-      sendBtn.disabled = false;
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', function() {
-    const ta = document.getElementById('eq-agent-input');
-    if (ta) ta.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 90) + 'px'; });
-  });
-
-  return { toggle, send };
-})();
-</script>
-
-</body>
-</html>
+          'Content-Type': 'application/j

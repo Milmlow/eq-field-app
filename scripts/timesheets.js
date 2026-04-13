@@ -138,19 +138,29 @@ function toggleTsSplit(pid, btn) {
 
 // ── Render grid ───────────────────────────────────────────────
 
-function renderTimesheets() {
-  if (typeof agencyMode !== 'undefined' && agencyMode) tsTab = 'lh';
-  const grpName = tsTab === 'app' ? 'Apprentice' : 'Labour Hire';
+function _getTsFilteredPeople() {
+  const grpFilter = (document.getElementById('ts-group-filter') || {}).value || '';
+  const searchRaw = (document.getElementById('ts-search') || {}).value || '';
+  const search    = searchRaw.toLowerCase().trim();
+
   let people = [...STATE.people]
-    .filter(p => p.group === grpName)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire');
+
   if (typeof agencyMode !== 'undefined' && agencyMode && typeof agencyName !== 'undefined') {
     people = people.filter(p => p.agency === agencyName);
   }
+  if (grpFilter) people = people.filter(p => p.group === grpFilter);
+  if (search)    people = people.filter(p => p.name.toLowerCase().includes(search));
+
+  return people.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+}
+
+function renderTimesheets() {
+  const people = _getTsFilteredPeople();
 
   if (!people.length) {
     document.getElementById('ts-content').innerHTML =
-      `<div class="empty"><div class="empty-icon">👤</div><p>No ${grpName} staff found</p></div>`;
+      `<div class="empty"><div class="empty-icon">👤</div><p>No matching staff found</p></div>`;
     updateTsStats();
     return;
   }
@@ -166,25 +176,57 @@ function renderTimesheets() {
     i < 5 || (i === 5 && (hasSat || isManager)) || (i === 6 && (hasSun || isManager))
   );
 
-  const disabled   = isManager ? '' : ' disabled';
+  const disabled    = isManager ? '' : ' disabled';
   const weekDatesTs = getWeekDates(week);
 
   let html = `<div class="roster-card"><div class="table-scroll"><table style="width:100%">
     <thead><tr>
       <th style="min-width:140px">Name</th>
+      <th style="min-width:50px">Group</th>
       ${dlabels.map((d, i) => `<th class="center" style="min-width:160px">${d}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(d)]} — Job / Hrs</span></th>`).join('')}
       <th class="center" style="min-width:55px">Total</th>
     </tr></thead><tbody>`;
 
+  // ── Quick-fill row ──────────────────────────────────────────
+  if (isManager) {
+    html += `<tr style="background:var(--blue-lt);border-bottom:2px solid var(--border)">
+      <td colspan="2" style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;padding:6px 8px">⚡ Quick Fill →</td>
+      ${days.map(d => `<td style="padding:5px 6px">
+        <div class="ts-cell">
+          <input class="ts-job" type="text" inputmode="numeric" list="ts-job-list" placeholder="Job" id="qf-job-${d}"
+            style="background:white;border:1.5px solid var(--blue)" oninput="this.value=this.value.toUpperCase()">
+          <input class="ts-hrs" type="number" placeholder="h" min="0" max="24" step="0.5" id="qf-hrs-${d}" value="8"
+            style="background:white;border:1.5px solid var(--blue)">
+        </div>
+      </td>`).join('')}
+      <td style="text-align:center;padding:4px">
+        <button class="btn btn-sm" onclick="runQuickFill()" style="font-size:11px;padding:6px 10px;white-space:nowrap" title="Apply to all empty cells for visible staff">Apply</button>
+      </td>
+    </tr>`;
+  }
+
+  // ── Data rows ───────────────────────────────────────────────
+  let lastGroup = '';
   people.forEach(p => {
+    // Group separator row
+    if (p.group !== lastGroup) {
+      lastGroup = p.group;
+      const icon = p.group === 'Apprentice' ? '🎓' : '🔧';
+      html += `<tr><td colspan="${days.length + 3}" style="background:var(--surface-2);font-size:11px;font-weight:700;color:var(--ink-3);padding:8px 10px;text-transform:uppercase;letter-spacing:.5px">${icon} ${p.group}</td></tr>`;
+    }
+
     const entry      = getTsEntry(p.name, week);
     const total      = tsTotalHrs(entry);
     const totalClass = total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-amber' : 'ts-total-empty';
     const rowBg      = !entry ? 'background:#FFF1F2' : total > 0 && total < 40 ? 'background:#FFFBEB' : '';
     const pid        = p.name.replace(/\W/g, '_');
+    const grpBadge   = p.group === 'Apprentice'
+      ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
+      : '<span style="font-size:9px;font-weight:700;color:var(--navy-3);background:var(--slate-lt);padding:1px 5px;border-radius:3px">LH</span>';
 
     html += `<tr style="${rowBg}">
       <td style="font-weight:600;color:var(--navy)">${esc(p.name)}</td>
+      <td>${grpBadge}</td>
       ${days.map(d => {
         const rawJob = entry && entry[d + '_job'] ? entry[d + '_job'] : '';
         const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
@@ -226,12 +268,67 @@ function renderTimesheets() {
   updateTsStats();
 }
 
-function setTsTab(tab) {
-  tsTab = tab;
-  document.getElementById('ts-tab-app').classList.toggle('active', tab === 'app');
-  document.getElementById('ts-tab-lh').classList.toggle('active', tab === 'lh');
+// ── Quick fill ───────────────────────────────────────────────
+// Reads the quick-fill row inputs and applies job+hrs to all
+// visible staff where that day's cell is currently empty.
+
+async function runQuickFill() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const people = _getTsFilteredPeople();
+  const week   = STATE.currentWeek;
+  const days   = TS_DAYS.filter((_, i) => {
+    const el = document.getElementById('qf-job-' + TS_DAYS[i]);
+    return !!el;   // only days visible in the table
+  });
+
+  if (!STATE.timesheets) STATE.timesheets = [];
+  let changed = 0;
+  const promises = [];
+
+  for (const p of people) {
+    let entry = STATE.timesheets.find(r => r.name === p.name && r.week === week);
+    let touched = false;
+
+    days.forEach(d => {
+      const jobEl = document.getElementById('qf-job-' + d);
+      const hrsEl = document.getElementById('qf-hrs-' + d);
+      const job   = jobEl ? jobEl.value.trim().toUpperCase() : '';
+      const hrs   = hrsEl ? parseFloat(hrsEl.value) || 0 : 0;
+      if (!job) return; // skip days with no quick-fill job entered
+
+      // Only fill empty cells
+      if (!entry) {
+        entry = {
+          name: p.name, group: p.group, week,
+          mon_job:null, mon_hrs:null, tue_job:null, tue_hrs:null,
+          wed_job:null, wed_hrs:null, thu_job:null, thu_hrs:null,
+          fri_job:null, fri_hrs:null, sat_job:null, sat_hrs:null, sun_job:null, sun_hrs:null
+        };
+        STATE.timesheets.push(entry);
+      }
+      if (entry[d + '_job']) return; // already has data — skip
+
+      entry[d + '_job'] = job;
+      entry[d + '_hrs'] = hrs;
+      changed++;
+      touched = true;
+    });
+
+    if (touched) {
+      const row = { name: p.name, group: p.group, week };
+      TS_DAYS.forEach(d => { row[d + '_job'] = entry[d + '_job'] || null; row[d + '_hrs'] = parseFloat(entry[d + '_hrs']) || null; });
+      promises.push(sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal'));
+    }
+  }
+
+  await Promise.all(promises);
+  showToast(`Quick fill: ${changed} cells updated`);
+  auditLog(`Quick fill: ${changed} cells`, 'Timesheet', `${people.length} staff`, week);
   renderTimesheets();
 }
+
+// Legacy tab function — kept for backward compat, now a no-op
+function setTsTab(tab) { renderTimesheets(); }
 
 // ── Stats ─────────────────────────────────────────────────────
 
@@ -302,12 +399,13 @@ function openTsBatch() {
   document.getElementById('ts-batch-hrs').value      = '8';
   document.getElementById('ts-batch-skip').checked   = true;
 
-  const grpName = tsTab === 'app' ? 'Apprentice' : 'Labour Hire';
-  const people  = [...STATE.people].filter(p => p.group === grpName).sort((a, b) => a.name.localeCompare(b.name));
+  // Use current filter (or all if no filter)
+  const people = _getTsFilteredPeople();
   document.getElementById('ts-batch-people').innerHTML = people.map(p =>
     `<label class="batch-person-row">
       <input type="checkbox" value="${p.id}" data-name="${esc(p.name)}" data-group="${p.group}" checked onchange="updateTsBatchCount()">
       <span style="font-size:12px;font-weight:500">${esc(p.name)}</span>
+      <span style="font-size:9px;color:var(--ink-3);margin-left:auto">${p.group === 'Apprentice' ? 'APP' : 'LH'}</span>
     </label>`
   ).join('');
   updateTsBatchCount();
@@ -335,8 +433,9 @@ async function runTsBatch() {
 
   closeModal('modal-ts-batch');
   if (!STATE.timesheets) STATE.timesheets = [];
-  const week    = STATE.currentWeek;
-  let changed   = 0;
+  const week     = STATE.currentWeek;
+  let changed    = 0;
+  const promises = [];
 
   for (const p of people) {
     let entry = STATE.timesheets.find(r => r.name === p.name && r.week === week);
@@ -355,9 +454,10 @@ async function runTsBatch() {
     });
     const row = { name: p.name, group: p.group, week };
     TS_DAYS.forEach(d => { row[d + '_job'] = entry[d + '_job'] || null; row[d + '_hrs'] = parseFloat(entry[d + '_hrs']) || null; });
-    await sbFetch('timesheets', 'POST', row, 'resolution=merge-duplicates,return=minimal');
+    promises.push(sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal'));
   }
 
+  await Promise.all(promises);
   showToast('Applied to ' + changed + ' cells');
   auditLog(`Timesheet batch: ${job} / ${hrs}h`, 'Timesheet', `${changed} cells, ${people.length} staff`, STATE.currentWeek);
   renderTimesheets();
