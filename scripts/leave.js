@@ -468,9 +468,10 @@ async function triggerLeaveEmail(type, record) {
       </div>`;
     } else return;
 
+    const eqToken = sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_agent_token') || '';
     const resp = await fetch('/.netlify/functions/send-email', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-eq-token': eqToken },
       body:    JSON.stringify({ to: [to], cc: cc.length ? cc : undefined, subject, html })
     });
     const data = await resp.json();

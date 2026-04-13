@@ -10,7 +10,7 @@
 const crypto = require('crypto');
 
 // Must match SECRET_SALT in verify-pin.js so tokens are valid here too.
-const SECRET_SALT = 'sks-nsw-labour-2026-hvK9mP2xQ7';
+const SECRET_SALT = process.env.EQ_SECRET_SALT || 'sks-nsw-labour-2026-hvK9mP2xQ7';
 
 // Default model — easy to swap later without a code change
 // by setting EQ_AGENT_MODEL env var in Netlify.

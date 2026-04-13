@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const SECRET_SALT = 'sks-nsw-labour-2026-hvK9mP2xQ7';
+const SECRET_SALT = process.env.EQ_SECRET_SALT || 'sks-nsw-labour-2026-hvK9mP2xQ7';
 function hashCode(code) {
   return crypto.createHmac('sha256', SECRET_SALT).update(code).digest('hex');
 }
@@ -12,8 +12,8 @@ const attempts = {};
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 
-const SB_URL = 'https://hignguefjjjtrhofdztu.supabase.co';
-const SB_KEY = 'sb_publishable_npv-8-iiMPde4Ggk9dD5Pw_QAP2OeWi';
+const SB_URL = process.env.AUDIT_SB_URL || 'https://hignguefjjjtrhofdztu.supabase.co';
+const SB_KEY = process.env.AUDIT_SB_KEY || 'sb_publishable_npv-8-iiMPde4Ggk9dD5Pw_QAP2OeWi';
 
 async function logAttempt(name, success, ip, detail) {
   try {

@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EQ Solves — Field Security Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --eq-sky: #3DA8D8;
+    --eq-deep: #2986B4;
+    --eq-ice: #EAF5FB;
+    --eq-ink: #1A1A2E;
+    --eq-grey: #6B7280;
+    --eq-light: #F8FBFD;
+    --eq-green: #10B981;
+    --eq-amber: #F59E0B;
+    --eq-red: #EF4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    color: var(--eq-ink);
+    background: var(--eq-light);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── LOGO ── */
+  .eq-logomark { height: 32px; width: auto; vertical-align: middle; }
+  .eq-logomark-lg { height: 56px; width: auto; }
+  .eq-logomark-sm { height: 24px; width: auto; }
+  .eq-logo { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+  .eq-logo-text { display: inline-flex; align-items: baseline; gap: 2px; }
+  .eq-logo-eq { font-weight: 800; color: #FFFFFF; }
+  .eq-logo-solves { font-weight: 800; color: var(--eq-sky); }
+  .eq-logo-dark .eq-logo-eq { color: var(--eq-ink); }
+  .eq-logo-dark .eq-logo-solves { color: var(--eq-sky); }
+
+  /* ── STICKY HEADER ── */
+  .doc-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #E5E7EB;
+    padding: 12px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .doc-header .eq-logo span { font-size: 18px; }
+  .doc-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--eq-grey);
+  }
+  .doc-header-badge {
+    background: #FEF3C7;
+    color: #92400E;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  @media print { .doc-header { display: none; } }
+
+  /* ── COVER ── */
+  .cover {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1A1A2E 0%, #2986B4 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 80px 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    top: -200px; right: -200px;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: rgba(61, 168, 216, 0.15);
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    bottom: -150px; left: -100px;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: rgba(61, 168, 216, 0.08);
+  }
+  .cover-content { position: relative; z-index: 1; max-width: 800px; }
+  .cover-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 24px;
+  }
+  .cover h1 {
+    font-size: 56px;
+    font-weight: 800;
+    color: white;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+  .cover h1 span { color: var(--eq-sky); }
+  .cover h2 {
+    font-size: 32px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 48px;
+  }
+  .cover-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    max-width: 600px;
+  }
+  .cover-meta-item label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 4px;
+  }
+  .cover-meta-item span {
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.9);
+  }
+  .cover-footer {
+    position: absolute;
+    bottom: 40px;
+    left: 60px;
+    right: 60px;
+    display: flex;
+    justify-content: space-between;
+    z-index: 1;
+  }
+  .cover-footer span {
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* ── CONTENT ── */
+  .content {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 80px 40px;
+  }
+
+  /* TOC */
+  .toc {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 16px;
+    padding: 40px;
+    margin-bottom: 64px;
+  }
+  .toc h2 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--eq-grey);
+    margin-bottom: 24px;
+  }
+  .toc-list { list-style: none; }
+  .toc-list li {
+    border-bottom: 1px solid #F3F4F6;
+    padding: 10px 0;
+  }
+  .toc-list li:last-child { border-bottom: none; }
+  .toc-list a {
+    text-decoration: none;
+    color: var(--eq-ink);
+    font-size: 15px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: color 0.15s;
+  }
+  .toc-list a:hover { color: var(--eq-sky); }
+  .toc-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--eq-sky);
+    background: var(--eq-ice);
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Sections */
+  .section { margin-bottom: 64px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--eq-ice);
+  }
+  .section-num {
+    font-size: 14px;
+    font-weight: 800;
+    color: white;
+    background: var(--eq-sky);
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-header h2 {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--eq-ink);
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--eq-deep);
+    margin: 32px 0 12px;
+  }
+
+  p { font-size: 15px; color: #374151; margin-bottom: 16px; line-height: 1.7; }
+
+  /* Cards */
+  .card {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  /* Info grid */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #E5E7EB;
+    margin-bottom: 24px;
+  }
+  .info-grid .label {
+    background: var(--eq-ice);
+    padding: 12px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--eq-deep);
+    border-bottom: 1px solid #E5E7EB;
+  }
+  .info-grid .value {
+    background: white;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--eq-ink);
+    border-bottom: 1px solid #E5E7EB;
+  }
+
+  /* Tables */
+  .styled-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #E5E7EB;
+    margin-bottom: 24px;
+    font-size: 14px;
+  }
+  .styled-table thead th {
+    background: var(--eq-ink);
+    color: white;
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 12px 16px;
+    text-align: left;
+  }
+  .styled-table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #F3F4F6;
+    color: #374151;
+  }
+  .styled-table tbody tr:last-child td { border-bottom: none; }
+  .styled-table tbody tr:hover { background: #FAFAFA; }
+
+  /* Status badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .badge-green { background: #ECFDF5; color: #065F46; }
+  .badge-amber { background: #FFFBEB; color: #92400E; }
+  .badge-red { background: #FEE2E2; color: #991B1B; }
+  .badge-blue { background: var(--eq-ice); color: var(--eq-deep); }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: linear-gradient(135deg, #1A1A2E 0%, #1e2a4a 100%);
+    border-radius: 16px;
+    padding: 40px;
+    margin: 24px 0;
+    text-align: center;
+  }
+  .arch-layer {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px;
+    padding: 16px 24px;
+    margin: 0 auto 8px;
+    max-width: 500px;
+  }
+  .arch-layer-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+  }
+  .arch-layer-sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 2px;
+  }
+  .arch-arrow {
+    color: var(--eq-sky);
+    font-size: 20px;
+    margin: 4px 0;
+  }
+  .arch-layer.highlight {
+    background: rgba(61, 168, 216, 0.15);
+    border-color: var(--eq-sky);
+  }
+  .arch-layer.green {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: var(--eq-green);
+  }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: var(--eq-ice);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0 24px;
+  }
+  .flow-step {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--eq-deep);
+  }
+  .flow-arrow { color: var(--eq-sky); font-size: 18px; font-weight: 700; }
+
+  /* Code block */
+  .code-block {
+    background: #1E293B;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 16px 0 24px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    color: #E2E8F0;
+    line-height: 1.6;
+    overflow-x: auto;
+  }
+  .code-keyword { color: #C084FC; }
+  .code-string { color: #86EFAC; }
+  .code-comment { color: #64748B; }
+
+  /* Callout */
+  .callout {
+    border-left: 4px solid var(--eq-sky);
+    background: var(--eq-ice);
+    border-radius: 0 12px 12px 0;
+    padding: 16px 20px;
+    margin: 20px 0;
+  }
+  .callout p { margin-bottom: 0; color: var(--eq-ink); }
+
+  .callout.warning {
+    border-left-color: var(--eq-amber);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .callout.warning p { color: #92400E; font-weight: 600; }
+
+  /* Controls checklist */
+  .controls-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .control-item {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .control-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .control-icon.green { background: #ECFDF5; }
+  .control-icon.amber { background: #FFFBEB; }
+  .control-icon.red { background: #FEE2E2; }
+  .control-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--eq-ink);
+  }
+  .control-sub {
+    font-size: 11px;
+    color: var(--eq-grey);
+    font-weight: 400;
+  }
+
+  /* ── PLAIN ENGLISH SECTION ── */
+  .plain-hero {
+    background: linear-gradient(135deg, #1A1A2E 0%, #2986B4 100%);
+    border-radius: 20px;
+    padding: 48px 40px 40px;
+    margin-bottom: 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  .plain-hero::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    background: rgba(61,168,216,0.12);
+  }
+  .plain-hero-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 6px;
+    position: relative;
+  }
+  .plain-hero-sub {
+    font-size: 14px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 32px;
+    position: relative;
+  }
+
+  .visual-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .visual-card {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 14px;
+    padding: 24px 20px;
+    text-align: center;
+  }
+  .visual-card .v-icon {
+    font-size: 40px;
+    margin-bottom: 10px;
+  }
+  .visual-card .v-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 6px;
+  }
+  .visual-card .v-desc {
+    font-size: 12px;
+    color: rgba(255,255,255,0.65);
+    line-height: 1.5;
+  }
+
+  .analogy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .analogy-card {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 14px;
+    padding: 24px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .analogy-icon {
+    font-size: 36px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .analogy-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--eq-ink);
+    margin-bottom: 4px;
+  }
+  .analogy-real {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--eq-deep);
+    margin-bottom: 6px;
+  }
+  .analogy-desc {
+    font-size: 13px;
+    color: #6B7280;
+    line-height: 1.55;
+  }
+
+  .journey-strip {
+    background: var(--eq-ice);
+    border-radius: 14px;
+    padding: 28px 24px;
+    margin-bottom: 24px;
+  }
+  .journey-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--eq-deep);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .journey-steps {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    justify-content: center;
+  }
+  .journey-step {
+    text-align: center;
+    flex: 1;
+    max-width: 140px;
+  }
+  .journey-step .j-icon {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid var(--eq-sky);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 8px;
+    font-size: 22px;
+  }
+  .journey-step .j-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--eq-ink);
+    margin-bottom: 2px;
+  }
+  .journey-step .j-sub {
+    font-size: 10px;
+    color: var(--eq-grey);
+    line-height: 1.4;
+  }
+  .journey-arrow {
+    color: var(--eq-sky);
+    font-size: 22px;
+    font-weight: 700;
+    padding-top: 14px;
+    flex-shrink: 0;
+  }
+
+  .plain-faq {
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .faq-item {
+    padding: 18px 24px;
+    border-bottom: 1px solid #F3F4F6;
+  }
+  .faq-item:last-child { border-bottom: none; }
+  .faq-q {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--eq-ink);
+    margin-bottom: 6px;
+  }
+  .faq-a {
+    font-size: 13px;
+    color: #6B7280;
+    line-height: 1.6;
+  }
+
+  /* Print */
+  @media print {
+    .cover { min-height: auto; page-break-after: always; padding: 120px 60px; }
+    .section { page-break-inside: avoid; }
+    body { background: white; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ STICKY HEADER ═══════════ -->
+<div class="doc-header">
+  <div class="eq-logo eq-logo-dark">
+    <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_blue_transparent.svg" alt="EQ" class="eq-logomark-sm">
+    <span class="eq-logo-text">
+      <span class="eq-logo-eq" style="font-size:18px;font-family:'Plus Jakarta Sans',sans-serif;">EQ</span>
+      <span class="eq-logo-solves" style="font-size:18px;font-family:'Plus Jakarta Sans',sans-serif;">Solves</span>
+    </span>
+  </div>
+  <div class="doc-header-right">
+    <span class="doc-header-badge">Commercial-in-Confidence</span>
+    <span>EQ-FIELD-SEC-001 &nbsp;|&nbsp; v1.0 &nbsp;|&nbsp; 13 April 2026</span>
+  </div>
+</div>
+
+<!-- ═══════════ COVER ═══════════ -->
+<div class="cover">
+  <div class="cover-content">
+    <div style="margin-bottom:24px;">
+      <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" class="eq-logomark-lg">
+    </div>
+    <div class="cover-label">Field Application</div>
+    <h1 style="display:flex;align-items:baseline;gap:6px;">
+      <span class="eq-logo">
+        <span class="eq-logo-text">
+          <span class="eq-logo-eq" style="font-size:56px;font-family:'Plus Jakarta Sans',sans-serif;">EQ</span>
+          <span class="eq-logo-solves" style="font-size:56px;font-family:'Plus Jakarta Sans',sans-serif;">Solves</span>
+        </span>
+      </span>
+    </h1>
+    <h2>Security Architecture — Field</h2>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <label>Document</label>
+        <span>EQ-FIELD-SEC-001</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Version</label>
+        <span>1.0</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Classification</label>
+        <span>Commercial-in-Confidence</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Date</label>
+        <span>13 April 2026</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Author</label>
+        <span>EQ Solutions</span>
+      </div>
+      <div class="cover-meta-item">
+        <label>Prepared for</label>
+        <span>SKS Technologies</span>
+      </div>
+    </div>
+  </div>
+  <div class="cover-footer">
+    <span>&copy; 2026 EQ Solutions. All rights reserved.</span>
+    <span>CDC Solutions Pty Ltd (Trustee)</span>
+  </div>
+</div>
+
+<!-- ═══════════ CONTENT ═══════════ -->
+<div class="content">
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>Contents</h2>
+    <ul class="toc-list">
+      <li><a href="#s0"><span class="toc-num" style="background:#10B981;color:white;">&#9733;</span> Security at a Glance (Non-Technical)</a></li>
+      <li><a href="#s1"><span class="toc-num">1</span> Executive Summary</a></li>
+      <li><a href="#s2"><span class="toc-num">2</span> Infrastructure Overview</a></li>
+      <li><a href="#s3"><span class="toc-num">3</span> Multi-Tenant Isolation</a></li>
+      <li><a href="#s4"><span class="toc-num">4</span> Authentication &amp; Access Control</a></li>
+      <li><a href="#s5"><span class="toc-num">5</span> Authorisation &amp; Roles</a></li>
+      <li><a href="#s6"><span class="toc-num">6</span> Audit Logging</a></li>
+      <li><a href="#s7"><span class="toc-num">7</span> Data Protection &amp; Privacy</a></li>
+      <li><a href="#s8"><span class="toc-num">8</span> Transport Security</a></li>
+      <li><a href="#s9"><span class="toc-num">9</span> Secret Management</a></li>
+      <li><a href="#s10"><span class="toc-num">10</span> Security Posture &amp; Controls</a></li>
+      <li><a href="#s11"><span class="toc-num">11</span> Remediation Roadmap</a></li>
+      <li><a href="#s12"><span class="toc-num" style="background:var(--eq-grey);color:white;">&#9998;</span> Document Control</a></li>
+    </ul>
+  </div>
+
+  <!-- 0. PLAIN ENGLISH SECTION -->
+  <div class="section" id="s0">
+    <div class="plain-hero">
+      <div style="margin-bottom:16px;"><img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" class="eq-logomark"></div>
+      <div class="plain-hero-title">Security at a Glance</div>
+      <div class="plain-hero-sub">No jargon. Here's how your field data is protected, explained plainly.</div>
+
+      <div class="visual-row">
+        <div class="visual-card">
+          <div class="v-icon">🔐</div>
+          <div class="v-title">Login PIN Gate</div>
+          <div class="v-desc">Staff log in with a shared PIN (like a workplace entry code). PINs are hashed and never stored in plain text. Failed attempts are rate-limited to prevent guessing.</div>
+        </div>
+        <div class="visual-card">
+          <div class="v-icon">📝</div>
+          <div class="v-title">Everything is Logged</div>
+          <div class="v-desc">Every timesheet entry and roster change is recorded with a timestamp. Admins can see who did what and when. These records can't be deleted.</div>
+        </div>
+        <div class="visual-card">
+          <div class="v-icon">🏢</div>
+          <div class="v-title">Your Data is Separate</div>
+          <div class="v-desc">SKS data is stored separately from any other organisation. The database enforces this automatically — you can't see other companies' information.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analogies -->
+    <h3 style="margin-bottom: 16px;">How It Works — In Everyday Terms</h3>
+    <div class="analogy-grid">
+      <div class="analogy-card">
+        <div class="analogy-icon">🛂</div>
+        <div>
+          <div class="analogy-title">Login Security</div>
+          <div class="analogy-real">Technical term: PIN-based access + session tokens</div>
+          <div class="analogy-desc">Like a site access code. Everyone uses the same code (just like a workplace gate), but the system tracks who's logged in and from where. If you close the app, you need to enter the code again to get back in.</div>
+        </div>
+      </div>
+      <div class="analogy-card">
+        <div class="analogy-icon">🏨</div>
+        <div>
+          <div class="analogy-title">Company Separation</div>
+          <div class="analogy-real">Technical term: Multi-tenant Row-Level Security</div>
+          <div class="analogy-desc">Think of a secure filing cabinet. SKS has its own drawer with its own lock. Even if someone broke into the cabinet, they still couldn't open the SKS drawer without the right key.</div>
+        </div>
+      </div>
+      <div class="analogy-card">
+        <div class="analogy-icon">📸</div>
+        <div>
+          <div class="analogy-title">Audit Trail</div>
+          <div class="analogy-real">Technical term: Immutable change logging</div>
+          <div class="analogy-desc">Every change is recorded like security camera footage — who made it, when, and what changed. These records can't be edited or deleted. Perfect for payroll disputes or compliance checks.</div>
+        </div>
+      </div>
+      <div class="analogy-card">
+        <div class="analogy-icon">🔒</div>
+        <div>
+          <div class="analogy-title">Data Encryption</div>
+          <div class="analogy-real">Technical term: AES-256 at rest, TLS 1.2+ in transit</div>
+          <div class="analogy-desc">Your data is scrambled while it's stored and while it travels between devices and the server. Even if someone intercepted it, they'd see gibberish — like a letter in a code only you and the server can read.</div>
+        </div>
+      </div>
+      <div class="analogy-card">
+        <div class="analogy-icon">☁️</div>
+        <div>
+          <div class="analogy-title">Cloud Infrastructure</div>
+          <div class="analogy-real">Technical term: Serverless cloud on Netlify + Supabase</div>
+          <div class="analogy-desc">There's no computer in an office running this app. It runs on enterprise cloud infrastructure (same as banks use) that automatically patches security updates and backs up your data every day.</div>
+        </div>
+      </div>
+      <div class="analogy-card">
+        <div class="analogy-icon">📲</div>
+        <div>
+          <div class="analogy-title">Progressive Web App</div>
+          <div class="analogy-real">Technical term: Offline-capable PWA</div>
+          <div class="analogy-desc">The app works on any device — laptop, tablet, phone — and can work offline. When you reconnect, all your data syncs to the server automatically. No app store required.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User journey -->
+    <div class="journey-strip">
+      <div class="journey-title">What happens when you log in and submit a timesheet entry</div>
+      <div class="journey-steps">
+        <div class="journey-step">
+          <div class="j-icon">📱</div>
+          <div class="j-label">Enter PIN</div>
+          <div class="j-sub">You enter the shared staff PIN</div>
+        </div>
+        <div class="journey-arrow">&rarr;</div>
+        <div class="journey-step">
+          <div class="j-icon">✅</div>
+          <div class="j-label">Verify PIN</div>
+          <div class="j-sub">System checks it's correct (hashed for security)</div>
+        </div>
+        <div class="journey-arrow">&rarr;</div>
+        <div class="journey-step">
+          <div class="j-icon">🎫</div>
+          <div class="j-label">Create Session</div>
+          <div class="j-sub">You get a 7-day login token</div>
+        </div>
+        <div class="journey-arrow">&rarr;</div>
+        <div class="journey-step">
+          <div class="j-icon">💾</div>
+          <div class="j-label">Save Entry</div>
+          <div class="j-sub">Your timesheet data goes to the encrypted database</div>
+        </div>
+        <div class="journey-arrow">&rarr;</div>
+        <div class="journey-step">
+          <div class="j-icon">📝</div>
+          <div class="j-label">Log Change</div>
+          <div class="j-sub">Permanent record created of the entry</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <h3 style="margin-bottom: 16px;">Common Questions</h3>
+    <div class="plain-faq">
+      <div class="faq-item">
+        <div class="faq-q">Is the PIN shared? Isn't that less secure?</div>
+        <div class="faq-a">Yes, staff share a PIN (like a site access code), and supervisors have a separate PIN. This is appropriate for a field app where users are contractors using company devices. The system tracks which person logged in based on name selection, so you have full audit history. If someone's device is lost, a supervisor can remotely deactivate that person's access.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can another company see SKS data?</div>
+        <div class="faq-a">No. Data separation is enforced by the database itself, not just the application. Even if there were a bug, the database would still block cross-company access. Two independent security layers would both need to fail simultaneously.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">What happens if someone's phone is lost?</div>
+        <div class="faq-a">A supervisor can instantly deactivate that person's account. The very next time that device tries to use the app, the system signs them out automatically. The thief would also need the PIN to log back in.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Where is the data physically stored?</div>
+        <div class="faq-a">Sydney, Australia (AWS ap-southeast-2 region). Both the application server and the database are hosted in the same region. Your data doesn't leave the country.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Is our data backed up?</div>
+        <div class="faq-a">Yes. The database is backed up automatically every day by Supabase. Backups are encrypted. When you delete something in the app, it's hidden but not destroyed, so it can always be recovered.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Who can see what?</div>
+        <div class="faq-a">Staff can see their own schedule and limited details. Supervisors can see everything — rosters, timesheets, people management. Agency users see timesheets only. Nobody sees other companies' data.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. EXECUTIVE SUMMARY -->
+  <div class="section" id="s1">
+    <div class="section-header">
+      <span class="section-num">1</span>
+      <h2>Executive Summary</h2>
+    </div>
+    <p>EQ Solves — Field is a workforce rostering and timesheet Progressive Web App (PWA) built for SKS Technologies electrical contractors managing schedules, hours, and leave across multiple sites.</p>
+    <p>The Field app is designed for rapid deployment and offline-capable operation. It uses PIN-based access (not per-user accounts), 7-day session tokens, and Supabase as the backend. Security is implemented through multi-tenant data isolation (row-level security), audit logging of all changes, rate limiting on authentication attempts, and encrypted transport.</p>
+    <p>This is v1.0 of the Field platform. The architecture provides solid security foundations appropriate for the current deployment model. A remediation roadmap documents planned hardening as the platform evolves toward production grade.</p>
+  </div>
+
+  <!-- 2. INFRASTRUCTURE -->
+  <div class="section" id="s2">
+    <div class="section-header">
+      <span class="section-num">2</span>
+      <h2>Infrastructure Overview</h2>
+    </div>
+
+    <h3>Hosting</h3>
+    <p>The application is deployed on Netlify (Sydney region, ap-southeast-2) as a static PWA with serverless functions for PIN verification, API proxying, and email. There are no long-running servers to patch or maintain. Each HTTP request runs in an isolated function instance that terminates after responding.</p>
+
+    <h3>Database</h3>
+    <p>All data is stored in Supabase (managed PostgreSQL, Sydney region). Supabase provides the database, storage, and real-time subscriptions. Supabase is SOC 2 Type II certified and encrypts all data at rest (AES-256) and in transit (TLS 1.2+).</p>
+
+    <h3>Architecture</h3>
+    <div class="arch-diagram">
+      <div class="arch-layer">
+        <div class="arch-layer-title">Browser (Laptop, Tablet, Phone)</div>
+        <div class="arch-layer-sub">HTTPS only — works offline</div>
+      </div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-layer highlight">
+        <div class="arch-layer-title">Netlify Functions (PIN, AI Agent, Email)</div>
+        <div class="arch-layer-sub">verify-pin.js &bull; eq-agent.js &bull; send-email.js</div>
+      </div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-layer green">
+        <div class="arch-layer-title">Supabase (PostgreSQL + Storage)</div>
+        <div class="arch-layer-sub">SOC 2 Type II &bull; AES-256 at rest &bull; TLS 1.2+ in transit &bull; RLS enforced</div>
+      </div>
+    </div>
+
+    <h3>Netlify Functions</h3>
+    <table class="styled-table">
+      <thead><tr><th>Function</th><th>Purpose</th><th>Auth Method</th></tr></thead>
+      <tbody>
+        <tr><td>verify-pin.js</td><td>PIN validation, session token generation</td><td>PIN + HMAC-SHA256</td></tr>
+        <tr><td>eq-agent.js</td><td>Anthropic API proxy for chat interface</td><td>Session token validation + rate limiting</td></tr>
+        <tr><td>send-email.js</td><td>Email notifications (Resend)</td><td>Currently unauthenticated (roadmap item)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. TENANT ISOLATION -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <span class="section-num">3</span>
+      <h2>Multi-Tenant Isolation</h2>
+    </div>
+    <p>EQ Solves Field is a multi-tenant platform. Each tenant (company) has complete data isolation enforced at the database level through PostgreSQL Row-Level Security (RLS).</p>
+
+    <h3>How RLS Works</h3>
+    <p>Every table in the database has RLS policies enabled. When a user queries any table, PostgreSQL automatically appends a filter clause that restricts rows to the user's tenant (identified via hostname slug mapping). This happens inside the database engine itself — even a bug in application code cannot expose another tenant's data.</p>
+
+    <div class="code-block">
+      <span class="code-comment">-- Example RLS policy on timesheets table</span><br>
+      <span class="code-keyword">CREATE POLICY</span> tenant_isolation <span class="code-keyword">ON</span> timesheets<br>
+      &nbsp;&nbsp;<span class="code-keyword">USING</span> (org_id = <span class="code-keyword">CURRENT_SETTING</span>(<span class="code-string">'app.org_id'</span>));
+    </div>
+
+    <h3>Tenant Boundary Enforcement</h3>
+    <table class="styled-table">
+      <thead><tr><th>Layer</th><th>Mechanism</th><th>Bypass Risk</th></tr></thead>
+      <tbody>
+        <tr><td>Database</td><td>RLS policies on every data table</td><td><span class="badge badge-green">None — enforced at PostgreSQL level</span></td></tr>
+        <tr><td>Application</td><td>Hostname → org_id mapping on every request</td><td><span class="badge badge-amber">Low (RLS backstop active)</span></td></tr>
+        <tr><td>Storage</td><td>RLS on Supabase Storage buckets</td><td><span class="badge badge-green">None</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <p><strong>Defence in depth:</strong> The application layer derives org_id from the request hostname and passes it to Supabase. Even if the application logic fails, the database RLS layer independently blocks cross-tenant queries. Both layers must fail simultaneously for data to leak.</p>
+    </div>
+  </div>
+
+  <!-- 4. AUTHENTICATION -->
+  <div class="section" id="s4">
+    <div class="section-header">
+      <span class="section-num">4</span>
+      <h2>Authentication &amp; Access Control</h2>
+    </div>
+
+    <h3>PIN-Based Login Model</h3>
+    <p>The Field app uses shared PINs, not per-user credentials. This is appropriate for field teams using company devices. There are two PIN codes:</p>
+    <table class="styled-table">
+      <thead><tr><th>Code</th><th>Value (Example)</th><th>Who Uses It</th><th>Permissions</th></tr></thead>
+      <tbody>
+        <tr><td>Staff PIN</td><td>2026</td><td>All staff members</td><td>View own schedule, record hours</td></tr>
+        <tr><td>Supervisor PIN</td><td>SKSNSW</td><td>Supervisors only</td><td>Full roster, timesheets, people management</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warning">
+      <p><strong>Current state:</strong> PINs are currently shared across all staff of the same role. Per-user credentials are planned for v2.0. This is acceptable for v1.0 given that users are known contractors and devices are managed company equipment. Accountability is maintained via audit logging (every change is logged with timestamps and name selection).</p>
+    </div>
+
+    <h3>Session Token Management</h3>
+    <div class="info-grid">
+      <div class="label">Token type</div>
+      <div class="value">HMAC-SHA256 signed (base64 payload + hex signature)</div>
+      <div class="label">Expiry</div>
+      <div class="value">7 days</div>
+      <div class="label">Rate limiting</div>
+      <div class="value">5 failed attempts per IP = 15-minute lockout</div>
+      <div class="label">Token hashing</div>
+      <div class="value">PIN hashed with HMAC-SHA256 before storage</div>
+      <div class="label">Storage location</div>
+      <div class="value">Browser localStorage (no HTTP-only cookies in PWA)</div>
+    </div>
+
+    <h3>Access Control Flow</h3>
+    <div class="flow">
+      <span class="flow-step">User enters PIN</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Verify against hash</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Generate session token</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Store locally (PWA)</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Validate on requests</span>
+    </div>
+
+    <div class="callout">
+      <p><strong>No MFA:</strong> The Field app does not implement multi-factor authentication. This is a known limitation documented in the remediation roadmap. For v1.0, rate limiting on PIN attempts and 7-day session expiry provide rate-limiting protections. MFA integration is planned for v2.0.</p>
+    </div>
+  </div>
+
+  <!-- 5. AUTHORISATION -->
+  <div class="section" id="s5">
+    <div class="section-header">
+      <span class="section-num">5</span>
+      <h2>Authorisation &amp; Roles</h2>
+    </div>
+
+    <h3>Role Hierarchy</h3>
+    <table class="styled-table">
+      <thead><tr><th>Role</th><th>Data Access</th><th>Write Permissions</th></tr></thead>
+      <tbody>
+        <tr><td>Supervisor</td><td>All company data (roster, timesheets, people)</td><td>Full — create, edit, delete operations</td></tr>
+        <tr><td>Staff</td><td>Own schedule ("My Week"), assigned jobs</td><td>Record hours, view leave requests</td></tr>
+        <tr><td>Agency</td><td>Timesheets only</td><td>Read-only or minimal edit (configurable)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Client-Side Role Checking</h3>
+    <p><strong>Current limitation:</strong> Role checking for Staff is currently client-side based on access codes stored in app-state.js. This is acceptable for internal use but is marked for server-side enforcement in the roadmap.</p>
+
+    <div class="code-block">
+      <span class="code-comment">// Example: client-side role check (current implementation)</span><br>
+      <span class="code-keyword">const</span> isSupervisor = enteredCode === supervisorCode;<br>
+      <span class="code-keyword">if</span> (isSupervisor) { <span class="code-comment">// show admin UI</span> }
+    </div>
+
+    <h3>Server-Side Enforcement (eq-agent.js)</h3>
+    <p>The AI Agent endpoint (eq-agent.js) implements server-side authorization:</p>
+    <div class="flow">
+      <span class="flow-step">Validate token</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Rate limit (20 req/min/IP)</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Message context cap</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-step">Proxy to Anthropic</span>
+    </div>
+  </div>
+
+  <!-- 6. AUDIT LOGGING -->
+  <div class="section" id="s6">
+    <div class="section-header">
+      <span class="section-num">6</span>
+      <h2>Audit Logging</h2>
+    </div>
+    <p>All changes to core entities (timesheets, roster, leave requests) are logged in the audit_logs table. Logs are tenant-scoped and immutable — no application user can modify or delete them.</p>
+
+    <h3>Logged Events</h3>
+    <table class="styled-table">
+      <thead><tr><th>Event</th><th>Details Captured</th></tr></thead>
+      <tbody>
+        <tr><td>Login attempt</td><td>Timestamp, result (success/failure), IP, attempt count</td></tr>
+        <tr><td>Timesheet entry</td><td>User name, job number, hours, date, change timestamp</td></tr>
+        <tr><td>Roster change</td><td>Person affected, site assignment, date changed, changed by</td></tr>
+        <tr><td>Leave request</td><td>Requester, type, dates, status change, approver</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Audit Log Fields</h3>
+    <div class="info-grid">
+      <div class="label">timestamp</div>
+      <div class="value">UTC, from server time</div>
+      <div class="label">user_name</div>
+      <div class="value">Name of the person who made the change</div>
+      <div class="label">action</div>
+      <div class="value">create, update, or delete</div>
+      <div class="label">entity_type</div>
+      <div class="value">timesheets, roster, leave_requests, etc.</div>
+      <div class="label">metadata</div>
+      <div class="value">JSON with before/after values where applicable</div>
+      <div class="label">org_id</div>
+      <div class="value">Tenant identifier (multi-tenant isolation)</div>
+    </div>
+  </div>
+
+  <!-- 7. DATA PROTECTION & PRIVACY -->
+  <div class="section" id="s7">
+    <div class="section-header">
+      <span class="section-num">7</span>
+      <h2>Data Protection &amp; Privacy</h2>
+    </div>
+
+    <h3>Encryption</h3>
+    <div class="info-grid">
+      <div class="label">At rest</div>
+      <div class="value">AES-256 (Supabase managed encryption)</div>
+      <div class="label">In transit</div>
+      <div class="value">TLS 1.2+ on all HTTPS connections</div>
+      <div class="label">Backups</div>
+      <div class="value">Automated daily by Supabase, encrypted</div>
+    </div>
+
+    <h3>Data Retention &amp; Deletion</h3>
+    <p>The Field app uses soft deletes for all records. No data is permanently destroyed through the application — all records use an <code>is_active</code> flag for logical deletion. This preserves full audit history and allows recovery if needed.</p>
+
+    <h3>Australian Privacy Principles Compliance</h3>
+    <p>The Field app handles personal information (employee names, phone numbers, email addresses) and complies with the Australian Privacy Principles:</p>
+    <ul style="margin-left: 20px; margin-bottom: 16px;">
+      <li><strong>APP 1 (Open and transparent management):</strong> Privacy notice shown at login.</li>
+      <li><strong>APP 3 (Collection of solicited information):</strong> Data collected only for rostering and timesheet purposes.</li>
+      <li><strong>APP 5 (Notification of the Australian Privacy Principles):</strong> Users informed how data is used and stored.</li>
+      <li><strong>APP 6 (Use or disclosure):</strong> Data only disclosed to SKS supervisors and payroll admins.</li>
+      <li><strong>APP 11 (Security):</strong> Encryption, access controls, and audit logging protect data.</li>
+      <li><strong>APP 12 (Access and correction):</strong> Supervisors can view and update employee details.</li>
+    </ul>
+
+    <h3>Data Scope</h3>
+    <p>The following personal and workplace data is stored:</p>
+    <ul style="margin-left: 20px; margin-bottom: 16px;">
+      <li>Employee names and phone numbers</li>
+      <li>Email addresses</li>
+      <li>Work schedules (site assignments per day)</li>
+      <li>Timesheets (job numbers, hours worked)</li>
+      <li>Leave requests (type, dates, status)</li>
+      <li>Supervisor/manager assignments</li>
+    </ul>
+  </div>
+
+  <!-- 8. TRANSPORT SECURITY -->
+  <div class="section" id="s8">
+    <div class="section-header">
+      <span class="section-num">8</span>
+      <h2>Transport Security</h2>
+    </div>
+    <p>The following HTTP security headers are enforced on all responses via Netlify:</p>
+    <table class="styled-table">
+      <thead><tr><th>Header</th><th>Value / Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>HSTS</td><td>max-age=31536000 — forces HTTPS for 1 year</td></tr>
+        <tr><td>X-Frame-Options</td><td>DENY — prevents clickjacking</td></tr>
+        <tr><td>X-Content-Type-Options</td><td>nosniff — prevents MIME type sniffing</td></tr>
+        <tr><td>Referrer-Policy</td><td>strict-origin-when-cross-origin — limits URL leakage</td></tr>
+        <tr><td>Permissions-Policy</td><td>Disables camera, microphone, payment, USB, FLoC</td></tr>
+        <tr><td>Content-Security-Policy</td><td>Restricts script/style sources to self and required CDNs</td></tr>
+      </tbody>
+    </table>
+
+    <h3>CORS Policy</h3>
+    <p><strong>Current limitation:</strong> CORS headers on Netlify Functions are currently set to Access-Control-Allow-Origin: *. This allows any origin to call the functions. This is acceptable for v1.0 but will be restricted to specific origins in v2.0 (see Remediation Roadmap).</p>
+  </div>
+
+  <!-- 9. SECRET MANAGEMENT -->
+  <div class="section" id="s9">
+    <div class="section-header">
+      <span class="section-num">9</span>
+      <h2>Secret Management</h2>
+    </div>
+
+    <h3>Current State — Hardcoded Secrets (Known Issue)</h3>
+    <div class="callout warning">
+      <p><strong>CRITICAL FINDING:</strong> The following secrets are currently hardcoded in the codebase:</p>
+      <ul style="margin-left: 20px; margin-top: 12px;">
+        <li><code>SECRET_SALT</code> in verify-pin.js and eq-agent.js (HMAC key for PIN hashing)</li>
+        <li>Supabase URL and API key in verify-pin.js</li>
+        <li>Resend API key in send-email.js</li>
+        <li>Staff access codes in app-state.js (staffCode, supervisorCode)</li>
+      </ul>
+      <p style="margin-top: 12px;">This is a high-priority remediation item. See Remediation Roadmap below.</p>
+    </div>
+
+    <h3>Mitigation Measures</h3>
+    <ul style="margin-left: 20px; margin-bottom: 16px;">
+      <li><strong>GitHub secret scanning:</strong> Enabled. No sensitive strings exposed in public repos.</li>
+      <li><strong>Private repository:</strong> Source code is in a private GitHub repo with restricted access.</li>
+      <li><strong>Netlify environment variables:</strong> Already in use for some secrets; expansion is planned.</li>
+      <li><strong>Code review:</strong> All changes reviewed before merge to main branch.</li>
+    </ul>
+
+    <h3>Planned Improvements</h3>
+    <p>See Section 11: Remediation Roadmap for the transition to environment variable injection for all secrets.</p>
+  </div>
+
+  <!-- 10. SECURITY POSTURE & CONTROLS -->
+  <div class="section" id="s10">
+    <div class="section-header">
+      <span class="section-num">10</span>
+      <h2>Security Posture &amp; Controls</h2>
+    </div>
+
+    <h3>Controls Summary</h3>
+    <div class="controls-grid">
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Row-Level Security (RLS)</div><div class="control-sub">Enforced on all data tables</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Audit Logging</div><div class="control-sub">All mutations recorded and immutable</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Rate Limiting</div><div class="control-sub">5 attempts/IP (PIN), 20 req/min (API)</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Encryption in Transit</div><div class="control-sub">TLS 1.2+ on all connections</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Encryption at Rest</div><div class="control-sub">AES-256 (Supabase managed)</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Session Tokens</div><div class="control-sub">HMAC-SHA256 signed, 7-day expiry</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Security Headers</div><div class="control-sub">HSTS, CSP, X-Frame-Options, etc.</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Soft Deletes</div><div class="control-sub">No data destruction — full recoverability</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon amber">⚠️</div>
+        <div><div class="control-text">Multi-Factor Auth</div><div class="control-sub">Not implemented (roadmap v2.0)</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon amber">⚠️</div>
+        <div><div class="control-text">Per-User Credentials</div><div class="control-sub">Shared PINs (v1.0 appropriate, v2.0 planned)</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon amber">⚠️</div>
+        <div><div class="control-text">Environment Secrets</div><div class="control-sub">Hardcoded in code (remediation in progress)</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon amber">⚠️</div>
+        <div><div class="control-text">CORS Restriction</div><div class="control-sub">Currently Allow-All (planned restriction)</div></div>
+      </div>
+    </div>
+
+    <h3>Inherited Compliance</h3>
+    <table class="styled-table">
+      <thead><tr><th>Provider</th><th>Certification</th><th>Relevance</th></tr></thead>
+      <tbody>
+        <tr><td>Supabase</td><td>SOC 2 Type II certified</td><td>Database, storage, encryption</td></tr>
+        <tr><td>Netlify</td><td>SOC 2 Type II (Enterprise plan)</td><td>Hosting, HSTS, DDoS protection</td></tr>
+        <tr><td>GitHub</td><td>SOC 2 Type II</td><td>Source control, secret scanning</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 11. REMEDIATION ROADMAP -->
+  <div class="section" id="s11">
+    <div class="section-header">
+      <span class="section-num">11</span>
+      <h2>Remediation Roadmap</h2>
+    </div>
+
+    <p>This roadmap outlines the planned security hardening of the Field app. The v1.0 release prioritizes functionality and rapid deployment; v2.0 and beyond focus on production-grade hardening.</p>
+
+    <table class="styled-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Item</th>
+          <th>Current State</th>
+          <th>Target State</th>
+          <th>Timeline</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-red">CRITICAL</span></td>
+          <td>Migrate hardcoded secrets to Netlify environment variables</td>
+          <td>SECRET_SALT, Supabase credentials, Resend key hardcoded in code</td>
+          <td>All secrets injected at build/runtime; zero secrets in codebase</td>
+          <td>v1.1 (Q2 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-red">CRITICAL</span></td>
+          <td>Secure send-email function (add authentication)</td>
+          <td>No authentication — anyone can call it</td>
+          <td>Token-based auth required; rate limiting per sender</td>
+          <td>v1.1 (Q2 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-red">CRITICAL</span></td>
+          <td>Implement CORS origin whitelisting</td>
+          <td>Allow-Origin: * on all functions</td>
+          <td>Restrict to sks-nsw-labour.netlify.app and eq-solves-field.netlify.app</td>
+          <td>v1.1 (Q2 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">HIGH</span></td>
+          <td>Multi-Factor Authentication (MFA)</td>
+          <td>Not implemented</td>
+          <td>Time-based OTP (TOTP) for supervisors; optional for staff</td>
+          <td>v2.0 (Q3 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">HIGH</span></td>
+          <td>Per-User Credentials</td>
+          <td>Shared PINs per role</td>
+          <td>Individual username/password for each user</td>
+          <td>v2.0 (Q3 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">HIGH</span></td>
+          <td>Server-Side Role Enforcement</td>
+          <td>Client-side access code validation</td>
+          <td>All role checks validated on server before data access</td>
+          <td>v2.0 (Q3 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">HIGH</span></td>
+          <td>In-Memory Rate Limiting → Persistent</td>
+          <td>In-memory only; resets on cold start or new instance</td>
+          <td>Redis or Supabase-backed rate limiting (survives instance restarts)</td>
+          <td>v2.0 (Q3 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge" style="background:#DDD;color:#000;">MEDIUM</span></td>
+          <td>API Key Rotation Policy</td>
+          <td>Manual rotation only</td>
+          <td>Automated key rotation every 90 days</td>
+          <td>v2.1 (Q4 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge" style="background:#DDD;color:#000;">MEDIUM</span></td>
+          <td>Penetration Testing</td>
+          <td>None conducted</td>
+          <td>Annual third-party pen test; vulnerability disclosure program</td>
+          <td>v2.0 (Q3 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge" style="background:#DDD;color:#000;">MEDIUM</span></td>
+          <td>Security Headers — Stricter CSP</td>
+          <td>CSP in report-only mode</td>
+          <td>Enforce CSP; minimize unsafe-inline</td>
+          <td>v1.2 (Q2 2026)</td>
+        </tr>
+        <tr>
+          <td><span class="badge" style="background:#DDD;color:#000;">MEDIUM</span></td>
+          <td>Centralised Logging</td>
+          <td>Logs only in Supabase audit_logs table</td>
+          <td>Stream logs to external SIEM (e.g., Datadog, Splunk)</td>
+          <td>v2.1 (Q4 2026)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Why This Roadmap?</h3>
+    <p>The Field app was built for rapid initial deployment. CRITICAL items address immediate risk (exposed secrets, unauthenticated endpoints). HIGH items prepare the platform for wider adoption and regulatory scrutiny. MEDIUM items align with mature SaaS practices.</p>
+
+    <div class="callout">
+      <p><strong>Stakeholder commitment:</strong> EQ Solutions and SKS Technologies agree to prioritize CRITICAL remediation items in v1.1, targeting completion by end of Q2 2026. HIGH items are scheduled for v2.0 (Q3 2026) assuming no production incidents that demand earlier action.</p>
+    </div>
+  </div>
+
+  <!-- DOCUMENT CONTROL -->
+  <div class="section" id="s12">
+    <div class="section-header">
+      <span class="section-num" style="background:var(--eq-grey);">&#9998;</span>
+      <h2>Document Control</h2>
+    </div>
+    <table class="styled-table">
+      <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Changes</th></tr></thead>
+      <tbody>
+        <tr><td>1.0</td><td>13 April 2026</td><td>EQ Solutions</td><td>Initial release — Field v1.0 security architecture</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Distribution</h3>
+    <table class="styled-table">
+      <thead><tr><th>Recipient</th><th>Organisation</th><th>Copy Type</th></tr></thead>
+      <tbody>
+        <tr><td>Royce Milmlow</td><td>EQ Solutions / CDC Solutions</td><td>Master</td></tr>
+        <tr><td>SKS Technologies</td><td>SKS Technologies Pty Ltd</td><td>Controlled</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Review & Update Schedule</h3>
+    <p>This document will be reviewed and updated:</p>
+    <ul style="margin-left: 20px; margin-bottom: 16px;">
+      <li>Quarterly (at minimum)</li>
+      <li>Following any significant change to the platform's security architecture</li>
+      <li>Following any infrastructure or dependency upgrade</li>
+      <li>Within 5 business days of any security incident or vulnerability disclosure</li>
+      <li>Upon completion of items in the Remediation Roadmap</li>
+    </ul>
+
+    <h3>Next Review Date</h3>
+    <p><strong>Scheduled:</strong> 13 July 2026 (Q3 2026 — following expected v1.1 release)</p>
+
+    <div class="callout">
+      <p><strong>Questions?</strong> Contact EQ Solutions or SKS Technologies operations team for detail on any security control, or to request SOC 2 compliance reports from infrastructure providers.</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════ BACK PAGE ═══════════ -->
+<div style="
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1A1A2E 0%, #2986B4 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 80px 40px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+">
+  <div style="position:absolute;top:-150px;left:-150px;width:500px;height:500px;border-radius:50%;background:rgba(61,168,216,0.1);"></div>
+  <div style="position:absolute;bottom:-200px;right:-100px;width:600px;height:600px;border-radius:50%;background:rgba(61,168,216,0.06);"></div>
+
+  <div style="position:relative;z-index:1;">
+    <div style="margin-bottom:16px;">
+      <img src="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_white_transparent.svg" alt="EQ" style="height:64px;width:auto;">
+    </div>
+    <div style="margin-bottom:32px;">
+      <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:48px;font-weight:800;color:white;">EQ</span>
+      <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:48px;font-weight:800;color:#3DA8D8;"> Solves</span>
+    </div>
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;color:rgba(255,255,255,0.5);margin-bottom:48px;letter-spacing:0.1em;text-transform:uppercase;">Field Application</div>
+
+    <div style="
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 36px 48px;
+      display: inline-block;
+      text-align: left;
+      min-width: 360px;
+    ">
+      <div style="margin-bottom: 20px;">
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:4px;">Prepared by</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:600;color:white;">EQ Solutions</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;color:rgba(255,255,255,0.6);">CDC Solutions Pty Ltd (Trustee)</div>
+      </div>
+      <div style="margin-bottom: 20px;">
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:4px;">Contact</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:600;color:white;">Royce Milmlow</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;color:rgba(255,255,255,0.6);">Operations Manager</div>
+      </div>
+      <div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:4px;">Web</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;color:#3DA8D8;">eq-solves-field.netlify.app</div>
+      </div>
+    </div>
+
+    <div style="margin-top:48px;">
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;color:rgba(255,255,255,0.3);">&copy; 2026 EQ Solutions. All rights reserved.</div>
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;color:rgba(255,255,255,0.2);margin-top:4px;">This document is commercial-in-confidence and intended solely for SKS Technologies Pty Ltd.</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
