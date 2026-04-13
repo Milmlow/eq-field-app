@@ -1,21 +1,56 @@
+// ─────────────────────────────────────────────────────────────
+// netlify/functions/verify-pin.js
+// PIN verification, session token generation, remember-me tokens.
+// Env vars required:
+//   EQ_SECRET_SALT   — HMAC signing key
+//   AUDIT_SB_URL     — Supabase REST URL for audit logging
+//   AUDIT_SB_KEY     — Supabase publishable key for audit logging
+// ─────────────────────────────────────────────────────────────
+
 const crypto = require('crypto');
 
-const SECRET_SALT = process.env.EQ_SECRET_SALT || 'sks-nsw-labour-2026-hvK9mP2xQ7';
+// ── Config from env vars (no fallbacks — fail explicitly) ────
+const SECRET_SALT = process.env.EQ_SECRET_SALT;
+const SB_URL      = process.env.AUDIT_SB_URL;
+const SB_KEY      = process.env.AUDIT_SB_KEY;
+
+if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
+
+// ── Allowed origins for CORS ─────────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://sks-nsw-labour.netlify.app',
+  'https://eq-solves-field.netlify.app',
+  'http://localhost:8888',
+  'http://localhost:3000',
+];
+
+function corsHeaders(event) {
+  const origin = event.headers['origin'] || event.headers['Origin'] || '';
+  const allowed = ALLOWED_ORIGINS.some(o => origin === o || origin.endsWith('--sks-nsw-labour.netlify.app') || origin.endsWith('--eq-solves-field.netlify.app'));
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': 'Content-Type, x-eq-token',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
+
+// ── PIN hashing ──────────────────────────────────────────────
 function hashCode(code) {
   return crypto.createHmac('sha256', SECRET_SALT).update(code).digest('hex');
 }
 
-const STAFF_HASH = '1b2e74d160a514b52a35ad24f86a99416ba8e69367be5a99e86b801540ab9762';
+const STAFF_HASH   = '1b2e74d160a514b52a35ad24f86a99416ba8e69367be5a99e86b801540ab9762';
 const MANAGER_HASH = '787b9ed62dcb4b8edc875be85725fffe063fe1716eca1933768b64d96eb45220';
 
+// ── Rate limiting (in-memory, best-effort) ───────────────────
 const attempts = {};
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 15 * 60 * 1000;
+const LOCKOUT_MS   = 15 * 60 * 1000;
 
-const SB_URL = process.env.AUDIT_SB_URL || 'https://hignguefjjjtrhofdztu.supabase.co';
-const SB_KEY = process.env.AUDIT_SB_KEY || 'sb_publishable_npv-8-iiMPde4Ggk9dD5Pw_QAP2OeWi';
-
+// ── Audit logging ────────────────────────────────────────────
 async function logAttempt(name, success, ip, detail) {
+  if (!SB_URL || !SB_KEY) return;
   try {
     await fetch(`${SB_URL}/rest/v1/audit_log`, {
       method: 'POST',
@@ -32,10 +67,10 @@ async function logAttempt(name, success, ip, detail) {
         who: name || 'unknown'
       })
     });
-  } catch (e) {}
+  } catch (e) { /* non-blocking */ }
 }
 
-// 7 day remember-me tokens
+// ── Token signing & verification ─────────────────────────────
 function signToken(name, role, expiresAt) {
   const payload = JSON.stringify({ name, role, exp: expiresAt });
   const sig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
@@ -54,27 +89,31 @@ function verifyToken(token) {
   } catch (e) { return null; }
 }
 
+// ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
-  const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type' };
+  const headers = corsHeaders(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' };
+
+  if (!SECRET_SALT) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server misconfigured — missing EQ_SECRET_SALT' }) };
+  }
 
   try {
     const body = JSON.parse(event.body);
     const ip = event.headers['x-forwarded-for'] || event.headers['client-ip'] || 'unknown';
 
+    // ── Token verification action ────────────────────────────
     if (body.action === 'verify-token') {
       const data = verifyToken(body.token);
       if (data) {
-        // Mint a fresh 8h session token so in-app features (EQ Agent)
-        // keep working for the user even though we're validating a
-        // long-lived remember-me token here.
         const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
         return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
       }
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }
 
+    // ── PIN verification ─────────────────────────────────────
     const { code, name, remember } = body;
     const now = Date.now();
 
@@ -102,18 +141,11 @@ exports.handler = async (event) => {
       record.lockedUntil = 0;
       await logAttempt(name, true, ip);
 
-      // Long-lived "remember me" token (7d) for the PIN gate bypass.
       let token = null;
       if (remember) {
         token = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000));
       }
 
-      // 7-day session token — ALWAYS issued. Used by in-app
-      // features like EQ Agent so any logged-in user can call
-      // protected Netlify functions without re-auth. 7 days
-      // matches the long-lived remember-me window so a user who
-      // stays logged in across the week never gets locked out
-      // of the agent mid-session.
       const sessionToken = signToken(name, role, now + (7 * 24 * 60 * 60 * 1000));
 
       return {
@@ -138,6 +170,6 @@ exports.handler = async (event) => {
       };
     }
   } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal error' }) };
   }
 };

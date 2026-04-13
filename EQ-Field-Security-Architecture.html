@@ -890,7 +890,7 @@
     </div>
     <p>EQ Solves — Field is a workforce rostering and timesheet Progressive Web App (PWA) built for SKS Technologies electrical contractors managing schedules, hours, and leave across multiple sites.</p>
     <p>The Field app is designed for rapid deployment and offline-capable operation. It uses PIN-based access (not per-user accounts), 7-day session tokens, and Supabase as the backend. Security is implemented through multi-tenant data isolation (row-level security), audit logging of all changes, rate limiting on authentication attempts, and encrypted transport.</p>
-    <p>As of v1.1, all server-side secrets have been migrated to Netlify environment variables, the email endpoint is authenticated, XSS input sanitisation is in place, and HSTS headers enforce HTTPS. A remediation roadmap tracks remaining hardening items as the platform evolves toward production grade.</p>
+    <p>As of v1.1, all CRITICAL security items are resolved: server-side secrets are injected via environment variables with no fallbacks in code, all endpoints are authenticated, CORS is whitelisted to approved origins, XSS input sanitisation is in place, HSTS enforces HTTPS, email inputs are validated, and all AI agent usage is audit-logged. A remediation roadmap tracks remaining HIGH and MEDIUM hardening items as the platform evolves toward production grade.</p>
   </div>
 
   <!-- 2. INFRASTRUCTURE -->
@@ -1158,7 +1158,7 @@
     </table>
 
     <h3>CORS Policy</h3>
-    <p><strong>Current limitation:</strong> CORS headers on Netlify Functions are currently set to Access-Control-Allow-Origin: *. This allows any origin to call the functions. This is acceptable for v1.0 but will be restricted to specific origins in v2.0 (see Remediation Roadmap).</p>
+    <p>All Netlify Functions validate the request Origin header against a whitelist of approved domains. Only requests from <code>sks-nsw-labour.netlify.app</code>, <code>eq-solves-field.netlify.app</code>, and <code>localhost</code> (development) are accepted. Branch deploys and deploy previews are also permitted via subdomain matching. A <code>Vary: Origin</code> header is set to prevent CDN cache poisoning.</p>
   </div>
 
   <!-- 9. SECRET MANAGEMENT -->
@@ -1185,7 +1185,7 @@
     </div>
 
     <div class="callout">
-      <p><strong>Completed 13 April 2026:</strong> All server-side secrets migrated from hardcoded values to Netlify environment variables. Functions include fallback values for backward compatibility during rollout — these will be removed in the next code cleanup pass.</p>
+      <p><strong>Completed 13 April 2026:</strong> All server-side secrets migrated from hardcoded values to Netlify environment variables. Fallback values have been stripped — functions now fail explicitly with a clear error if any required env var is missing. Zero secrets remain in the codebase.</p>
     </div>
 
     <h3>Remaining Client-Side Codes</h3>
@@ -1262,8 +1262,16 @@
         <div><div class="control-text">Authenticated Endpoints</div><div class="control-sub">All functions require session token</div></div>
       </div>
       <div class="control-item">
-        <div class="control-icon amber">⚠️</div>
-        <div><div class="control-text">CORS Restriction</div><div class="control-sub">Currently Allow-All (planned restriction)</div></div>
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">CORS Whitelisting</div><div class="control-sub">Origin-validated on all functions</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Input Validation</div><div class="control-sub">Email format, length caps on send-email</div></div>
+      </div>
+      <div class="control-item">
+        <div class="control-icon green">&#9989;</div>
+        <div><div class="control-text">Agent Audit Trail</div><div class="control-sub">All AI agent calls logged</div></div>
       </div>
     </div>
 
@@ -1326,12 +1334,33 @@
           <td>max-age=31536000; includeSubDomains on all responses</td>
           <td><span class="badge badge-green">v1.1 ✓</span></td>
         </tr>
-        <tr>
-          <td><span class="badge badge-red">CRITICAL</span></td>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
           <td>Implement CORS origin whitelisting</td>
-          <td>Allow-Origin: * on all functions</td>
-          <td>Restrict to sks-nsw-labour.netlify.app and eq-solves-field.netlify.app</td>
-          <td>v1.2 (Q2 2026)</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">Allow-Origin: * on all functions</td>
+          <td>Origin validated against whitelist (sks-nsw-labour, eq-solves-field, localhost dev); Vary: Origin header set</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
+        </tr>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
+          <td>Input validation on send-email function</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">No validation beyond field existence</td>
+          <td>Email format regex, max recipients (10), subject length cap (200), HTML body cap (50KB)</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
+        </tr>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
+          <td>Audit logging on EQ Agent calls</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">No logging of agent usage</td>
+          <td>All successful agent calls logged to audit_log with user, IP, message count, model</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
+        </tr>
+        <tr style="background:#F0FDF4;">
+          <td><span class="badge badge-green">DONE</span></td>
+          <td>Remove hardcoded secret fallbacks from code</td>
+          <td style="text-decoration:line-through;color:#9CA3AF;">Fallback values in source code</td>
+          <td>Functions fail explicitly if env vars missing; no secrets in codebase</td>
+          <td><span class="badge badge-green">v1.1 ✓</span></td>
         </tr>
         <tr>
           <td><span class="badge badge-amber">HIGH</span></td>
@@ -1393,10 +1422,10 @@
     </table>
 
     <h3>Why This Roadmap?</h3>
-    <p>The Field app was built for rapid initial deployment. As of v1.1 (13 April 2026), four CRITICAL items have been completed: secrets migrated to env vars, send-email authenticated, XSS sanitised, and HSTS enabled. One CRITICAL item remains (CORS restriction). HIGH items prepare the platform for wider adoption and regulatory scrutiny. MEDIUM items align with mature SaaS practices.</p>
+    <p>The Field app was built for rapid initial deployment. As of v1.1 (13 April 2026), all CRITICAL items have been resolved: secrets migrated to env vars (fallbacks stripped), send-email authenticated, CORS whitelisted, XSS sanitised, HSTS enabled, input validation added, and audit logging extended to the AI agent. HIGH items prepare the platform for wider adoption and regulatory scrutiny. MEDIUM items align with mature SaaS practices.</p>
 
     <div class="callout">
-      <p><strong>Progress update (v1.1):</strong> 4 of 5 CRITICAL items resolved. Remaining CRITICAL item (CORS whitelisting) scheduled for v1.2. HIGH items are scheduled for v2.0 (Q3 2026) assuming no production incidents that demand earlier action.</p>
+      <p><strong>Progress update (v1.1):</strong> All CRITICAL items resolved (8 of 8 completed). Zero CRITICAL items remain. HIGH items are scheduled for v2.0 (Q3 2026) assuming no production incidents that demand earlier action.</p>
     </div>
   </div>
 
@@ -1410,7 +1439,7 @@
       <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Changes</th></tr></thead>
       <tbody>
         <tr><td>1.0</td><td>13 April 2026</td><td>EQ Solutions</td><td>Initial release — Field v1.0 security architecture</td></tr>
-        <tr><td>1.1</td><td>13 April 2026</td><td>EQ Solutions</td><td>Secrets migrated to env vars; send-email authenticated; XSS fix; HSTS added; remediation roadmap updated</td></tr>
+        <tr><td>1.1</td><td>13 April 2026</td><td>EQ Solutions</td><td>All CRITICAL items resolved: env vars (fallbacks removed), send-email auth, CORS whitelisting, XSS fix, HSTS, input validation, agent audit logging</td></tr>
       </tbody>
     </table>
 

@@ -2,22 +2,47 @@
 // netlify/functions/eq-agent.js
 // Proxies chat requests to Anthropic so the API key never
 // touches the browser. Auth is piggy-backed on the existing
-// verify-pin HMAC token — only logged-in SKS users can call it.
+// verify-pin HMAC token — only logged-in users can call it.
 // Env vars required:
 //   ANTHROPIC_API_KEY   — your sk-ant-… key
+//   EQ_SECRET_SALT      — HMAC signing key (must match verify-pin)
+//   AUDIT_SB_URL        — Supabase REST URL (optional, for logging)
+//   AUDIT_SB_KEY        — Supabase key (optional, for logging)
 // ─────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
 
-// Must match SECRET_SALT in verify-pin.js so tokens are valid here too.
-const SECRET_SALT = process.env.EQ_SECRET_SALT || 'sks-nsw-labour-2026-hvK9mP2xQ7';
+// ── Config from env vars (no fallbacks) ──────────────────────
+const SECRET_SALT = process.env.EQ_SECRET_SALT;
+const SB_URL      = process.env.AUDIT_SB_URL;
+const SB_KEY      = process.env.AUDIT_SB_KEY;
 
-// Default model — easy to swap later without a code change
-// by setting EQ_AGENT_MODEL env var in Netlify.
+if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
+
+// Default model — easy to swap via EQ_AGENT_MODEL env var.
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
 const MAX_TOKENS    = 512;
 
-// Per-IP rate limit (cold-start memory only, best-effort)
+// ── Allowed origins for CORS ─────────────────────────────────
+const ALLOWED_ORIGINS = [
+  'https://sks-nsw-labour.netlify.app',
+  'https://eq-solves-field.netlify.app',
+  'http://localhost:8888',
+  'http://localhost:3000',
+];
+
+function corsHeaders(event) {
+  const origin = event.headers['origin'] || event.headers['Origin'] || '';
+  const allowed = ALLOWED_ORIGINS.some(o => origin === o || origin.endsWith('--sks-nsw-labour.netlify.app') || origin.endsWith('--eq-solves-field.netlify.app'));
+  return {
+    'Access-Control-Allow-Origin': allowed ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': 'Content-Type, x-eq-token',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
+
+// ── Per-IP rate limit (cold-start memory only, best-effort) ──
 const rateBuckets = {};
 const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX       = 20;   // 20 calls / minute / IP
@@ -44,14 +69,37 @@ function rateLimited(ip) {
   return rec.count > RATE_MAX;
 }
 
+// ── Audit logging (non-blocking) ─────────────────────────────
+async function logAgentCall(userName, ip, messageCount, model) {
+  if (!SB_URL || !SB_KEY) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/audit_log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SB_KEY,
+        'Authorization': `Bearer ${SB_KEY}`,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        action: 'EQ Agent call',
+        category: 'Agent',
+        detail: `User: ${userName}, IP: ${ip}, Messages: ${messageCount}, Model: ${model}`,
+        who: userName
+      })
+    });
+  } catch (e) { /* non-blocking */ }
+}
+
+// ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin':  '*',
-    'Access-Control-Allow-Headers': 'Content-Type, x-eq-token',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
-  };
+  const headers = corsHeaders(event);
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers };
   if (event.httpMethod !== 'POST')    return { statusCode: 405, headers, body: 'Method not allowed' };
+
+  if (!SECRET_SALT) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server misconfigured — missing EQ_SECRET_SALT' }) };
+  }
 
   try {
     // ── Auth: signed session token from verify-pin ────────────
@@ -69,7 +117,7 @@ exports.handler = async (event) => {
 
     // ── Parse body ────────────────────────────────────────────
     const body = JSON.parse(event.body || '{}');
-    const system   = typeof body.system === 'string' ? body.system : '';
+    const system   = typeof body.system === 'string' ? body.system.slice(0, 2000) : '';
     const messages = Array.isArray(body.messages) ? body.messages : [];
     if (!messages.length) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'No messages supplied' }) };
@@ -108,6 +156,10 @@ exports.handler = async (event) => {
     }
 
     const reply = (data.content && data.content[0] && data.content[0].text) || '(no response)';
+
+    // ── Audit log (non-blocking — don't await) ────────────────
+    logAgentCall(user.name, ip, trimmed.length, model);
+
     return {
       statusCode: 200,
       headers:    { ...headers, 'Content-Type': 'application/json' },
@@ -115,6 +167,6 @@ exports.handler = async (event) => {
     };
 
   } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message || 'Unknown error' }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal error' }) };
   }
 };
