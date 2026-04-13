@@ -51,8 +51,18 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.3.3
+  EQ Solves — Field  v3.3.4
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.3.4
+  ─────────────────
+  - Privacy notice modal restored to sidebar footer (APP compliance)
+  - Security headers added to netlify.toml (CSP, X-Frame-Options, etc.)
+  - Supabase RLS policies tightened — org_id enforcement on all tables
+  - Mobile nav: 5-tab bottom bar (Home/Roster/My Week/Calendar/More)
+  - Mobile drawer: swipe-down-to-close, logout button, Leave → Testing
+  - Mobile topbar: decluttered (pills hidden, compact sync icon)
+  - Dashboard filters stack on mobile
 
   WHAT LIVES WHERE
   ────────────────
@@ -80,6 +90,7 @@
   - Navigation (showPage, renderCurrentPage, stepWeek, onWeekChange)
   - refreshData, updateTopStats, updateLastUpdated
   - Mobile nav (mobileNav, openMobileDrawer, closeMobileDrawer)
+  - Privacy notice modal + openPrivacyNotice()
   - Loading overlay helpers
   - EQ Agent overlay (self-contained)
   ════════════════════════════════════════════════════════════════
@@ -235,10 +246,12 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.3.3</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.3.4</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
+      &nbsp;·&nbsp;
+      <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
     </div>
   </div>
 </nav>
@@ -618,12 +631,54 @@
       <span class="d-icon" id="mobile-lock-icon">🔒</span>
       <span><span style="display:block;font-size:13px" id="mobile-lock-status">View only — tap to unlock</span><span style="display:block;font-size:10px;opacity:.5;margin-top:2px">Password required</span></span>
     </button>
+    <button class="drawer-item" onclick="openPrivacyNotice();closeMobileDrawer()"><span class="d-icon">🔒</span> Privacy Notice</button>
     <div class="drawer-divider"></div>
     <button class="drawer-item" onclick="logoutUser();closeMobileDrawer()" style="color:var(--red)"><span class="d-icon">🚪</span> Log Out</button>
   </div>
 </div>
 
 </div><!-- /shell -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     PRIVACY NOTICE MODAL
+     Australian Privacy Principles (APP) — Privacy Act 1988 (Cth)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-privacy" style="z-index:500">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3>🔒 Privacy Notice</h3>
+      <button class="modal-close" onclick="closeModal('modal-privacy')">✕</button>
+    </div>
+    <div class="modal-body" style="font-size:12.5px;color:var(--ink-2);line-height:1.8;max-height:65vh;overflow-y:auto">
+      <p style="font-weight:700;color:var(--navy);margin-bottom:8px">SKS Technologies Pty Ltd — Collection Notice</p>
+      <p style="margin-bottom:12px">SKS Technologies Pty Ltd (ABN 51 168 906 956) collects and holds personal information about its employees and contractors in order to manage workforce rostering, timesheets, leave, and site operations. This notice is provided in accordance with the <strong>Australian Privacy Principles (APPs)</strong> under the <em>Privacy Act 1988</em> (Cth).</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">What information we collect</p>
+      <p style="margin-bottom:12px">We collect your name, mobile number, email address, employment group (Direct / Apprentice / Labour Hire), licence class, agency (where applicable), weekly site allocations, timesheet hours, and leave requests. Access codes (PINs) are stored as one-way cryptographic hashes — your raw PIN is never stored or accessible to anyone.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Why we collect it (APP 3)</p>
+      <p style="margin-bottom:12px">Personal information is collected for the primary purpose of workforce management — including rostering, timesheet processing, payroll reconciliation, leave management, and site supervision. It is not used for any secondary purpose without your consent.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Who can see your information (APP 6)</p>
+      <p style="margin-bottom:12px">Your information is accessible to SKS Technologies management and supervisors who are authorised users of this system. Labour hire staff information is visible to the relevant agency for timesheet verification only. Information is not disclosed to third parties except where required by law or for payroll processing by our contracted provider.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">How we protect it (APP 11)</p>
+      <p style="margin-bottom:12px">Access to this application requires a shared access code and individual identification. All data is stored in an encrypted cloud database hosted in the AWS ap-southeast-2 (Sydney) region. All connections use TLS encryption in transit. Supervisor actions are recorded in a tamper-evident audit trail. Login attempts are rate-limited and accounts are locked after repeated failures. Database-level row security controls enforce strict isolation between organisations.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Overseas disclosure (APP 8)</p>
+      <p style="margin-bottom:12px">This application is hosted on infrastructure operated by Supabase Inc. (USA) and Netlify Inc. (USA) under data processing agreements consistent with Australian privacy obligations. No personal information is otherwise disclosed overseas.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Your rights (APP 12 &amp; 13)</p>
+      <p style="margin-bottom:12px">You may request access to your personal information, or request a correction if it is inaccurate, by contacting your supervisor or the NSW Operations Manager. Requests will be responded to within a reasonable time and at no charge.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Complaints</p>
+      <p style="margin-bottom:4px">If you believe your privacy has been breached, you may contact SKS Technologies at <strong>admin@sks.com.au</strong>. If you are not satisfied with our response, you may lodge a complaint with the <strong>Office of the Australian Information Commissioner (OAIC)</strong> at <strong>oaic.gov.au</strong> or on 1300 363 992.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('modal-privacy')">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════
      MODALS
@@ -1002,6 +1057,9 @@ function closeMobileDrawer() { const d = document.getElementById('mobile-drawer'
 })();
 
 // ── Help tabs ─────────────────────────────────────────────────
+// ── Privacy notice ────────────────────────────────────────────
+function openPrivacyNotice() { openModal('modal-privacy'); }
+
 function showHelpTab(tab) {
   document.getElementById('help-emp').style.display = tab === 'emp' ? '' : 'none';
   document.getElementById('help-sup').style.display = tab === 'sup' ? '' : 'none';

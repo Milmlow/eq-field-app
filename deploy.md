@@ -1,5 +1,5 @@
 # EQ Solves — Field  ·  Deploy Instructions
-## v3.3.3 — April 2026
+## v3.3.4 — April 2026
 
 > **Local repo path:** `C:\Projects\sks-nsw-labour`
 

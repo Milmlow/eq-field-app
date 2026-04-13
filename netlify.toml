@@ -31,3 +31,25 @@
   for = "/manifest.json"
   [headers.values]
     Cache-Control = "public, max-age=86400"
+
+# ── Security headers — applied to all responses ──────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Prevent clickjacking — disallow embedding in iframes
+    X-Frame-Options = "DENY"
+    # Prevent MIME-type sniffing
+    X-Content-Type-Options = "nosniff"
+    # Limit referrer info sent to third parties
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # Permissions policy — disable features this app doesn't use
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(self), payment=()"
+    # Content Security Policy
+    # - default-src: only this origin by default
+    # - script-src: this origin + Google Fonts (preconnect only, no scripts)
+    # - style-src: this origin + Google Fonts CDN
+    # - font-src: Google Fonts CDN
+    # - connect-src: this origin + Supabase production + websocket + Anthropic API
+    # - img-src: this origin + data URIs + R2 bucket (org logos)
+    # - frame-ancestors: none (consistent with X-Frame-Options)
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com; img-src 'self' data: https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev; frame-ancestors 'none';"
