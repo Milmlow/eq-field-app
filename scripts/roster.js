@@ -255,6 +255,7 @@ function renderRoster() {
 
     people.forEach(p => {
       const s = getPersonSchedule(p.name, week);
+      const isOnLeaveAllWeek = ['mon','tue','wed','thu','fri'].every(d2 => isLeave(s[d2] || ''));
       html += `<tr>
         <td class="name-col">${esc(p.name)}</td>
         ${days.map(d => {
@@ -263,8 +264,12 @@ function renderRoster() {
           const bg   = bgMap[col] || 'transparent';
           const fg   = colMap[col] || 'var(--ink)';
           const title = code && !isLeave(code) ? getSiteName(code) : '';
-          return `<td class="center" style="background:${bg}" title="${esc(title)}">
-            ${code ? `<span style="color:${fg};font-weight:600;font-size:11px">${esc(code)}</span>` : '<span style="color:var(--ink-4)">—</span>'}
+          const isWeekday = ['mon','tue','wed','thu','fri'].includes(d);
+          const isEmpty = !code || !code.trim();
+          const needsAttention = isWeekday && isEmpty && !isOnLeaveAllWeek;
+          const cellBg = needsAttention ? '#FEF9C3' : bg;
+          return `<td class="center" style="background:${cellBg}" title="${esc(title)}">
+            ${code ? `<span style="color:${fg};font-weight:600;font-size:11px">${esc(code)}</span>` : (needsAttention ? '<span style="color:#D97706;font-size:10px">—</span>' : '<span style="color:var(--ink-4)">—</span>')}
           </td>`;
         }).join('')}
       </tr>`;
@@ -383,14 +388,22 @@ function renderEditor() {
 
     people.forEach(p => {
       const s = getPersonSchedule(p.name, week);
+      const isOnLeaveAllWeek = ['mon','tue','wed','thu','fri'].every(d2 => isLeave(s[d2] || ''));
       html += `<div class="roster-editor-row">
         <div class="editor-name">${esc(p.name)}${!p.phone ? '<span class="flag" title="No phone recorded">📵</span>' : ''}</div>
         <div class="editor-days">
           ${days.map(d => {
+            const val = (s[d] || '').toUpperCase();
+            const isWeekday = ['mon','tue','wed','thu','fri'].includes(d);
+            const isEmpty = !val || !val.trim();
+            const needsAttention = isWeekday && isEmpty && !isOnLeaveAllWeek;
             const copied = typeof isCopiedCell === 'function' && isCopiedCell(p.name, d);
-            return `<div class="editor-day${copied ? ' copied-cell' : ''}">
+            let cellClass = 'editor-day';
+            if (copied) cellClass += ' copied-cell';
+            if (needsAttention) cellClass += ' empty-cell';
+            return `<div class="${cellClass}">
             <input type="text" list="site-datalist"
-              value="${(s[d] || '').toUpperCase()}"
+              value="${val}"
               placeholder="${d.toUpperCase()}"
               data-name="${esc(p.name)}" data-week="${week}" data-day="${d}"
               oninput="handleCellInput(this)"
@@ -400,7 +413,7 @@ function renderEditor() {
           }).join('')}
         </div>
         <div class="editor-actions">
-          <button class="btn-icon" title="Fill Mon–Fri" onclick="fillWeek('${p.name.replace(/'/g,"\\'")}','${week}')" style="font-size:10px;color:var(--navy-3)">⇒wk</button>
+          <button class="btn-icon" title="Fill Mon\u2013Fri" onclick="fillWeek('${p.name.replace(/'/g,"\\'")}','${week}')" style="font-size:10px;color:var(--navy-3)">\u21D2wk</button>
           <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
           <button class="btn-icon" style="color:var(--red)" title="Remove"
             data-pid="${p.id}" data-pname="${esc(p.name)}"

@@ -54,14 +54,16 @@
   EQ Solves — Field  v3.3.6
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.3.6  (Copy Week + Job Combobox)
-  ──────────────────────────────────────────────
+  CHANGES IN v3.3.6  (Copy Week + Job Combobox + Roster Gaps)
+  ──────────────────────────────────────────────────────────
   - Copy Last Week: parallel saves via Promise.all (was sequential await loop)
-  - Copy Last Week: yellow highlight on freshly-copied cells, auto-clears on next render
+  - Copy Last Week: green highlight on freshly-copied cells, auto-clears on next render
+  - Roster + Editor: empty weekday cells highlighted yellow (needs attention)
   - Timesheet job inputs: custom combobox dropdown (searchable, shows description)
   - Combobox works on both manager table view and staff self-entry cards
   - Removed inputmode="numeric" from job inputs (was suppressing datalist on mobile)
   - Staff self-entry job inputs now connected to job numbers list
+  - DB migration: added client, notes, status, site_name columns to job_numbers
 
   CHANGES IN v3.3.5  (Security Hardening)
   ────────────────────────────────────────
@@ -693,7 +695,7 @@
       <p style="margin-bottom:12px">You may request access to your personal information, or request a correction if it is inaccurate, by contacting your supervisor or the NSW Operations Manager. Requests will be responded to within a reasonable time and at no charge.</p>
 
       <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Complaints</p>
-      <p style="margin-bottom:4px">If you believe your privacy has been breached, you may contact SKS Technologies at <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4c2d282125220c3f273f622f2321622d39">[email&#160;protected]</a></strong>. If you are not satisfied with our response, you may lodge a complaint with the <strong>Office of the Australian Information Commissioner (OAIC)</strong> at <strong>oaic.gov.au</strong> or on 1300 363 992.</p>
+      <p style="margin-bottom:4px">If you believe your privacy has been breached, you may contact SKS Technologies at <strong>admin@sks.com.au</strong>. If you are not satisfied with our response, you may lodge a complaint with the <strong>Office of the Australian Information Commissioner (OAIC)</strong> at <strong>oaic.gov.au</strong> or on 1300 363 992.</p>
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" onclick="closeModal('modal-privacy')">Close</button>
@@ -807,7 +809,7 @@
      INLINE SCRIPT — Navigation, init, data load, top stats
      Everything else lives in scripts/*.js
      ═══════════════════════════════════════════════════════════ -->
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 
 // ── Loading overlay ───────────────────────────────────────────
 function showLoadingOverlay(msg) {
@@ -1344,4 +1346,13 @@ const eqAgent = (function() {
   }
 
   document.addEventListener('DOMContentLoaded', function() {
-    const ta = document.getElementById('eq-
+    const ta = document.getElementById('eq-agent-input');
+    if (ta) ta.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 90) + 'px'; });
+  });
+
+  return { toggle, send };
+})();
+</script>
+
+</body>
+</html>
