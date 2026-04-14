@@ -408,9 +408,15 @@ function renderTrialDashboard() {
     if (s && !isLeave(s) && String(s).trim() && matchAll(r, d, s)) activeSet.add(r.name);
   }));
 
-  // Composition from activeSet
+  // Composition from full workforce (STATE.people) — matches main dashboard.
+  // Previously counted only people with site allocations in the current week,
+  // which undercounted vs main dash (anyone unrostered / fully on leave was
+  // dropped). Now shows full head per group so Total = main dash "total"
+  // (e.g. 53). The group slicer still filters the rest of the view via
+  // matchAll / matchGroupDay.
+  const allPeople = STATE.people || [];
   const comp = { Direct:0, Apprentice:0, 'Labour Hire':0 };
-  activeSet.forEach(nm => { if (comp[pGroup[nm]] != null) comp[pGroup[nm]]++; });
+  allPeople.forEach(p => { if (comp[p.group] != null) comp[p.group]++; });
   const totalHead = comp.Direct + comp.Apprentice + comp['Labour Hire'];
 
   // On leave this week — exclude Public Holidays (site-wide closure, not an absence)
@@ -443,19 +449,11 @@ function renderTrialDashboard() {
     return { w: w, v: names.size || totalHead };
   });
 
-  // Previous-week delta
-  const prevW = allWeeks[curIdx - 1];
-  let prevTotal = 0;
-  if (prevW) {
-    const ws = getWeekSchedule(prevW);
-    const names = new Set();
-    ws.forEach(r => days.slice(0,5).forEach(d => {
-      if (r[d] && !isLeave(r[d]) && String(r[d]).trim()) names.add(r.name);
-    }));
-    prevTotal = names.size;
-  }
+  // Active = total workforce minus those on leave this week.
+  // Delta is disabled (KPI now reflects full headcount, so week-on-week
+  // fluctuations are meaningful only for roster allocation, not headcount).
   const curActive = totalHead - onLeave;
-  const deltaHead = curActive - (prevTotal || curActive);
+  const deltaHead = 0;
 
   // Hours logged this week
   const tsThisWeek = (STATE.timesheets || []).filter(t => t.week === week);

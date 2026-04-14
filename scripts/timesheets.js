@@ -259,6 +259,44 @@ function toggleTsSplit(pid, btn) {
   }
 }
 
+// ── Fill week from Monday ─────────────────────────────────────
+// Copies the current Monday cell (job + hours) for one person into
+// Tue–Fri of the same week. Honours split-day entries: the raw
+// `mon_job` string (e.g. "D5384:4|D5385:4") and numeric `mon_hrs`
+// copy through saveTsCell unchanged.
+// Triggered from the ">> Week" button in the Monday cell.
+async function fillTsWeekFromMon(name, grp) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  if (!name) return;
+  const week  = STATE.currentWeek;
+  const entry = (STATE.timesheets || []).find(r => r.name === name && r.week === week);
+  if (!entry || !entry.mon_job) { showToast('Fill Monday first'); return; }
+
+  const monJob = entry.mon_job;
+  const monHrs = entry.mon_hrs;
+  const days   = ['tue', 'wed', 'thu', 'fri'];
+
+  // Warn before clobbering existing Tue–Fri data
+  const hasExisting = days.some(d => entry[d + '_job'] || entry[d + '_hrs']);
+  if (hasExisting) {
+    const ok = window.confirm(
+      `${name} already has Tue–Fri data for this week.\n\n` +
+      `Overwrite Tue–Fri with Monday's job (${String(monJob).split(':')[0]}) / ${monHrs || 0}h?`
+    );
+    if (!ok) return;
+  }
+
+  for (const d of days) {
+    await saveTsCell(name, grp, week, d, monJob, monHrs);
+  }
+  renderTimesheets();
+  showToast('✓ Copied Mon → Tue–Fri');
+  auditLog(
+    `Fill week from Mon: ${String(monJob).split('|')[0]} / ${monHrs || 0}h`,
+    'Timesheet', name, week
+  );
+}
+
 // ── Render grid ───────────────────────────────────────────────
 
 function _getTsFilteredPeople() {
@@ -344,6 +382,17 @@ function renderTimesheets() {
           job1 = rawJob; hrs1 = rawHrs;
         }
         const pid2 = p.name.replace(/\W/g, '_') + '_' + d;
+        // Fill-week button lives in the Mon cell only. Always visible, disabled
+        // until Mon has a job number (or if user is view-only).
+        const monFilled = !!(entry && entry.mon_job);
+        const fwDisabled = !monFilled || !isManager;
+        const fillWeekBtn = d === 'mon'
+          ? `<button class="ts-fillweek-btn" title="Copy Monday's job &amp; hours into Tue–Fri"
+                data-n="${esc(p.name)}" data-g="${p.group}"
+                onclick="fillTsWeekFromMon(this.dataset.n, this.dataset.g)"
+                ${fwDisabled ? 'disabled' : ''}
+                style="margin-top:4px;width:100%;padding:4px 6px;font-size:10px;font-weight:700;color:#fff;background:${fwDisabled ? 'var(--ink-4)' : 'var(--navy)'};border:1px solid ${fwDisabled ? 'var(--ink-4)' : 'var(--navy)'};border-radius:5px;cursor:${fwDisabled ? 'not-allowed' : 'pointer'};font-family:inherit;letter-spacing:.3px;${fwDisabled ? 'opacity:.55' : ''}">&gt;&gt; Week</button>`
+          : '';
         return `<td style="padding:5px 6px">
           <div class="ts-cell">
             <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
@@ -362,6 +411,7 @@ function renderTimesheets() {
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
               onchange="onTsCellChange(this)">
           </div>
+          ${fillWeekBtn}
         </td>`;
       }).join('')}
       <td class="ts-total-col ${totalClass}" id="tst-${pid}">${total > 0 ? total + 'h' : '—'}</td>
