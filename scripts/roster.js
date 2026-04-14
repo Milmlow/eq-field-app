@@ -267,7 +267,7 @@ function renderRoster() {
           const isWeekday = ['mon','tue','wed','thu','fri'].includes(d);
           const isEmpty = !code || !code.trim();
           const needsAttention = isWeekday && isEmpty && !isOnLeaveAllWeek;
-          const cellBg = needsAttention ? '#FEF9C3' : bg;
+          const cellBg = needsAttention ? '#FDE68A' : bg;
           return `<td class="center" style="background:${cellBg}" title="${esc(title)}">
             ${code ? `<span style="color:${fg};font-weight:600;font-size:11px">${esc(code)}</span>` : (needsAttention ? '<span style="color:#D97706;font-size:10px">—</span>' : '<span style="color:var(--ink-4)">—</span>')}
           </td>`;

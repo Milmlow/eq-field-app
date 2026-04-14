@@ -463,9 +463,9 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
 .editor-day input:focus { background: rgba(61,168,216,.08) !important; }
 .editor-day.copied-cell { background: #DCFCE7; border-left: 3px solid #22C55E; }
 .editor-day.copied-cell input { background: transparent !important; }
-.editor-day.empty-cell { background: #FEF9C3; }
+.editor-day.empty-cell { background: #FDE68A; border-left: 3px solid #F59E0B; }
 .editor-day.empty-cell input { background: transparent !important; }
-.editor-day.empty-cell input::placeholder { color: #D97706; }
+.editor-day.empty-cell input::placeholder { color: #B45309; font-weight: 700; }
 .editor-actions {
   display: flex;
   gap: 2px;
@@ -556,8 +556,9 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0,0,0,.15);
-  max-height: 220px;
+  max-height: min(320px, 50vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
 .jcb-option {

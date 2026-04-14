@@ -28,12 +28,27 @@ function openJobCombobox(inputEl) {
   drop.id = 'job-combobox-dropdown';
   drop.className = 'job-combobox-dropdown';
 
-  // Position below the input
+  // Position below the input, flip above if near bottom of viewport
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const flipAbove = spaceBelow < 240 && spaceAbove > spaceBelow;
+
   drop.style.position = 'fixed';
   drop.style.left   = rect.left + 'px';
-  drop.style.top    = (rect.bottom + 2) + 'px';
-  drop.style.width  = Math.max(rect.width, 220) + 'px';
+  drop.style.width  = Math.max(rect.width, 260) + 'px';
   drop.style.zIndex = '9999';
+
+  if (flipAbove) {
+    drop.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+    drop.style.top    = 'auto';
+  } else {
+    drop.style.top    = (rect.bottom + 2) + 'px';
+    drop.style.bottom = 'auto';
+  }
+
+  // Prevent scroll inside dropdown from closing it
+  drop.addEventListener('mousedown', function(e) { e.preventDefault(); });
+  drop.addEventListener('touchstart', function(e) { e.stopPropagation(); }, { passive: true });
 
   _activeCombobox = { input: inputEl, dropdown: drop };
   document.body.appendChild(drop);
@@ -58,11 +73,12 @@ function _renderComboboxOptions(filter) {
     return;
   }
 
-  drop.innerHTML = filtered.slice(0, 15).map(j => {
-    const desc = j.description ? ' — ' + esc(j.description) : '';
+  drop.innerHTML = filtered.map(j => {
+    const desc = j.description ? ' \u2014 ' + esc(j.description) : '';
     const client = j.client ? '<span class="jcb-client">' + esc(j.client) + '</span>' : '';
     return `<div class="jcb-option" data-value="${esc(j.number)}"
-      onmousedown="selectComboboxOption(event, '${esc(j.number)}')">
+      onmousedown="selectComboboxOption(event, '${esc(j.number)}')"
+      ontouchend="selectComboboxOption(event, '${esc(j.number)}')">
       <span class="jcb-number">${esc(j.number)}</span>
       <span class="jcb-desc">${desc}</span>
       ${client}
@@ -104,12 +120,15 @@ function _onComboboxFocus(el) {
 }
 
 function _onComboboxBlur() {
-  // Small delay to allow mousedown on option to fire first
-  setTimeout(closeJobCombobox, 150);
+  // Longer delay to allow scrolling and touch interactions on the dropdown
+  setTimeout(closeJobCombobox, 300);
 }
 
-// Close combobox on scroll or resize
-document.addEventListener('scroll', closeJobCombobox, true);
+// Close combobox on scroll OUTSIDE the dropdown, or on resize
+document.addEventListener('scroll', function(e) {
+  if (_activeCombobox && _activeCombobox.dropdown && _activeCombobox.dropdown.contains(e.target)) return;
+  closeJobCombobox();
+}, true);
 window.addEventListener('resize', closeJobCombobox);
 
 // ── Load ──────────────────────────────────────────────────────
@@ -290,25 +309,6 @@ function renderTimesheets() {
       ${dlabels.map((d, i) => `<th class="center" style="min-width:160px">${d}<br><span style="font-size:9px;opacity:.6;font-weight:400">${weekDatesTs[['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(d)]} — Job / Hrs</span></th>`).join('')}
       <th class="center" style="min-width:55px">Total</th>
     </tr></thead><tbody>`;
-
-  // ── Quick-fill row ──────────────────────────────────────────
-  if (isManager) {
-    html += `<tr style="background:var(--blue-lt);border-bottom:2px solid var(--border)">
-      <td colspan="2" style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;padding:6px 8px">⚡ Quick Fill →</td>
-      ${days.map(d => `<td style="padding:5px 6px">
-        <div class="ts-cell">
-          <input class="ts-job" type="text" placeholder="Job" id="qf-job-${d}"
-            style="background:white;border:1.5px solid var(--blue)"
-            oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()">
-          <input class="ts-hrs" type="number" placeholder="h" min="0" max="24" step="0.5" id="qf-hrs-${d}" value="8"
-            style="background:white;border:1.5px solid var(--blue)">
-        </div>
-      </td>`).join('')}
-      <td style="text-align:center;padding:4px">
-        <button class="btn btn-sm" onclick="runQuickFill()" style="font-size:11px;padding:6px 10px;white-space:nowrap" title="Apply to all empty cells for visible staff">Apply</button>
-      </td>
-    </tr>`;
-  }
 
   // ── Data rows ───────────────────────────────────────────────
   let lastGroup = '';
