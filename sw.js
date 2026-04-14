@@ -1,5 +1,5 @@
-// EQ Solves — Field  ·  Service Worker  v3.3.6
-const CACHE = 'eq-field-v3.3.6';
+// EQ Solves — Field  ·  Service Worker  v3.3.7
+const CACHE = 'eq-field-v3.3.7';
 
 const PRECACHE = [
   '/',
@@ -27,6 +27,9 @@ const PRECACHE = [
   '/scripts/trial-dashboard.js',
 ];
 
+// Static assets that rarely change — cache-first is safe
+const CACHE_FIRST_PATHS = ['/manifest.json', '/icons/'];
+
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
@@ -48,14 +51,10 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Network first for HTML, cache first for assets
-  if (event.request.headers.get('accept').includes('text/html')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(res => { const c = res.clone(); caches.open(CACHE).then(cache => cache.put(event.request, c)); return res; })
-        .catch(() => caches.match(event.request))
-    );
-  } else {
+  const path = url.pathname;
+
+  // Cache-first ONLY for truly static assets (icons, manifest)
+  if (CACHE_FIRST_PATHS.some(p => path.startsWith(p))) {
     event.respondWith(
       caches.match(event.request).then(cached => {
         if (cached) return cached;
@@ -66,5 +65,18 @@ self.addEventListener('fetch', event => {
         });
       })
     );
+    return;
   }
+
+  // Network-first for everything else (HTML, JS, CSS)
+  // Ensures updates are picked up immediately, with cache fallback for offline
+  event.respondWith(
+    fetch(event.request)
+      .then(res => {
+        const c = res.clone();
+        caches.open(CACHE).then(cache => cache.put(event.request, c));
+        return res;
+      })
+      .catch(() => caches.match(event.request))
+  );
 });

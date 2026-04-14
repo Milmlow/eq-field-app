@@ -374,64 +374,6 @@ function renderTimesheets() {
 }
 
 // ── Quick fill ───────────────────────────────────────────────
-// Reads the quick-fill row inputs and applies job+hrs to all
-// visible staff where that day's cell is currently empty.
-
-async function runQuickFill() {
-  if (!isManager) { showToast('Supervision access required'); return; }
-  const people = _getTsFilteredPeople();
-  const week   = STATE.currentWeek;
-  const days   = TS_DAYS.filter((_, i) => {
-    const el = document.getElementById('qf-job-' + TS_DAYS[i]);
-    return !!el;   // only days visible in the table
-  });
-
-  if (!STATE.timesheets) STATE.timesheets = [];
-  let changed = 0;
-  const promises = [];
-
-  for (const p of people) {
-    let entry = STATE.timesheets.find(r => r.name === p.name && r.week === week);
-    let touched = false;
-
-    days.forEach(d => {
-      const jobEl = document.getElementById('qf-job-' + d);
-      const hrsEl = document.getElementById('qf-hrs-' + d);
-      const job   = jobEl ? jobEl.value.trim().toUpperCase() : '';
-      const hrs   = hrsEl ? parseFloat(hrsEl.value) || 0 : 0;
-      if (!job) return; // skip days with no quick-fill job entered
-
-      // Only fill empty cells
-      if (!entry) {
-        entry = {
-          name: p.name, group: p.group, week,
-          mon_job:null, mon_hrs:null, tue_job:null, tue_hrs:null,
-          wed_job:null, wed_hrs:null, thu_job:null, thu_hrs:null,
-          fri_job:null, fri_hrs:null, sat_job:null, sat_hrs:null, sun_job:null, sun_hrs:null
-        };
-        STATE.timesheets.push(entry);
-      }
-      if (entry[d + '_job']) return; // already has data — skip
-
-      entry[d + '_job'] = job;
-      entry[d + '_hrs'] = hrs;
-      changed++;
-      touched = true;
-    });
-
-    if (touched) {
-      const row = { name: p.name, group: p.group, week };
-      TS_DAYS.forEach(d => { row[d + '_job'] = entry[d + '_job'] || null; row[d + '_hrs'] = parseFloat(entry[d + '_hrs']) || null; });
-      promises.push(sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal'));
-    }
-  }
-
-  await Promise.all(promises);
-  showToast(`Quick fill: ${changed} cells updated`);
-  auditLog(`Quick fill: ${changed} cells`, 'Timesheet', `${people.length} staff`, week);
-  renderTimesheets();
-}
-
 // Legacy tab function — kept for backward compat, now a no-op
 function setTsTab(tab) { renderTimesheets(); }
 

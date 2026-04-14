@@ -309,8 +309,16 @@ function inputColor(el) {
   const col = siteColor(s);
   const bgMap2 = { blue:'#EFF4FF', green:'#F0FDF4', amber:'#FFFBEB', red:'#FEF2F2', grey:'#F8FAFC', purple:'#EEEDF8', empty:'transparent' };
   const fgMap2 = { blue:'#2563EB', green:'#16A34A', amber:'#D97706', red:'#DC2626', grey:'#64748B', purple:'#7C77B9', empty:'var(--ink)' };
-  el.style.background = bgMap2[col] || 'transparent';
-  el.style.color      = fgMap2[col] || 'var(--ink)';
+
+  // If the cell is empty and inside an .empty-cell wrapper, keep the yellow highlight
+  const wrapper = el.closest('.editor-day');
+  if (!s && wrapper && wrapper.classList.contains('empty-cell')) {
+    el.style.background = '#FDE68A';
+    el.style.color      = '#92400E';
+  } else {
+    el.style.background = bgMap2[col] || 'transparent';
+    el.style.color      = fgMap2[col] || 'var(--ink)';
+  }
   if (s && !isKnownSite(s)) { el.style.outline = '2px solid #F59E0B'; el.style.outlineOffset = '-2px'; el.title = '⚠ Unknown site'; }
   else { el.style.outline = ''; el.title = ''; }
 }

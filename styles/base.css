@@ -180,7 +180,7 @@ a { color: var(--blue); }
   font-size: 12px;
   font-weight: 600;
   padding: 8px 20px;
-  border-bottom: 1px solid #FDE68A;
+  border-bottom: 1px solid #FEF9C3;
   cursor: pointer;
   text-align: center;
   -webkit-tap-highlight-color: rgba(180,83,9,.15);
