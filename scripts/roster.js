@@ -386,7 +386,9 @@ function renderEditor() {
       html += `<div class="roster-editor-row">
         <div class="editor-name">${esc(p.name)}${!p.phone ? '<span class="flag" title="No phone recorded">📵</span>' : ''}</div>
         <div class="editor-days">
-          ${days.map(d => `<div class="editor-day">
+          ${days.map(d => {
+            const copied = typeof isCopiedCell === 'function' && isCopiedCell(p.name, d);
+            return `<div class="editor-day${copied ? ' copied-cell' : ''}">
             <input type="text" list="site-datalist"
               value="${(s[d] || '').toUpperCase()}"
               placeholder="${d.toUpperCase()}"
@@ -394,7 +396,8 @@ function renderEditor() {
               oninput="handleCellInput(this)"
               onchange="updateCell(this)"
               autocomplete="off" spellcheck="false">
-          </div>`).join('')}
+          </div>`;
+          }).join('')}
         </div>
         <div class="editor-actions">
           <button class="btn-icon" title="Fill Mon–Fri" onclick="fillWeek('${p.name.replace(/'/g,"\\'")}','${week}')" style="font-size:10px;color:var(--navy-3)">⇒wk</button>

@@ -181,6 +181,17 @@ async function applyBatch(people, days, code, week, skipExisting) {
 
 // ── Copy last week ────────────────────────────────────────────
 
+// Track freshly-copied cells for yellow highlight. Cleared on next manual renderEditor().
+let _copiedCells = new Set();
+
+function isCopiedCell(name, day) {
+  return _copiedCells.has(`${name}||${day}`);
+}
+
+function clearCopiedCells() {
+  _copiedCells.clear();
+}
+
 async function copyLastWeek() {
   if (!isManager) { showToast('Supervision access required'); return; }
   const week = STATE.currentWeek;
@@ -216,7 +227,12 @@ async function copyLastWeek() {
 
   showLoadingOverlay('Copying last week\u2026');
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const allDays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   let copied = 0;
+  _copiedCells.clear();
+
+  // \u2500\u2500 Phase 1: Build all local state changes in memory (no awaits) \u2500\u2500
+  const saveTasks = [];
 
   for (const prev of prevSched) {
     let entry = STATE.schedule.find(r => r.name === prev.name && r.week === week);
@@ -225,22 +241,70 @@ async function copyLastWeek() {
       STATE.schedule.push(entry);
       if (STATE.scheduleIndex) STATE.scheduleIndex[`${prev.name}||${week}`] = entry;
     }
+    const cellsChanged = [];
     for (const d of days) {
       if (!entry[d] || !entry[d].trim()) {
         const val = prev[d] || '';
         if (val && val.trim()) {
           entry[d] = val;
-          await saveCellToSB(prev.name, week, d, val);
+          cellsChanged.push(d);
+          _copiedCells.add(`${prev.name}||${d}`);
           copied++;
         }
       }
     }
+
+    // Build a save task for this person (one request per person, not per cell)
+    if (cellsChanged.length) {
+      saveTasks.push({ entry, cellsChanged });
+    }
   }
 
-  hideLoadingOverlay();
+  // Render immediately with highlights before network requests
   renderEditor();
-  showToast(`Copied ${copied} cells from ${prevWeek}`);
-  auditLog(`Copy last week: ${prevWeek} → ${week}`, 'Roster', `${copied} cells`, week);
+  if (currentPage === 'roster') renderRoster();
+
+  // \u2500\u2500 Phase 2: Save to Supabase in parallel \u2500\u2500
+  const savePromises = saveTasks.map(async ({ entry, cellsChanged }) => {
+    if (entry.id && !String(entry.id).startsWith('temp')) {
+      // Existing row \u2014 PATCH only changed days in a single request
+      const patch = {};
+      cellsChanged.forEach(d => { patch[d] = entry[d] || null; });
+      try {
+        const res = await sbFetch(
+          `schedule?id=eq.${entry.id}`,
+          'PATCH', patch, 'return=representation'
+        );
+        if (Array.isArray(res) && res[0]) {
+          entry.updated_at = res[0].updated_at;
+          if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(entry.id);
+        }
+      } catch (e) { /* individual failure is non-fatal */ }
+    } else {
+      // New row \u2014 POST full row
+      const row = { name: entry.name, week: entry.week };
+      allDays.forEach(d => { row[d] = entry[d] || null; });
+      try {
+        const res = await sbFetch('schedule', 'POST', row, 'return=representation');
+        if (res && res[0]) {
+          entry.id         = res[0].id;
+          entry.updated_at = res[0].updated_at;
+          if (STATE.scheduleIndex) STATE.scheduleIndex[`${entry.name}||${entry.week}`] = entry;
+        }
+      } catch (e) { /* individual failure is non-fatal */ }
+    }
+  });
+
+  try {
+    await Promise.all(savePromises);
+    hideLoadingOverlay();
+    showToast(`Copied ${copied} cells from ${prevWeek} \u2014 saved \u2713`);
+  } catch (e) {
+    hideLoadingOverlay();
+    showToast(`Copied ${copied} cells locally but some saves failed`);
+  }
+
+  auditLog(`Copy last week: ${prevWeek} \u2192 ${week}`, 'Roster', `${copied} cells`, week);
 }
 
 // ── Clean up unknown codes ────────────────────────────────────

@@ -461,6 +461,8 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   transition: background .1s;
 }
 .editor-day input:focus { background: rgba(61,168,216,.08); }
+.editor-day.copied-cell { background: #FEF9C3; border-left: 3px solid #F59E0B; }
+.editor-day.copied-cell input { background: transparent; }
 .editor-actions {
   display: flex;
   gap: 2px;
@@ -544,6 +546,56 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   transition: border-color .12s;
 }
 .ts-hrs:focus { border-color: var(--purple); }
+
+/* ── Job Combobox Dropdown ───────────────────────── */
+.job-combobox-dropdown {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  max-height: 220px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.jcb-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  transition: background .08s;
+}
+.jcb-option:last-child { border-bottom: none; }
+.jcb-option:hover, .jcb-option:active { background: var(--purple-lt); }
+.jcb-number {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  flex-shrink: 0;
+}
+.jcb-desc {
+  font-size: 11px;
+  color: var(--ink-2);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jcb-client {
+  font-size: 10px;
+  color: var(--ink-4);
+  flex-basis: 100%;
+}
+.jcb-empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-4);
+}
 .ts-split-btn {
   flex: 0 0 auto;
   width: 22px;

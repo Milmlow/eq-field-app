@@ -8,6 +8,110 @@
 const TS_DAYS   = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const TS_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// ── Job Combobox ─────────────────────────────────────────────
+// Custom dropdown for job number inputs. Shows filtered active
+// job numbers with description. Allows manual free-text entry.
+
+let _activeCombobox = null;
+
+function _getActiveJobs() {
+  return (typeof jobNumbers !== 'undefined' ? jobNumbers : []).filter(j => j.status === 'Active');
+}
+
+function openJobCombobox(inputEl) {
+  closeJobCombobox();
+  const jobs = _getActiveJobs();
+  if (!jobs.length) return;
+
+  const rect = inputEl.getBoundingClientRect();
+  const drop = document.createElement('div');
+  drop.id = 'job-combobox-dropdown';
+  drop.className = 'job-combobox-dropdown';
+
+  // Position below the input
+  drop.style.position = 'fixed';
+  drop.style.left   = rect.left + 'px';
+  drop.style.top    = (rect.bottom + 2) + 'px';
+  drop.style.width  = Math.max(rect.width, 220) + 'px';
+  drop.style.zIndex = '9999';
+
+  _activeCombobox = { input: inputEl, dropdown: drop };
+  document.body.appendChild(drop);
+  _renderComboboxOptions(inputEl.value);
+}
+
+function _renderComboboxOptions(filter) {
+  if (!_activeCombobox) return;
+  const drop = _activeCombobox.dropdown;
+  const q    = (filter || '').toLowerCase().trim();
+  const jobs = _getActiveJobs();
+
+  const filtered = q
+    ? jobs.filter(j =>
+        (j.number || '').toLowerCase().includes(q) ||
+        (j.description || '').toLowerCase().includes(q) ||
+        (j.client || '').toLowerCase().includes(q))
+    : jobs;
+
+  if (!filtered.length) {
+    drop.innerHTML = '<div class="jcb-empty">No matches</div>';
+    return;
+  }
+
+  drop.innerHTML = filtered.slice(0, 15).map(j => {
+    const desc = j.description ? ' — ' + esc(j.description) : '';
+    const client = j.client ? '<span class="jcb-client">' + esc(j.client) + '</span>' : '';
+    return `<div class="jcb-option" data-value="${esc(j.number)}"
+      onmousedown="selectComboboxOption(event, '${esc(j.number)}')">
+      <span class="jcb-number">${esc(j.number)}</span>
+      <span class="jcb-desc">${desc}</span>
+      ${client}
+    </div>`;
+  }).join('');
+}
+
+function selectComboboxOption(e, value) {
+  e.preventDefault(); // prevent blur before we set the value
+  if (!_activeCombobox) return;
+  const input = _activeCombobox.input;
+  input.value = value;
+  input.dispatchEvent(new Event('change'));
+  closeJobCombobox();
+  // Move focus to the hours input next to it
+  const hrsInput = input.closest('.ts-cell, div')
+    ?.querySelector('input[data-type="hrs"], input[type="number"]');
+  if (hrsInput) hrsInput.focus();
+}
+
+function closeJobCombobox() {
+  if (_activeCombobox && _activeCombobox.dropdown) {
+    _activeCombobox.dropdown.remove();
+  }
+  _activeCombobox = null;
+}
+
+function _onComboboxInput(el) {
+  el.value = el.value.toUpperCase();
+  if (_activeCombobox && _activeCombobox.input === el) {
+    _renderComboboxOptions(el.value);
+  } else {
+    openJobCombobox(el);
+  }
+}
+
+function _onComboboxFocus(el) {
+  openJobCombobox(el);
+}
+
+function _onComboboxBlur() {
+  // Small delay to allow mousedown on option to fire first
+  setTimeout(closeJobCombobox, 150);
+}
+
+// Close combobox on scroll or resize
+document.addEventListener('scroll', closeJobCombobox, true);
+window.addEventListener('resize', closeJobCombobox);
+
 // ── Load ──────────────────────────────────────────────────────
 
 async function loadTimesheets() {
@@ -193,8 +297,9 @@ function renderTimesheets() {
       <td colspan="2" style="font-size:11px;font-weight:700;color:var(--navy);white-space:nowrap;padding:6px 8px">⚡ Quick Fill →</td>
       ${days.map(d => `<td style="padding:5px 6px">
         <div class="ts-cell">
-          <input class="ts-job" type="text" inputmode="numeric" list="ts-job-list" placeholder="Job" id="qf-job-${d}"
-            style="background:white;border:1.5px solid var(--blue)" oninput="this.value=this.value.toUpperCase()">
+          <input class="ts-job" type="text" placeholder="Job" id="qf-job-${d}"
+            style="background:white;border:1.5px solid var(--blue)"
+            oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()">
           <input class="ts-hrs" type="number" placeholder="h" min="0" max="24" step="0.5" id="qf-hrs-${d}" value="8"
             style="background:white;border:1.5px solid var(--blue)">
         </div>
@@ -241,18 +346,18 @@ function renderTimesheets() {
         const pid2 = p.name.replace(/\W/g, '_') + '_' + d;
         return `<td style="padding:5px 6px">
           <div class="ts-cell">
-            <input class="ts-job" type="text" inputmode="numeric" list="ts-job-list" value="${esc(String(job1))}" placeholder="Job no."${disabled}
+            <input class="ts-job" type="text" value="${esc(String(job1))}" placeholder="Job no."${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
-              oninput="this.value=this.value.toUpperCase()" onchange="onTsCellChange(this)">
+              oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
             <input class="ts-hrs" type="number" value="${hrs1}" placeholder="h" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="0"
               onchange="onTsCellChange(this)">
             <button class="ts-split-btn${isSplit ? ' active' : ''}" title="Split: add second job" aria-label="Split day into two jobs" onclick="toggleTsSplit('${pid2}',this)"${disabled ? ' disabled' : ''}>＋</button>
           </div>
           <div class="ts-cell ts-split-row" id="split-${pid2}" style="display:${isSplit ? 'flex' : 'none'};margin-top:3px">
-            <input class="ts-job" type="text" inputmode="numeric" list="ts-job-list" value="${esc(String(job2))}" placeholder="Job 2"${disabled}
+            <input class="ts-job" type="text" value="${esc(String(job2))}" placeholder="Job 2"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
-              oninput="this.value=this.value.toUpperCase()" onchange="onTsCellChange(this)">
+              oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this)" onblur="_onComboboxBlur()" onchange="onTsCellChange(this)">
             <input class="ts-hrs" type="number" value="${hrs2}" placeholder="h" min="0" max="24" step="0.5"${disabled}
               data-name="${esc(p.name)}" data-group="${p.group}" data-week="${week}" data-day="${d}" data-type="hrs" data-slot="1"
               onchange="onTsCellChange(this)">
@@ -658,11 +763,10 @@ function renderStaffTs() {
           <div style="display:flex;gap:8px;align-items:flex-end">
             <div style="flex:1">
               <label style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Job / Docket No.</label>
-              <input type="text" inputmode="numeric" value="${esc(String(job1))}" placeholder="e.g. D5384"
+              <input type="text" value="${esc(String(job1))}" placeholder="e.g. D5384"
                 data-name="${esc(name)}" data-group="${group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="0"
-                oninput="this.value=this.value.toUpperCase()" onchange="onStaffTsCellChange(this)"
-                style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s"
-                onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'">
+                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this);this.style.borderColor='var(--purple)'" onblur="_onComboboxBlur();this.style.borderColor='var(--border)'" onchange="onStaffTsCellChange(this)"
+                style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s">>
             </div>
             <div style="width:80px">
               <label style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hours</label>
@@ -676,11 +780,10 @@ function renderStaffTs() {
           <div id="staff-split-${d}" style="display:${isSplit ? 'flex' : 'none'};gap:8px;align-items:flex-end">
             <div style="flex:1">
               <label style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Job 2</label>
-              <input type="text" inputmode="numeric" value="${esc(String(job2))}" placeholder="Second job"
+              <input type="text" value="${esc(String(job2))}" placeholder="Second job"
                 data-name="${esc(name)}" data-group="${group}" data-week="${week}" data-day="${d}" data-type="job" data-slot="1"
-                oninput="this.value=this.value.toUpperCase()" onchange="onStaffTsCellChange(this)"
-                style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s"
-                onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'">
+                oninput="_onComboboxInput(this)" onfocus="_onComboboxFocus(this);this.style.borderColor='var(--purple)'" onblur="_onComboboxBlur();this.style.borderColor='var(--border)'" onchange="onStaffTsCellChange(this)"
+                style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:13px;color:var(--ink);outline:none;transition:border-color .15s">>
             </div>
             <div style="width:80px">
               <label style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hrs 2</label>
