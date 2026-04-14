@@ -267,7 +267,7 @@ function renderRoster() {
           const isWeekday = ['mon','tue','wed','thu','fri'].includes(d);
           const isEmpty = !code || !code.trim();
           const needsAttention = isWeekday && isEmpty && !isOnLeaveAllWeek;
-          const cellBg = needsAttention ? '#FDE68A' : bg;
+          const cellBg = needsAttention ? '#FBBF24' : bg;
           return `<td class="center" style="background:${cellBg}" title="${esc(title)}">
             ${code ? `<span style="color:${fg};font-weight:600;font-size:11px">${esc(code)}</span>` : (needsAttention ? '<span style="color:#D97706;font-size:10px">—</span>' : '<span style="color:var(--ink-4)">—</span>')}
           </td>`;
@@ -313,7 +313,7 @@ function inputColor(el) {
   // If the cell is empty and inside an .empty-cell wrapper, keep the yellow highlight
   const wrapper = el.closest('.editor-day');
   if (!s && wrapper && wrapper.classList.contains('empty-cell')) {
-    el.style.background = '#FDE68A';
+    el.style.background = '#FBBF24';
     el.style.color      = '#92400E';
   } else {
     el.style.background = bgMap2[col] || 'transparent';

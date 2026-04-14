@@ -1123,7 +1123,21 @@ async function initApp() {
   });
   const sel = document.getElementById('globalWeek');
   sel.innerHTML = '';
-  allWeeks.forEach(w => { const o = document.createElement('option'); o.value = w; o.textContent = w; sel.appendChild(o); });
+
+  // Compute this week's Monday for highlighting
+  const _thisMonday = (() => {
+    const d = new Date(), mon = new Date(d);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
+  })();
+
+  allWeeks.forEach(w => {
+    const o = document.createElement('option');
+    o.value = w;
+    o.textContent = w === _thisMonday ? '\u25C9  ' + w + '  (this week)' : w;
+    if (w === _thisMonday) { o.style.fontWeight = '700'; o.style.color = '#2563EB'; }
+    sel.appendChild(o);
+  });
 
   // Set current week to this Monday
   const todayStr = (() => {
