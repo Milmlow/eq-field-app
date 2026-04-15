@@ -1,0 +1,28 @@
+/* ═══════════════════════════════════════════════════════
+   EQ Solves — Field  ·  apprentices.css
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Star buttons ────────────────────────────────────── */
+.sa-star:hover,
+.sa-star:focus,
+.tr-star:hover,
+.tr-star:focus {
+  color: #F59E0B !important;
+  outline: none;
+}
+
+/* ── Rating badges ───────────────────────────────────── */
+.rating-1, .rating-2 { color: var(--red); }
+.rating-3 { color: var(--amber); }
+.rating-4, .rating-5 { color: var(--green); }
+.gap-warning {
+  background: var(--amber-lt);
+  border-left: 3px solid var(--amber);
+}
+
+/* ── Passport table responsive ───────────────────────── */
+@media (max-width: 768px) {
+  #section-apprentices .roster-card table { font-size: 11px; }
+  #section-apprentices .roster-card th,
+  #section-apprentices .roster-card td { padding: 7px 8px; }
+}
