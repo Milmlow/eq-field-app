@@ -18,7 +18,7 @@ let activeApprenticeTab = 'overview';
 async function loadApprenticeData() {
   try {
     const [profiles, comps, ratings, feedback, rots] = await Promise.all([
-      sbFetch('apprentice_profiles?order=id.asc'),
+      sbFetch('apprentice_profiles?select=*,people(name)&order=id.asc'),
       // competencies has no org_id — fetch directly
       (async () => {
         if (!SB_URL) return [];
@@ -32,7 +32,12 @@ async function loadApprenticeData() {
       sbFetch('feedback_entries?order=feedback_date.desc'),
       sbFetch('rotations?order=date_start.desc'),
     ]);
-    if (profiles) apprenticeProfiles = profiles;
+    if (profiles) {
+      apprenticeProfiles = profiles.map(p => ({
+        ...p,
+        _resolvedName: (p.people && p.people.name) ? p.people.name : null
+      }));
+    }
     if (comps && comps.length) competencies = comps;
     if (ratings) skillsRatings = ratings;
     if (feedback) feedbackEntries = feedback;
@@ -46,7 +51,9 @@ async function loadApprenticeData() {
 
 function getPersonNameById(personId) {
   const p = (STATE.people || []).find(x => x.id === personId || String(x.id) === String(personId));
-  return p ? p.name : 'Unknown';
+  if (p) return p.name;
+  const prof = apprenticeProfiles.find(x => String(x.person_id) === String(personId));
+  return (prof && prof._resolvedName) ? prof._resolvedName : 'Unknown';
 }
 
 function yearBadge(year) {
@@ -119,7 +126,9 @@ function renderApprentices() {
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">';
 
   apprenticePeople.forEach(person => {
-    const profile = apprenticeProfiles.find(p => String(p.person_id) === String(person.id));
+    const profile = apprenticeProfiles.find(p =>
+      String(p.person_id) === String(person.id) || p._resolvedName === person.name
+    );
     const selfAvg = profile ? avgRating(profile.id, 'self') : null;
     const tradeAvg = profile ? avgRating(profile.id, 'tradesman') : null;
     const recentFeedback = profile ? feedbackEntries.filter(f => f.apprentice_id === profile.id).slice(0, 1)[0] : null;
@@ -185,7 +194,9 @@ function renderApprenticeProfile(profileId) {
   const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile || !container) return;
 
-  const person = (STATE.people || []).find(p => String(p.id) === String(profile.person_id));
+  const person = (STATE.people || []).find(p =>
+    String(p.id) === String(profile.person_id) || p.name === profile._resolvedName
+  );
   const personName = person ? person.name : 'Unknown';
   const site = (STATE.sites || []).find(s => s.abbr === profile.current_site);
 
@@ -793,7 +804,7 @@ function openAddApprenticeProfile(presetName) {
   let personHtml = '<option value="">— Select apprentice —</option>';
   apprenticePeople.forEach(p => {
     if (!takenIds.has(String(p.id))) {
-      personHtml += '<option value="' + p.id + '"' + (presetName && p.name === presetName ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+      personHtml += '<option value="' + esc(p.name) + '"' + (presetName && p.name === presetName ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }
   });
   document.getElementById('ap-person').innerHTML = personHtml;
@@ -850,6 +861,7 @@ async function saveApprenticeProfile() {
   const site = document.getElementById('ap-site').value || null;
 
   if (!editId && !personId) { showToast('Select an apprentice'); return; }
+  const _personName = personId; // dropdown value is now person name
 
   const row = {
     year_level: yearLevel,
@@ -872,13 +884,19 @@ async function saveApprenticeProfile() {
       document.getElementById('ap-person').disabled = false;
       renderApprenticeProfile(parseInt(editId));
     } else {
-      row.person_id = personId;
+      // Resolve the DB UUID for this person by name
+      let resolvedPersonId = personId;
+      try {
+        const dbPeople = await sbFetch('people?name=eq.' + encodeURIComponent(_personName) + '&select=id&limit=1');
+        if (dbPeople && dbPeople[0]) resolvedPersonId = dbPeople[0].id;
+      } catch(e) { /* use original value if lookup fails */ }
+      row.person_id = resolvedPersonId;
       const res = await sbFetch('apprentice_profiles', 'POST', row, 'return=representation');
       if (res && res[0]) {
         apprenticeProfiles.push(res[0]);
         showToast('Profile created ✓');
         closeModal('modal-apprentice-profile');
-        openApprenticeProfile(res[0].id, getPersonNameById(personId));
+        openApprenticeProfile(res[0].id, _personName || getPersonNameById(personId));
       }
     }
     await loadApprenticeData();
