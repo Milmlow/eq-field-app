@@ -17,25 +17,49 @@ let activeApprenticeTab = 'overview';
 
 async function loadApprenticeData() {
   try {
-    const [profiles, comps, ratings, feedback, rots] = await Promise.all([
-      sbFetch('apprentice_profiles?select=*,people(name)&order=id.asc'),
-      // competencies has no org_id — fetch directly
+    const [profiles, comps, ratings, feedback, rots, dbPeople] = await Promise.all([
+      sbFetch('apprentice_profiles?order=id.asc'),
+      // competencies has no org_id — fetch directly with explicit URL
       (async () => {
-        if (!SB_URL) return [];
-        const res = await fetch(SB_URL + '/rest/v1/competencies?order=sort_order.asc&active=eq.true', {
-          headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
-          credentials: 'omit'
-        });
-        return res.ok ? await res.json() : [];
+        if (!SB_URL || !SB_KEY) return [];
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/competencies?order=sort_order.asc&active=eq.true', {
+            headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
+            credentials: 'omit'
+          });
+          return res.ok ? await res.json() : [];
+        } catch(e) { return []; }
       })(),
       sbFetch('skills_ratings?order=created_at.desc'),
       sbFetch('feedback_entries?order=feedback_date.desc'),
       sbFetch('rotations?order=date_start.desc'),
+      // Fetch DB people separately to build UUID→name map
+      (async () => {
+        if (!SB_URL || !SB_KEY) return [];
+        try {
+          const res = await fetch(SB_URL + '/rest/v1/people?org_id=eq.' + (typeof TENANT !== 'undefined' && TENANT.ORG_UUID ? TENANT.ORG_UUID : '') + '&select=id,name&order=name.asc', {
+            headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
+            credentials: 'omit'
+          });
+          return res.ok ? await res.json() : [];
+        } catch(e) { return []; }
+      })(),
     ]);
+
+    // Build UUID→name lookup from DB people
+    const uuidToName = {};
+    if (dbPeople && dbPeople.length) {
+      dbPeople.forEach(p => { uuidToName[String(p.id)] = p.name; });
+    }
+    // Also map from STATE.people (SEED) name→name for fallback
+    if (typeof STATE !== 'undefined' && STATE.people) {
+      STATE.people.forEach(p => { uuidToName[String(p.name)] = p.name; });
+    }
+
     if (profiles) {
       apprenticeProfiles = profiles.map(p => ({
         ...p,
-        _resolvedName: (p.people && p.people.name) ? p.people.name : null
+        _resolvedName: uuidToName[String(p.person_id)] || null
       }));
     }
     if (comps && comps.length) competencies = comps;
