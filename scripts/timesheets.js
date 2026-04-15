@@ -204,7 +204,7 @@ async function saveTsCell(name, grp, week, day, job, hrs) {
       row[d + '_hrs'] = parseFloat(hVal) || null;
     }
   });
-  sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal')
+  sbFetch('timesheets', 'POST', row, 'resolution=merge-duplicates,on_conflict=name,week,org_id,return=minimal')
     .catch(() => showToast('Timesheet save failed — check connection'));
 }
 
@@ -551,7 +551,7 @@ async function runTsBatch() {
     });
     const row = { name: p.name, group: p.group, week };
     TS_DAYS.forEach(d => { row[d + '_job'] = entry[d + '_job'] || null; row[d + '_hrs'] = parseFloat(entry[d + '_hrs']) || null; });
-    promises.push(sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal'));
+    promises.push(sbFetch('timesheets', 'POST', row, 'resolution=merge-duplicates,on_conflict=name,week,org_id,return=minimal'));
   }
 
   await Promise.all(promises);
@@ -852,7 +852,7 @@ async function onStaffTsCellChange(el) {
   // separate try so a cosmetic exception never masquerades as a failed save.
   let saveOk = true;
   try {
-    await sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal');
+    await sbFetch('timesheets', 'POST', row, 'resolution=merge-duplicates,on_conflict=name,week,org_id,return=minimal');
   } catch (err) {
     saveOk = false;
     console.error('EQ[ts] staff save failed:', err);
