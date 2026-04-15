@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 let jobNumbers = [];
+let jnSort = { col: 'number', dir: 'asc' };
 
 // ── Load ──────────────────────────────────────────────────────
 
@@ -29,15 +30,30 @@ function populateJobNumberDatalist() {
 
 // ── Render ────────────────────────────────────────────────────
 
+function setJNSort(col) {
+  if (jnSort.col === col) { jnSort.dir = jnSort.dir === 'asc' ? 'desc' : 'asc'; }
+  else { jnSort.col = col; jnSort.dir = 'asc'; }
+  renderJobNumbers();
+}
+
 function renderJobNumbers() {
   const search = (document.getElementById('jobnumbers-search').value || '').toLowerCase();
-  let items    = jobNumbers;
+  let items    = [...jobNumbers];
   if (search) items = items.filter(j =>
     (j.number      || '').toLowerCase().includes(search) ||
     (j.description || '').toLowerCase().includes(search) ||
     (j.client      || '').toLowerCase().includes(search) ||
     (j.site_name   || '').toLowerCase().includes(search)
   );
+
+  // Sort
+  const colKey = { 'number':'number', 'description':'description', 'client':'client', 'site':'site_name', 'status':'status' };
+  const key = colKey[jnSort.col] || 'number';
+  items.sort((a, b) => {
+    const av = (a[key] || '').toLowerCase();
+    const bv = (b[key] || '').toLowerCase();
+    return jnSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
 
   if (!items.length) {
     document.getElementById('jobnumbers-content').innerHTML =
@@ -48,11 +64,16 @@ function renderJobNumbers() {
   const statusColors = { Active: 'var(--green)', Complete: 'var(--ink-3)', 'On Hold': 'var(--amber)' };
   const statusBg     = { Active: 'var(--green-lt)', Complete: 'var(--surface-2)', 'On Hold': 'var(--amber-lt)' };
 
+  const sortArrow = (col) => jnSort.col === col ? (jnSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  const thStyle = 'padding:8px 12px;text-align:left;font-weight:700;cursor:pointer;user-select:none';
+
   let html = '<div class="roster-card" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
   html += '<thead><tr style="background:var(--navy);color:white">';
-  ['Job #', 'Project / Description', 'Client', 'Site', 'Status'].forEach(h => {
-    html += `<th style="padding:8px 12px;text-align:left;font-weight:700">${h}</th>`;
-  });
+  html += `<th style="${thStyle}" onclick="setJNSort('number')">Job #${sortArrow('number')}</th>`;
+  html += `<th style="${thStyle}" onclick="setJNSort('description')">Project / Description${sortArrow('description')}</th>`;
+  html += `<th style="${thStyle}" onclick="setJNSort('client')">Client${sortArrow('client')}</th>`;
+  html += `<th style="${thStyle}" onclick="setJNSort('site')">Site${sortArrow('site')}</th>`;
+  html += `<th style="${thStyle}" onclick="setJNSort('status')">Status${sortArrow('status')}</th>`;
   if (isManager) html += '<th style="padding:8px 10px;text-align:center;font-weight:700;width:70px"></th>';
   html += '</tr></thead><tbody>';
 

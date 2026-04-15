@@ -6,7 +6,7 @@
 <title>EQ Solves — Field</title>
 <meta name="description" content="EQ Solves — Field | Labour Forecast &amp; Roster">
 <meta name="theme-color" content="#1F335C">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
 <link rel="manifest" href="/manifest.json">
@@ -51,8 +51,22 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.3.8
+  EQ Solves — Field  v3.3.9
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.3.9  (Sites Fix + Clear Week + Job Sort)
+  ──────────────────────────────────────────────────────────
+  - Sites: added site_lead and site_lead_phone columns to Supabase schema.
+    Sites now save correctly (was failing with PGRST204).
+  - Edit Roster: replaced per-row Remove Person button (✕) with Clear Week
+    button (⌫). Clears Mon–Sun for that person with a confirmation modal.
+  - Job Numbers: table headers are now sortable — click any column to sort
+    ascending/descending.
+  - Meta tag: replaced deprecated apple-mobile-web-app-capable with
+    mobile-web-app-capable.
+  - Contacts: added CSV export button to contacts page. Exports Name,
+    Group, Phone, Email, Licence, Agency — respects current search/group
+    filter. Filename includes group suffix when filtered.
 
   CHANGES IN v3.3.8  (Trial Dash Headcount Fix + Timesheet Fill Week)
   ──────────────────────────────────────────────────────────
@@ -370,6 +384,7 @@
     <div class="filter-row">
       <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="contacts-search" placeholder="Search contacts…" oninput="renderContacts()"></div>
       <select class="filter-select" id="contacts-group" onchange="renderContacts()"><option value="">All Groups</option><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select>
+      <button class="btn btn-secondary btn-sm" onclick="exportContactsCSV()" style="margin-left:auto">↓ CSV</button>
     </div>
     <div id="contacts-content"></div>
   </div>

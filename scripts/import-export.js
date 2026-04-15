@@ -82,6 +82,27 @@ function exportPeopleCSV() {
   showToast('People exported — ' + STATE.people.length + ' contacts');
 }
 
+function exportContactsCSV() {
+  const search = (document.getElementById('contacts-search').value || '').toLowerCase();
+  const group  = document.getElementById('contacts-group').value;
+  let people   = STATE.people;
+  if (search) people = people.filter(p =>
+    p.name.toLowerCase().includes(search) ||
+    (p.phone && p.phone.includes(search)) ||
+    (p.email && p.email.toLowerCase().includes(search))
+  );
+  if (group) people = people.filter(p => p.group === group);
+  people = [...people].sort((a, b) => a.name.localeCompare(b.name));
+
+  const header = 'Name,Group,Phone,Email,Licence,Agency';
+  const rows   = people.map(p =>
+    [csvEscape(p.name), csvEscape(p.group), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
+  );
+  const suffix = group ? '_' + group.replace(/\s/g, '') : '';
+  downloadCSV(header + '\n' + rows.join('\n'), `EQ_Contacts${suffix}.csv`);
+  showToast(`Contacts exported — ${people.length} records`);
+}
+
 function importPeopleCSV(input) {
   const file = input.files[0];
   if (!file) return;

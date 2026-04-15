@@ -295,6 +295,35 @@ function fillWeek(name, week) {
   showToast(`Filled Mon–Fri with ${val}`);
 }
 
+// ── Clear week ──────────────────────────────────────────────
+function confirmClearWeek(name, week) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  document.getElementById('confirm-title').textContent = 'Clear Week';
+  document.getElementById('confirm-msg').textContent =
+    `Clear all roster entries for ${name} for w/c ${week}? This will blank Mon–Sun.`;
+  document.getElementById('confirm-action').textContent = 'Clear';
+  document.getElementById('confirm-action').onclick = () => clearWeek(name, week);
+  openModal('modal-confirm');
+}
+
+function clearWeek(name, week) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const days = ['mon','tue','wed','thu','fri','sat','sun'];
+  let entry = STATE.schedule.find(r => r.name === name && r.week === week);
+  if (!entry) { closeModal('modal-confirm'); showToast('Nothing to clear'); return; }
+  days.forEach(d => { entry[d] = ''; });
+  closeModal('modal-confirm');
+  renderEditor();
+  saveCurrentWeek();
+  updateTopStats();
+  if (currentPage === 'roster') renderRoster();
+  if (currentPage === 'dashboard') renderDashboard();
+  days.forEach(d => saveCellToSB(name, week, d, '').catch(() => {}));
+  showToast(`${name} — week cleared`);
+  auditLog('Week cleared', 'Roster', name, week);
+  updateLastUpdated();
+}
+
 // ── Editor helpers ────────────────────────────────────────────
 function handleCellInput(el) {
   const pos = el.selectionStart;
@@ -423,9 +452,9 @@ function renderEditor() {
         <div class="editor-actions">
           <button class="btn-icon" title="Fill Mon\u2013Fri" onclick="fillWeek('${p.name.replace(/'/g,"\\'")}','${week}')" style="font-size:10px;color:var(--navy-3)">\u21D2wk</button>
           <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
-          <button class="btn-icon" style="color:var(--red)" title="Remove"
-            data-pid="${p.id}" data-pname="${esc(p.name)}"
-            onclick="confirmRemove(parseInt(this.dataset.pid), this.dataset.pname)">✕</button>
+          <button class="btn-icon" style="color:var(--red)" title="Clear week"
+            data-pname="${esc(p.name)}" data-week="${week}"
+            onclick="confirmClearWeek(this.dataset.pname, this.dataset.week)">⌫</button>
         </div>
       </div>`;
     });
