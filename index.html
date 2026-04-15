@@ -26,7 +26,6 @@
 <link rel="stylesheet" href="styles/base.css">
 <link rel="stylesheet" href="styles/print.css">
 <link rel="stylesheet" href="styles/mobile.css">
-<link rel="stylesheet" href="styles/apprentices.css">
 
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
@@ -47,7 +46,6 @@
 <script src="scripts/audit.js"></script>
 <script src="scripts/realtime.js"></script>
 <script src="scripts/auth.js"></script>
-<script src="scripts/apprentices.js"></script>
 </head>
 <body>
 
@@ -195,9 +193,9 @@
     </div>
     <button class="gate-btn" onclick="checkPin()">Enter</button>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:8px">
-      <button onclick="openStaffTsGate()" style="background:none;border:1px solid rgba(61,168,216,.5);color:#3DA8D8;font-size:12px;padding:10px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center">⏱ My Timesheet →</button>
-      <button onclick="openAgencyGate()" style="background:none;border:1px solid rgba(61,168,216,.5);color:#3DA8D8;font-size:12px;padding:10px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center">Agency Access →</button>
-      <button onclick="localStorage.clear();sessionStorage.clear();location.reload()" style="background:none;border:1px solid rgba(61,168,216,.25);color:rgba(61,168,216,.7);font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px;padding:8px 18px;border-radius:8px;width:100%;font-weight:500;text-align:center">Having trouble logging in? Tap here to reset</button>
+      <button onclick="openStaffTsGate()" style="background:none;border:1px solid rgba(124,119,185,.4);color:var(--purple);font-size:11px;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600">⏱ My Timesheet →</button>
+      <button onclick="openAgencyGate()" style="background:none;border:1px solid rgba(31,51,92,.2);color:var(--navy-3);font-size:11px;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%">Agency Access →</button>
+      <button onclick="localStorage.clear();sessionStorage.clear();location.reload()" style="background:none;border:1px solid rgba(124,119,185,.3);color:var(--purple);font-size:12px;cursor:pointer;font-family:inherit;margin-top:10px;padding:8px 18px;border-radius:8px;width:100%;font-weight:600">Having trouble logging in? Tap here to reset</button>
     </div>
   </div>
 </div>
@@ -285,7 +283,6 @@
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices</button>
       <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
   </div>
@@ -646,10 +643,6 @@
     </div>
   </div>
 
-  <div class="page hidden" id="page-apprentices">
-    <div id="apprentices-content"></div>
-  </div>
-
 </div><!-- /content -->
 
 <!-- ═══════════════════════════════════════════════════════════
@@ -684,7 +677,6 @@
     <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets <span class="beta-tag">BETA</span></button>
-    <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices</button>
     <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
     <div class="drawer-divider"></div>
     <button id="audit-drawer-btn" class="drawer-item edit-only" onclick="openAuditLog();closeMobileDrawer()"><span class="d-icon">📋</span> Audit Log</button>
@@ -927,7 +919,7 @@ const PAGE_TITLES = {
   contacts:'Contacts', sites:'Sites', editor:'Edit Roster',
   data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
-  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices'
+  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard'
 };
 
 function showPage(id) {
@@ -961,7 +953,6 @@ function renderCurrentPage() {
   else if (currentPage === 'staff-ts')   renderStaffTs();
   else if (currentPage === 'calendar')   renderCalendar();
   else if (currentPage === 'trial')      renderTrialDashboard();
-  else if (currentPage === 'apprentices') renderApprentices();
 }
 
 // ── Week controls ─────────────────────────────────────────────
@@ -1066,7 +1057,7 @@ function refreshPersonSelects() {
 // ── Mobile nav ────────────────────────────────────────────────
 // Must match the bottom-bar buttons in <nav id="mobile-nav"> (excluding 'more')
 const MOBILE_NAV_PAGES  = ['dashboard','roster','schedule','calendar'];
-const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial','apprentices'];
+const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial'];
 
 function mobileNav(id) {
   showPage(id);
@@ -1146,7 +1137,6 @@ async function initApp() {
   if (typeof loadLeaveRequests  === 'function') await loadLeaveRequests();
   if (typeof loadLeaveCCList    === 'function') await loadLeaveCCList();
   if (typeof loadJobNumbers     === 'function') await loadJobNumbers();
-  if (typeof loadApprenticeData  === 'function') await loadApprenticeData();
   if (typeof populateJobNumberDatalist === 'function') populateJobNumberDatalist();
 
   // Build week selector
@@ -1408,230 +1398,6 @@ const eqAgent = (function() {
   return { toggle, send };
 })();
 </script>
-
-<!-- ══════════════════════════════════════════════════════════════
-     APPRENTICE MODULE MODALS
-══════════════════════════════════════════════════════════════ -->
-
-<!-- Self-assessment modal -->
-<div class="modal-overlay" id="modal-apprentice-self">
-  <div class="modal" style="max-width:540px">
-    <div class="modal-header">
-      <h3 id="modal-sa-title">Rate My Skills</h3>
-      <button class="modal-close" onclick="closeModal('modal-apprentice-self')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="sa-apprentice-id">
-      <div class="form-group">
-        <label class="form-label">Period (e.g. Q1 2026)</label>
-        <input class="form-input" id="sa-period" placeholder="Q1 2026">
-      </div>
-      <div id="sa-competencies-grid" style="max-height:420px;overflow-y:auto;padding-right:4px"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-self')">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSelfAssessment()">Save Ratings</button>
-    </div>
-  </div>
-</div>
-
-<!-- Tradesman rating modal -->
-<div class="modal-overlay" id="modal-apprentice-trade-rating">
-  <div class="modal" style="max-width:540px">
-    <div class="modal-header">
-      <h3 id="modal-tr-title">Rate Skills</h3>
-      <button class="modal-close" onclick="closeModal('modal-apprentice-trade-rating')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="tr-apprentice-id">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Your Name</label>
-          <input class="form-input" id="tr-rated-by" placeholder="e.g. Alex Mitchell">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Period</label>
-          <input class="form-input" id="tr-period" placeholder="Q1 2026">
-        </div>
-      </div>
-      <div id="tr-competencies-grid" style="max-height:380px;overflow-y:auto;padding-right:4px"></div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-trade-rating')">Cancel</button>
-      <button class="btn btn-primary" onclick="submitTradesmanRating()">Save Ratings</button>
-    </div>
-  </div>
-</div>
-
-<!-- Feedback modal -->
-<div class="modal-overlay" id="modal-apprentice-feedback">
-  <div class="modal" style="max-width:500px">
-    <div class="modal-header">
-      <h3 id="modal-fb-title">Give Feedback</h3>
-      <button class="modal-close" onclick="closeModal('modal-apprentice-feedback')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="fb-apprentice-id">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Your Name</label>
-          <input class="form-input" id="fb-submitted-by" placeholder="Your name">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Site / Project</label>
-          <input class="form-input" id="fb-site" placeholder="e.g. SITE-A">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Competency (optional)</label>
-          <select class="form-input" id="fb-competency" style="background:var(--surface)"></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Rating (optional)</label>
-          <select class="form-input" id="fb-rating" style="background:var(--surface)">
-            <option value="">— No rating —</option>
-            <option value="1">1 — Not confident</option>
-            <option value="2">2 — Need supervision</option>
-            <option value="3">3 — Some help</option>
-            <option value="4">4 — Confident</option>
-            <option value="5">5 — Could teach</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">✅ What they did well</label>
-        <textarea class="form-input" id="fb-did-well" rows="2" placeholder="Be specific — what did you actually observe?"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">⏭ Trust them next with</label>
-        <textarea class="form-input" id="fb-trust-next" rows="2" placeholder="What's the next skill/task to stretch them?"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">🔧 Needs to improve</label>
-        <textarea class="form-input" id="fb-needs-improve" rows="2" placeholder="Specific and actionable"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">📌 Follow-up (optional)</label>
-        <input class="form-input" id="fb-follow-up" placeholder="Any actions or check-ins needed?">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-feedback')">Cancel</button>
-      <button class="btn btn-primary" onclick="submitFeedback()">Save Feedback</button>
-    </div>
-  </div>
-</div>
-
-<!-- Apprentice profile / goals modal -->
-<div class="modal-overlay" id="modal-apprentice-profile">
-  <div class="modal" style="max-width:500px">
-    <div class="modal-header">
-      <h3 id="modal-ap-title">Add Apprentice Profile</h3>
-      <button class="modal-close" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="ap-edit-id">
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Apprentice</label>
-          <select class="form-input" id="ap-person" style="background:var(--surface)"></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Year Level</label>
-          <select class="form-input" id="ap-year" style="background:var(--surface)">
-            <option value="1">1st Year</option>
-            <option value="2">2nd Year</option>
-            <option value="3">3rd Year</option>
-            <option value="4">4th Year</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Start Date</label>
-          <input class="form-input" id="ap-start-date" type="date">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Current Site</label>
-          <select class="form-input" id="ap-site" style="background:var(--surface)"></select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">🔧 Technical Goal</label>
-        <textarea class="form-input" id="ap-goal-tech" rows="2" placeholder="What technical skill are they working towards?"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">💼 Professional Goal</label>
-        <textarea class="form-input" id="ap-goal-prof" rows="2" placeholder="Workplace behaviour, communication, leadership..."></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">🌱 Personal Goal</label>
-        <textarea class="form-input" id="ap-goal-personal" rows="2" placeholder="Something personal they want to achieve..."></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Notes</label>
-        <textarea class="form-input" id="ap-notes" rows="2" placeholder="Any extra context for supervisors"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">Cancel</button>
-      <button class="btn btn-primary" onclick="saveApprenticeProfile()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- Rotation modal -->
-<div class="modal-overlay" id="modal-apprentice-rotation">
-  <div class="modal" style="max-width:460px">
-    <div class="modal-header">
-      <h3 id="modal-rot-title">Add Rotation</h3>
-      <button class="modal-close" onclick="closeModal('modal-apprentice-rotation')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="rot-apprentice-id">
-      <div class="form-group">
-        <label class="form-label">Project / Site Name</label>
-        <input class="form-input" id="rot-site" placeholder="e.g. Equinix SY7 Level 2">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Project Type</label>
-        <select class="form-input" id="rot-type" style="background:var(--surface)">
-          <option>Commercial</option>
-          <option>Data Centre</option>
-          <option>Healthcare</option>
-          <option>Industrial</option>
-          <option>Residential</option>
-          <option>Infrastructure</option>
-          <option>Other</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Start Date</label>
-          <input class="form-input" id="rot-start" type="date">
-        </div>
-        <div class="form-group">
-          <label class="form-label">End Date (optional)</label>
-          <input class="form-input" id="rot-end" type="date">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Supervising Tradesman</label>
-        <input class="form-input" id="rot-supervisor" placeholder="e.g. Alex Mitchell">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Main Work Performed</label>
-        <textarea class="form-input" id="rot-main-work" rows="2" placeholder="What did they mainly work on?"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-rotation')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveRotation()">Save</button>
-    </div>
-  </div>
-</div>
-
 
 </body>
 </html>

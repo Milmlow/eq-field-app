@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.3.8-demo';
+const APP_VERSION = '3.3.8';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -20,10 +20,6 @@ const TENANT_SUPABASE = {
   sks: {
     url: 'https://nspbmirochztcjijmcrx.supabase.co',
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zcGJtaXJvY2h6dGNqaWptY3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODg2MjQsImV4cCI6MjA5MDI2NDYyNH0.cpwHUqWr7MKaJFP0K7RMt43CytJ_dnPAH3LJ3xEdEdg'
-  },
-  eq: {
-    url: 'https://ktmjmdzqrogauaevbktn.supabase.co',
-    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0bWptZHpxcm9nYXVhZXZia3RuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2MzA3MzUsImV4cCI6MjA5MTIwNjczNX0.QwXUvO1Wd1YV_UlCBkgJNjzCXd-2homD2sQ2bIrAgC4'
   }
 };
 
@@ -31,7 +27,10 @@ function _detectTenantSlug() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('tenant')) return params.get('tenant');
   const h = window.location.hostname;
+  // Exact match first
   if (HOSTNAME_MAP[h]) return HOSTNAME_MAP[h];
+  // Substring match for Netlify deploy previews and branch deploys
+  // e.g. deploy-preview-1--sks-nsw-labour.netlify.app, v3-3-2-test--sks-nsw-labour.netlify.app
   if (h.indexOf('sks-nsw-labour') !== -1) return 'sks';
   if (h.indexOf('eq-solves-field') !== -1) return 'eq';
   return 'eq';
@@ -52,14 +51,19 @@ let MANAGER_PASSWORD = '';
 // (used by scripts/supabase.js — _isOrgTable lives there)
 const ORG_TABLES = [
   'people', 'sites', 'schedule', 'managers', 'timesheets',
-  'leave_requests', 'audit_log', 'job_numbers',
-  'apprentice_profiles', 'skills_ratings', 'feedback_entries',
-  'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log'
+  'leave_requests', 'audit_log', 'job_numbers'
 ];
 
 // ── Group name normalisation ─────────────────────────────────
-let GROUP_ALIAS_READ  = {};
-let GROUP_ALIAS_WRITE = {};
+// SKS Supabase stores "SKS Direct" but the app code is hard-coded to
+// filter/render by "Direct". We normalise on read and denormalise on
+// write so existing Supabase rows stay compatible with the UI without
+// any data migration. Populated per-tenant from TENANT_BRANDING.groupAliases.
+//
+// Shape: { 'SKS Direct': 'Direct' } means "on read, SKS Direct → Direct;
+// on write, Direct → SKS Direct".
+let GROUP_ALIAS_READ  = {};  // { dbValue: uiValue }
+let GROUP_ALIAS_WRITE = {};  // { uiValue: dbValue }
 
 function normaliseGroupFromDb(g) {
   if (!g) return '';
@@ -73,8 +77,9 @@ function denormaliseGroupForDb(g) {
 async function loadTenantConfig() {
   TENANT.ORG_SLUG = _detectTenantSlug();
 
-  if (TENANT.ORG_SLUG === 'demo') {
-    TENANT.ORG_NAME = 'EQ Solves — Field (Demo)';
+  // Demo / EQ tenant — no Supabase needed
+  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
+    TENANT.ORG_NAME = 'EQ Solves — Field';
     TENANT.ORG_UUID = '00000000-0000-0000-0000-000000000001';
     SB_URL          = '';
     SB_KEY          = '';
@@ -83,6 +88,8 @@ async function loadTenantConfig() {
     return;
   }
 
+  // Live tenant — resolve Supabase credentials from TENANT_SUPABASE map
+  // (falls back to window.__SB_URL__ / window.__SB_KEY__ for override/testing)
   const tConfig = TENANT_SUPABASE[TENANT.ORG_SLUG] || {};
   SB_URL = window.__SB_URL__ || tConfig.url || '';
   SB_KEY = window.__SB_KEY__ || tConfig.key || '';
@@ -105,6 +112,7 @@ async function loadTenantConfig() {
         TENANT.ORG_NAME = rows[0].name || TENANT.ORG_NAME;
       }
     }
+    // Load app config (manager password etc)
     const cfgResp = await fetch(`${SB_URL}/rest/v1/app_config?org_id=eq.${TENANT.ORG_UUID}&select=key,value`, {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
       credentials: 'omit'
@@ -117,6 +125,7 @@ async function loadTenantConfig() {
         if (row.key === 'staff_code')         _dbStaffCode      = row.value;
         if (row.key === 'supervisor_code')    _dbSupervisorCode = row.value;
       });
+      // Stash DB-driven access codes for applyTenantBranding to consume.
       if (_dbStaffCode || _dbSupervisorCode) {
         window.__TENANT_CODES_DB__ = {
           staff:      _dbStaffCode      || null,
@@ -128,6 +137,7 @@ async function loadTenantConfig() {
   } catch (e) {
     console.error('loadTenantConfig error:', e);
   }
+  // Apply tenant group-name aliases and fallback manager password.
   const _brand = TENANT_BRANDING[TENANT.ORG_SLUG];
   if (_brand && _brand.groupAliases) {
     GROUP_ALIAS_READ  = Object.assign({}, _brand.groupAliases);
@@ -138,37 +148,39 @@ async function loadTenantConfig() {
   }
   if (_brand && _brand.fallbackManagerPassword && !MANAGER_PASSWORD) {
     MANAGER_PASSWORD = _brand.fallbackManagerPassword;
+    console.info('EQ[tenant] Using fallback manager password for', TENANT.ORG_SLUG, '(no app_config.manager_password row)');
   }
   applyTenantBranding();
 }
 
-// Per-tenant visual branding
+// Per-tenant visual branding (applied after loadTenantConfig)
 const TENANT_BRANDING = {
   sks: {
     orgName: 'SKS Technologies',
     gateSub: 'NSW Labour Forecast — Staff Access',
+    // Real SKS colour-arrows mark (served from Cloudflare R2 — public bucket)
     gateLogo: '<img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_Colour_Arrows_Clean.png" alt="SKS Technologies" style="height:64px;width:auto;display:block;margin:0 auto" />',
+    // White-text full lockup for the dark sidebar
     sidebarLogoHtml: '<div style="display:flex;align-items:center;padding:6px 4px"><img src="https://pub-97a4f025d993484e91b8f15a8c73084d.r2.dev/SKS_Logo_White_Text_Clean.png" alt="SKS Technologies" style="height:38px;width:auto;display:block" /></div>',
     hideDemoCodes: true,
     clearDefaultName: true,
     whiteGateCard: true,
     rememberMeDays: 7,
     gateDisclaimer: 'This system stores employee names, contact details and work schedules. Access is restricted to authorised SKS Technologies staff only. Sharing this URL or access code outside the company is not permitted.',
+    // Client-side access codes — validated in auth.js without hitting the
+    // Netlify verify-pin function (which isn't deployed to this repo).
+    // Staff code logs in with view-only access; supervisor code additionally
+    // auto-unlocks Supervision mode.
     staffCode:      '2026',
     supervisorCode: 'SKSNSW',
+    // Group alias map — SKS Supabase uses "SKS Direct" but the UI codes
+    // "Direct" throughout. Normalised on read, denormalised on write so the
+    // data layer and the UI can use different strings without a migration.
     groupAliases: { 'SKS Direct': 'Direct' },
+    // Fallback supervisor password — used only if the app_config table has
+    // no manager_password row for this org. Replace by inserting an
+    // app_config row: { org_id: <sks-uuid>, key: 'manager_password', value: '<pw>' }
     fallbackManagerPassword: 'SKSNSW',
-  },
-  eq: {
-    orgName: 'EQ Solves — Field',
-    gateSub: 'Demo Environment',
-    hideDemoCodes: false,
-    clearDefaultName: false,
-    whiteGateCard: false,
-    rememberMeDays: 1,
-    staffCode: 'demo',
-    supervisorCode: 'demo1234',
-    fallbackManagerPassword: 'demo1234',
   }
 };
 
@@ -181,6 +193,7 @@ function applyTenantBranding() {
   const brand = TENANT_BRANDING[TENANT.ORG_SLUG];
   if (!brand) return;
 
+  // Tenant class on <body> so CSS can scope overrides (e.g. `body.tenant-sks`)
   if (document && document.body) {
     document.body.classList.forEach(c => {
       if (c.indexOf('tenant-') === 0) document.body.classList.remove(c);
@@ -188,19 +201,24 @@ function applyTenantBranding() {
     document.body.classList.add('tenant-' + TENANT.ORG_SLUG);
   }
 
+  // Gate org name
   if (brand.orgName && orgNameEl) orgNameEl.textContent = brand.orgName;
 
+  // Gate subtitle
   const gateSubEl = document.getElementById('gate-sub');
   if (brand.gateSub && gateSubEl) gateSubEl.textContent = brand.gateSub;
 
+  // Gate logo
   const gateLogoEl = document.getElementById('gate-logo');
   if (brand.gateLogo && gateLogoEl) gateLogoEl.innerHTML = brand.gateLogo;
 
+  // Hide demo access codes block
   if (brand.hideDemoCodes) {
     const demoCodesEl = document.getElementById('gate-demo-codes');
     if (demoCodesEl) demoCodesEl.style.display = 'none';
   }
 
+  // Clear pre-filled "Demo Supervisor"
   if (brand.clearDefaultName) {
     const hiddenName = document.getElementById('gate-name');
     const selText = document.getElementById('gate-selected-text');
@@ -208,15 +226,18 @@ function applyTenantBranding() {
     if (selText) { selText.textContent = '— Tap to select your name —'; selText.style.color = 'var(--ink-3)'; }
   }
 
+  // Sidebar logo swap
   const sidebarWrap = document.getElementById('sidebar-logo-wrap');
   if (brand.sidebarLogoHtml && sidebarWrap) sidebarWrap.innerHTML = brand.sidebarLogoHtml;
 
+  // Remember-me duration label + expose TTL globally for checkPin()
   if (brand.rememberMeDays) {
     window.__TENANT_REMEMBER_DAYS__ = brand.rememberMeDays;
     const remLabel = document.getElementById('gate-remember-label');
     if (remLabel) remLabel.textContent = 'Remember me for ' + brand.rememberMeDays + ' days';
   }
 
+  // Disclaimer footer
   if (brand.gateDisclaimer) {
     const discEl = document.getElementById('gate-disclaimer');
     if (discEl) {
@@ -225,6 +246,13 @@ function applyTenantBranding() {
     }
   }
 
+  // White gate card styling is handled via body.tenant-sks CSS in base.css.
+  // Nothing to do here for whiteGateCard — CSS does the work.
+
+  // Expose client-side access codes to auth.js. When these are set the gate
+  // validates locally instead of POSTing to /.netlify/functions/verify-pin.
+  // DB values (Supabase app_config) take precedence over hardcoded brand
+  // values so codes can be rotated via SQL without a redeploy.
   const _db = window.__TENANT_CODES_DB__ || {};
   const _staffCode      = _db.staff      || brand.staffCode      || null;
   const _supervisorCode = _db.supervisor || brand.supervisorCode || null;
@@ -235,6 +263,7 @@ function applyTenantBranding() {
     };
   }
 
+  // Document title
   if (brand.orgName) document.title = brand.orgName + ' — Field';
 }
 
@@ -253,6 +282,7 @@ function saveCurrentWeek() {
   try { localStorage.setItem('eq_current_week', STATE.currentWeek); } catch (e) {}
 }
 
+// Restore saved week on load
 try {
   const saved = localStorage.getItem('eq_current_week');
   if (saved) STATE.currentWeek = saved;
@@ -285,6 +315,10 @@ const LEAVE_TERMS = [
 // ── Day arrays ────────────────────────────────────────────────
 const ALL_DAYS   = ['mon','tue','wed','thu','fri','sat','sun'];
 const ALL_LABELS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// ── Agency mode ───────────────────────────────────────────────
+// (declared here so auth.js can reference — initialised to false)
+// Note: agencyMode and agencyName are declared in auth.js
 
 // ── Manager state ─────────────────────────────────────────────
 let isManager = false;
