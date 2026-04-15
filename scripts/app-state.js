@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.3.8';
+const APP_VERSION = '3.3.8-demo';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -20,6 +20,10 @@ const TENANT_SUPABASE = {
   sks: {
     url: 'https://nspbmirochztcjijmcrx.supabase.co',
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zcGJtaXJvY2h6dGNqaWptY3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODg2MjQsImV4cCI6MjA5MDI2NDYyNH0.cpwHUqWr7MKaJFP0K7RMt43CytJ_dnPAH3LJ3xEdEdg'
+  },
+  eq: {
+    url: 'https://ktmjmdzqrogauaevbktn.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0bWptZHpxcm9nYXVhZXZia3RuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2MzA3MzUsImV4cCI6MjA5MTIwNjczNX0.QwXUvO1Wd1YV_UlCBkgJNjzCXd-2homD2sQ2bIrAgC4'
   }
 };
 
@@ -77,9 +81,12 @@ function denormaliseGroupForDb(g) {
 async function loadTenantConfig() {
   TENANT.ORG_SLUG = _detectTenantSlug();
 
-  // Demo / EQ tenant — no Supabase needed
-  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
-    TENANT.ORG_NAME = 'EQ Solves — Field';
+  // ── DEMO BRANCH CHANGE ─────────────────────────────────────
+  // The EQ tenant now connects to its own Supabase project (demo DB)
+  // instead of running in-memory with SEED data. Only the 'demo' slug
+  // (used for ?tenant=demo override) still runs in-memory mode.
+  if (TENANT.ORG_SLUG === 'demo') {
+    TENANT.ORG_NAME = 'EQ Solves — Field (Demo)';
     TENANT.ORG_UUID = '00000000-0000-0000-0000-000000000001';
     SB_URL          = '';
     SB_KEY          = '';
@@ -87,6 +94,7 @@ async function loadTenantConfig() {
     applyTenantBranding();
     return;
   }
+  // ── END DEMO BRANCH CHANGE ─────────────────────────────────
 
   // Live tenant — resolve Supabase credentials from TENANT_SUPABASE map
   // (falls back to window.__SB_URL__ / window.__SB_KEY__ for override/testing)
@@ -181,6 +189,17 @@ const TENANT_BRANDING = {
     // no manager_password row for this org. Replace by inserting an
     // app_config row: { org_id: <sks-uuid>, key: 'manager_password', value: '<pw>' }
     fallbackManagerPassword: 'SKSNSW',
+  },
+  eq: {
+    orgName: 'EQ Solves — Field',
+    gateSub: 'Demo Environment',
+    hideDemoCodes: false,
+    clearDefaultName: false,
+    whiteGateCard: false,
+    rememberMeDays: 1,
+    staffCode: 'demo',
+    supervisorCode: 'demo1234',
+    fallbackManagerPassword: 'demo1234',
   }
 };
 

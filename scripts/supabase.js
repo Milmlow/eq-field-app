@@ -28,7 +28,7 @@ function _isOrgTable(path) {
 }
 
 function _isDemoTenant() {
-  return (typeof TENANT !== 'undefined') && (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo');
+  return (typeof TENANT !== 'undefined') && (TENANT.ORG_SLUG === 'demo');
 }
 
 function _sbLog(level, stage, details) {
