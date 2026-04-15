@@ -143,8 +143,8 @@ function renderSites() {
         ${site.address ? `<div class="site-detail"><span>📍</span>${esc(site.address)}</div>` : ''}
         ${site.site_lead ? `<div class="site-detail"><span>👤</span><strong>${esc(site.site_lead)}</strong>${site.site_lead_phone ? ` — <a href="tel:${site.site_lead_phone}" style="color:var(--blue);text-decoration:none">${site.site_lead_phone}</a>` : ''}</div>` : ''}
         <div class="site-headcount">
-          <span class="site-headcount-label">On site this week</span>
-          <span class="site-headcount-value">${count || '—'}</span>
+          <span class="site-headcount-label">Active this week</span>
+          <span class="site-headcount-value" style="color:${count ? 'var(--green)' : 'var(--ink-4)'}">${count ? 'Yes' : '—'}</span>
         </div>
       </div>
     </div>`;

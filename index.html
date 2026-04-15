@@ -54,19 +54,23 @@
   EQ Solves — Field  v3.3.9
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.3.9  (Sites Fix + Clear Week + Job Sort)
+  CHANGES IN v3.3.9  (Sites Fix + Clear Week + Job Sort + Conflict Fix)
   ──────────────────────────────────────────────────────────
   - Sites: added site_lead and site_lead_phone columns to Supabase schema.
     Sites now save correctly (was failing with PGRST204).
+  - Sites view: "On site this week" headcount replaced with "Active this week"
+    Yes/— indicator (green when someone is rostered).
   - Edit Roster: replaced per-row Remove Person button (✕) with Clear Week
     button (⌫). Clears Mon–Sun for that person with a confirmation modal.
+  - Edit conflicts: fillWeek and clearWeek now save all days in a single
+    PATCH request (saveRowToSB) instead of per-day saveCellToSB calls.
+    Eliminates false CAS conflict modals during bulk operations.
   - Job Numbers: table headers are now sortable — click any column to sort
     ascending/descending.
+  - Contacts: added CSV export button. Exports Name, Group, Phone, Email,
+    Licence, Agency — respects current search/group filter.
   - Meta tag: replaced deprecated apple-mobile-web-app-capable with
     mobile-web-app-capable.
-  - Contacts: added CSV export button to contacts page. Exports Name,
-    Group, Phone, Email, Licence, Agency — respects current search/group
-    filter. Filename includes group suffix when filtered.
 
   CHANGES IN v3.3.8  (Trial Dash Headcount Fix + Timesheet Fill Week)
   ──────────────────────────────────────────────────────────

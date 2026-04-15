@@ -291,7 +291,7 @@ function fillWeek(name, week) {
   if (!val) { showToast('No Monday value to fill from'); return; }
   ['tue','wed','thu','fri'].forEach(d => { entry[d] = val; });
   renderEditor();
-  ['tue','wed','thu','fri'].forEach(d => saveCellToSB(name, week, d, val).catch(() => {}));
+  saveRowToSB(name, week, { tue: val, wed: val, thu: val, fri: val }).catch(() => {});
   showToast(`Filled Mon–Fri with ${val}`);
 }
 
@@ -318,7 +318,7 @@ function clearWeek(name, week) {
   updateTopStats();
   if (currentPage === 'roster') renderRoster();
   if (currentPage === 'dashboard') renderDashboard();
-  days.forEach(d => saveCellToSB(name, week, d, '').catch(() => {}));
+  saveRowToSB(name, week, { mon: '', tue: '', wed: '', thu: '', fri: '', sat: '', sun: '' }).catch(() => {});
   showToast(`${name} — week cleared`);
   auditLog('Week cleared', 'Roster', name, week);
   updateLastUpdated();

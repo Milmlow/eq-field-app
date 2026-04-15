@@ -452,6 +452,69 @@ async function saveCellToSB(name, week, day, val) {
   }
 }
 
+// ── Bulk day save (single CAS) ────────────────────────────────
+// Patches multiple days on the same schedule row in one request,
+// avoiding the CAS race that fires false conflicts when fillWeek /
+// clearWeek call saveCellToSB per-day in parallel.
+async function saveRowToSB(name, week, dayVals) {
+  const existing = STATE.schedule.find(r => r.name === name && r.week === week);
+  if (!existing) return;
+
+  const patch = {};
+  Object.entries(dayVals).forEach(([d, v]) => { patch[d] = v || null; });
+
+  if (existing.id && !String(existing.id).startsWith('temp')) {
+    let res;
+    try {
+      if (existing.updated_at) {
+        const enc = encodeURIComponent(existing.updated_at);
+        res = await sbFetch(
+          `schedule?id=eq.${existing.id}&updated_at=eq.${enc}`,
+          'PATCH', patch, 'return=representation'
+        );
+      } else {
+        res = await sbFetch(
+          `schedule?id=eq.${existing.id}`,
+          'PATCH', patch, 'return=representation'
+        );
+      }
+    } catch (e) { return; }
+
+    if (Array.isArray(res) && res.length === 0 && existing.updated_at) {
+      // Lost CAS — fall back to unconditional PATCH (batch-fill style).
+      // Multi-day bulk ops (clear/fill) are user-intentional, so overwrite wins.
+      try {
+        const retry = await sbFetch(
+          `schedule?id=eq.${existing.id}`,
+          'PATCH', patch, 'return=representation'
+        );
+        if (Array.isArray(retry) && retry[0]) {
+          existing.updated_at = retry[0].updated_at;
+          if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
+        }
+      } catch (e) { /* non-blocking */ }
+      return;
+    }
+
+    if (Array.isArray(res) && res[0]) {
+      existing.updated_at = res[0].updated_at;
+      if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
+    }
+  } else {
+    // No server row — POST the full row
+    const row = { name, week, mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null };
+    Object.assign(row, dayVals);
+    const lockKey = `${name}||${week}`;
+    const res = await sbFetch('schedule', 'POST', row, 'return=representation');
+    if (existing && res && res[0]) {
+      existing.id = res[0].id;
+      existing.updated_at = res[0].updated_at;
+      if (typeof _rtMarkLocalWrite === 'function') _rtMarkLocalWrite(existing.id);
+    }
+    if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = existing || res[0];
+  }
+}
+
 async function saveManagerToSB(mgr) {
   return _upsertById('managers', mgr, {
     name:     mgr.name,
