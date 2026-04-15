@@ -7,6 +7,7 @@
 
 let apprenticeProfiles = [];
 let competencies = [];
+let _uuidNameCache = {}; // UUID→name lookup populated at load
 let skillsRatings = [];
 let feedbackEntries = [];
 let apprenticeRotations = [];
@@ -19,31 +20,13 @@ async function loadApprenticeData() {
   try {
     const [profiles, comps, ratings, feedback, rots, dbPeople] = await Promise.all([
       sbFetch('apprentice_profiles?order=id.asc'),
-      // competencies has no org_id — fetch directly with explicit URL
-      (async () => {
-        if (!SB_URL || !SB_KEY) return [];
-        try {
-          const res = await fetch(SB_URL + '/rest/v1/competencies?order=sort_order.asc&active=eq.true', {
-            headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
-            credentials: 'omit'
-          });
-          return res.ok ? await res.json() : [];
-        } catch(e) { return []; }
-      })(),
+      // competencies has no org_id filter — use select=* to get all rows
+      sbFetch('competencies?order=sort_order.asc&active=eq.true'),
       sbFetch('skills_ratings?order=created_at.desc'),
       sbFetch('feedback_entries?order=feedback_date.desc'),
       sbFetch('rotations?order=date_start.desc'),
-      // Fetch DB people separately to build UUID→name map
-      (async () => {
-        if (!SB_URL || !SB_KEY) return [];
-        try {
-          const res = await fetch(SB_URL + '/rest/v1/people?org_id=eq.' + (typeof TENANT !== 'undefined' && TENANT.ORG_UUID ? TENANT.ORG_UUID : '') + '&select=id,name&order=name.asc', {
-            headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
-            credentials: 'omit'
-          });
-          return res.ok ? await res.json() : [];
-        } catch(e) { return []; }
-      })(),
+      // Fetch people to build UUID→name map
+      sbFetch('people?select=id,name&order=name.asc'),
     ]);
 
     // Build UUID→name lookup from DB people
@@ -51,10 +34,12 @@ async function loadApprenticeData() {
     if (dbPeople && dbPeople.length) {
       dbPeople.forEach(p => { uuidToName[String(p.id)] = p.name; });
     }
-    // Also map from STATE.people (SEED) name→name for fallback
+    // Also map from STATE.people (SEED) by name
     if (typeof STATE !== 'undefined' && STATE.people) {
       STATE.people.forEach(p => { uuidToName[String(p.name)] = p.name; });
     }
+    // Persist to module-level cache for getPersonNameById
+    _uuidNameCache = { ...uuidToName };
 
     if (profiles) {
       apprenticeProfiles = profiles.map(p => ({
@@ -74,10 +59,21 @@ async function loadApprenticeData() {
 // ── Helpers ───────────────────────────────────────────────────
 
 function getPersonNameById(personId) {
-  const p = (STATE.people || []).find(x => x.id === personId || String(x.id) === String(personId));
-  if (p) return p.name;
-  const prof = apprenticeProfiles.find(x => String(x.person_id) === String(personId));
-  return (prof && prof._resolvedName) ? prof._resolvedName : 'Unknown';
+  // 1. Check STATE.people (SEED — numeric IDs)
+  const seedPerson = (STATE.people || []).find(x =>
+    x.id === personId || String(x.id) === String(personId)
+  );
+  if (seedPerson) return seedPerson.name;
+  // 2. Check resolved names on profiles (UUID match)
+  const prof = apprenticeProfiles.find(x =>
+    String(x.person_id) === String(personId)
+  );
+  if (prof && prof._resolvedName) return prof._resolvedName;
+  // 3. Check uuidNameCache (populated at load time)
+  if (typeof _uuidNameCache !== 'undefined' && _uuidNameCache[String(personId)]) {
+    return _uuidNameCache[String(personId)];
+  }
+  return 'Unknown';
 }
 
 function yearBadge(year) {
@@ -824,10 +820,11 @@ function openAddApprenticeProfile(presetName) {
 
   // Populate person dropdown
   const apprenticePeople = (STATE.people || []).filter(p => p.group === 'Apprentice');
-  const takenIds = new Set(apprenticeProfiles.map(p => String(p.person_id)));
+  // Match taken by resolved name (person_id is UUID, STATE.people have numeric IDs)
+  const takenNames = new Set(apprenticeProfiles.map(p => p._resolvedName).filter(Boolean));
   let personHtml = '<option value="">— Select apprentice —</option>';
   apprenticePeople.forEach(p => {
-    if (!takenIds.has(String(p.id))) {
+    if (!takenNames.has(p.name)) {
       personHtml += '<option value="' + esc(p.name) + '"' + (presetName && p.name === presetName ? ' selected' : '') + '>' + esc(p.name) + '</option>';
     }
   });

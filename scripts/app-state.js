@@ -235,7 +235,7 @@ function applyTenantBranding() {
     };
   }
 
-  if (brand.orgName) document.title = brand.orgName + ' — Field';
+  if (brand.orgName) document.title = brand.orgName;
 }
 
 // ── App state ─────────────────────────────────────────────────
