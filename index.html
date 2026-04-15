@@ -11,12 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
 <link rel="manifest" href="/manifest.json">
 <!-- SKS Labour — Favicon & Home Screen Icons -->
-<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48x48.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/favicon-192x192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icons/favicon-512x512.png">
+<link rel="icon" type="image/svg+xml" href="https://pub-409bd651f2e549f4907f5a856a9264ae.r2.dev/EQ_logo_blue_transparent.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,6 +43,119 @@
 <script src="scripts/realtime.js"></script>
 <script src="scripts/auth.js"></script>
 <script src="scripts/apprentices.js"></script>
+
+<style>
+/* ── Gate redesign override ─────────────────────────────────── */
+#access-gate {
+  background: #0B1628 !important;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 35%, rgba(61,168,216,.2) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 50% at 15% 85%, rgba(41,134,180,.1) 0%, transparent 55%) !important;
+}
+#access-gate::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #3DA8D8 40%, #2986B4 60%, transparent 100%);
+  animation: gateShimmer 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes gateShimmer {
+  0%,100% { opacity: .5; transform: scaleX(.7); }
+  50%     { opacity: 1;  transform: scaleX(1); }
+}
+.gate-card {
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(61,168,216,.22) !important;
+  border-radius: 24px !important;
+  padding: 40px 36px 32px !important;
+  max-width: 420px !important;
+  align-items: center !important;
+  text-align: center !important;
+  gap: 0 !important;
+  box-shadow:
+    0 0 0 1px rgba(61,168,216,.06),
+    0 40px 100px rgba(0,0,0,.55),
+    0 0 80px rgba(61,168,216,.06) inset !important;
+  animation: gateCardIn .55s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes gateCardIn {
+  from { opacity: 0; transform: translateY(20px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Logo */
+.gate-logo { 
+  font-size: 28px !important; 
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  margin-bottom: 12px !important;
+}
+/* Title */
+.gate-title {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  color: white !important;
+  text-align: center !important;
+  letter-spacing: -.4px !important;
+  width: 100% !important;
+  margin-bottom: 4px !important;
+}
+/* Subtitle */
+.gate-sub {
+  font-size: 11px !important;
+  color: rgba(255,255,255,.4) !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  letter-spacing: .8px !important;
+  width: 100% !important;
+  margin-bottom: 28px !important;
+}
+/* PIN input */
+.gate-input {
+  background: rgba(255,255,255,.06) !important;
+  border: 1.5px solid rgba(61,168,216,.28) !important;
+  border-radius: 12px !important;
+  font-size: 22px !important;
+  letter-spacing: 10px !important;
+  padding: 14px 16px !important;
+  transition: border-color .2s, background .2s, box-shadow .2s !important;
+}
+.gate-input:focus {
+  border-color: #3DA8D8 !important;
+  background: rgba(61,168,216,.08) !important;
+  box-shadow: 0 0 0 3px rgba(61,168,216,.15) !important;
+}
+.gate-input::placeholder { letter-spacing: 8px !important; }
+/* Enter button */
+.gate-btn {
+  background: linear-gradient(135deg, #3DA8D8 0%, #2986B4 100%) !important;
+  border-radius: 12px !important;
+  padding: 15px !important;
+  font-size: 15px !important;
+  letter-spacing: .5px !important;
+  box-shadow: 0 4px 24px rgba(61,168,216,.4) !important;
+  transition: all .2s !important;
+  margin-top: 4px !important;
+}
+.gate-btn:hover {
+  box-shadow: 0 8px 32px rgba(61,168,216,.55) !important;
+  transform: translateY(-1px) !important;
+}
+.gate-btn:active { transform: translateY(0) !important; }
+/* Error */
+.gate-error { text-align: center !important; width: 100% !important; }
+/* Labels inside gate */
+#gate-pin-wrap label,
+#access-gate label[for="gate-name-search"] {
+  text-align: left !important;
+}
+/* Divider above secondary buttons */
+#access-gate > .gate-card > div:last-of-type {
+  border-top: 1px solid rgba(61,168,216,.12) !important;
+}
+</style>
 </head>
 <body>
 
@@ -156,7 +264,7 @@
     <div class="gate-logo" id="gate-logo"><svg style="height:52px;width:auto;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="130 325 764 370"><path fill="#3DA8D8" d="M721.22,622.17l46.95,47q-31,12.78-67,12.78-70.68,0-121.58-48.84a162,162,0,0,1-31.23-40.81c15.14-18.46,31.52-39,46-58.58q5.83,34.5,28.53,58.21,30.47,31.86,78.27,31.85A121.63,121.63,0,0,0,721.22,622.17Z"/><path fill="#3DA8D8" d="M874.32,508.74q0,36.54-12.29,67l-52.8-52.81c.45-4.58.65-9.33.65-14.2q0-51.27-30.45-83.1t-78.27-31.89c-41.88,0-71.72,22-93.95,55.63-23.45,35.54-44.66,72.83-73.39,104.55C493,599,439.3,647.71,390.38,667.77c-2.58,1.07-5.2,2.09-7.86,3-.53.21-1,.37-1.55.53-1.11.37-2.22.74-3.28,1.11-3.89,1.23-7.41,2.25-10.6,3.11-1.19.33-2.34.61-3.44.86-.82.2-1.6.41-2.37.57-6.47,1.52-10.36,2.09-11.1,2.17a.31.31,0,0,1-.12,0,217.44,217.44,0,0,1-34.71,2.71q-70.68,0-121.58-48.84T142.89,508.74q0-75.47,50.88-124.32t121.58-48.84q56.11,0,96.28,27.35t65.08,77.94L251.61,565.56l-25.05-48.72,164.39-91Q374.32,409.1,358,401.45t-42.65-7.7q-47.83,0-78.31,31.89t-30.5,83.1q0,51.27,30.5,83.14t78.31,31.85a213,213,0,0,0,43.18-6.35c66.73-17.07,122.15-91,160.31-144.09,20.46-28.45,35.28-64.47,60.7-88.87q50.91-48.81,121.58-48.84,71.3,0,122.23,48.84T874.32,508.74Z"/><rect fill="#3DA8D8" x="745.11" y="474.28" width="66.9" height="223.16" transform="translate(-186.23 722.12) rotate(-45)"/></svg></div>
     <div class="gate-title"><span id="gate-org-name">EQ Solves — Field</span></div>
     <div class="gate-sub" id="gate-sub">EQ Solves — Field Demo</div>
-    <div style="margin-bottom:12px;width:100%">
+    <div style="margin-bottom:16px;width:100%">
       <label for="gate-name-search" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
       <input type="hidden" id="gate-name" value="Demo Supervisor">
       <div id="gate-selected-name" onclick="toggleGateNamePicker()" style="font-size:15px;padding:12px 14px;width:100%;background:var(--surface);color:var(--ink-4);border:2px solid var(--border);border-radius:10px;font-family:inherit;font-weight:600;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:48px">
@@ -170,17 +278,17 @@
         <div id="gate-name-list" style="max-height:min(300px,50vh);overflow-y:auto;padding:4px 0"></div>
       </div>
     </div>
-    <div id="gate-pin-wrap" style="width:100%">
+    <div id="gate-pin-wrap" style="width:100%;margin-bottom:4px">
       <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
       <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
     </div>
     <div class="gate-error" id="gate-err"></div>
-    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:14px">
       <input type="checkbox" id="gate-remember" style="width:16px;height:16px;accent-color:var(--purple)">
       <label for="gate-remember" id="gate-remember-label" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 24 hours</label>
     </div>
     <div id="gate-disclaimer" style="display:none;width:100%;margin-top:14px;padding-top:12px;border-top:1px solid rgba(31,51,92,.12);font-size:10px;line-height:1.4;color:var(--ink-3);text-align:center"></div>
-    <div id="gate-demo-codes" style="background:linear-gradient(135deg,#1F335C 0%,#2a4a7f 100%);border-radius:12px;padding:14px 18px;margin-bottom:14px;width:100%;box-sizing:border-box">
+    <div id="gate-demo-codes" style="background:rgba(255,255,255,.06);border:1px solid rgba(61,168,216,.2);border-radius:12px;padding:14px 18px;margin-bottom:18px;width:100%;box-sizing:border-box">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.5);margin-bottom:10px">🔑 Demo access codes</div>
       <div style="display:flex;gap:12px;justify-content:center">
         <div style="text-align:center;flex:1;background:rgba(255,255,255,.08);border-radius:8px;padding:10px 8px">
@@ -194,7 +302,7 @@
       </div>
     </div>
     <button class="gate-btn" onclick="checkPin()">Enter</button>
-    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:8px">
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(61,168,216,.12);display:flex;flex-direction:column;gap:8px;width:100%">
       <button onclick="openStaffTsGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">⏱ My Timesheet →</button>
       <button onclick="openAgencyGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">Agency Access →</button>
       <button onclick="localStorage.clear();sessionStorage.clear();location.reload()" style="background:none;border:1px solid rgba(61,168,216,.2);color:rgba(61,168,216,.55);font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px;padding:8px 18px;border-radius:8px;width:100%;font-weight:500;text-align:center">Having trouble logging in? Tap here to reset</button>
