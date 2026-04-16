@@ -40,7 +40,8 @@
 ### TAFE holidays
 - New button: **📆 TAFE Holidays** opens a config modal.
 - Supports any number of date ranges with an optional label (e.g. "Term 2 break").
-- Stored in `app_config` keyed `eq.tafe_holidays`, with localStorage fallback (same pattern as the existing leave CC list).
+- Stored in `app_config` keyed `tafe_holidays`, with localStorage fallback (same pattern as the existing leave CC list).
+- **Banner on the editor:** when the current week intersects a holiday range AND there are apprentices with a TAFE day set, a purple banner appears above the roster headers — e.g. "TAFE break this week — apprentices stay on-site · Winter holidays (Term 2 break)". Only shown when relevant, so it doesn't add noise most of the year.
 
 ## 4. Schema change
 

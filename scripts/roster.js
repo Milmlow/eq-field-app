@@ -421,7 +421,32 @@ function renderEditor() {
     + '<div style="width:80px;flex-shrink:0"></div>'
     + '</div>';
 
-  let html = dayHeaderHtml;
+  // TAFE holiday banner — only if (a) the week intersects a holiday range
+  // AND (b) there's at least one apprentice with a TAFE day set.
+  let tafeBannerHtml = '';
+  if (typeof tafeWeekSummary === 'function') {
+    const apprenticesWithTafe = (STATE.people || []).filter(p =>
+      p.group === 'Apprentice' && p.tafe_day && ['mon','tue','wed','thu','fri'].includes(p.tafe_day)
+    );
+    if (apprenticesWithTafe.length) {
+      const s = tafeWeekSummary(week);
+      if (s.anyHoliday) {
+        const labelText = s.labels.join(', ');
+        const headline  = s.fullWeek
+          ? `TAFE break this week — apprentices stay on-site`
+          : `TAFE break intersects this week — apprentices stay on-site on affected days`;
+        tafeBannerHtml = `<div style="display:flex;align-items:center;gap:10px;background:#EEEDF8;border:1px solid #D5D1EC;color:#4A4680;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">
+          <span style="font-size:16px;line-height:1">📆</span>
+          <div style="flex:1;line-height:1.4">
+            <strong>${headline}</strong>
+            ${labelText ? `<div style="font-size:11px;color:#6B68A0;margin-top:2px">${esc(labelText)}</div>` : ''}
+          </div>
+        </div>`;
+      }
+    }
+  }
+
+  let html = tafeBannerHtml + dayHeaderHtml;
   groups.forEach(g => {
     let people = STATE.people.filter(p => p.group === g);
     if (!people.length) return;
