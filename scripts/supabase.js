@@ -332,6 +332,7 @@ async function savePersonToSB(person) {
     agency:   person.agency  || null,
     email:    person.email   || null,
     tafe_day: person.tafe_day || null,
+    notify_roster: !!person.notify_roster,
     pin:      person.pin     || null
   });
 }
@@ -346,7 +347,8 @@ async function saveSiteToSB(site) {
     abbr:            site.abbr,
     address:         site.address         || null,
     site_lead:       site.site_lead       || null,
-    site_lead_phone: site.site_lead_phone || null
+    site_lead_phone: site.site_lead_phone || null,
+    site_lead_email: site.site_lead_email || null
   });
 }
 

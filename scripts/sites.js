@@ -19,6 +19,8 @@ function openAddSite() {
   );
   populateSiteLeadDropdown();
   document.getElementById('site-lead').value = '';
+  const emailEl = document.getElementById('site-lead-email');
+  if (emailEl) emailEl.value = '';
   document.querySelector('#modal-site h3').textContent = 'Add Site';
   openModal('modal-site');
 }
@@ -33,6 +35,8 @@ function openEditSite(id) {
   document.getElementById('site-address').value  = site.address || '';
   populateSiteLeadDropdown();
   document.getElementById('site-lead').value     = site.site_lead || '';
+  const emailEl = document.getElementById('site-lead-email');
+  if (emailEl) emailEl.value = site.site_lead_email || '';
   document.querySelector('#modal-site h3').textContent = 'Edit Site';
   openModal('modal-site');
 }
@@ -44,6 +48,7 @@ function saveSite() {
   const abbr     = document.getElementById('site-abbr').value.trim().toUpperCase();
   const address  = document.getElementById('site-address').value.trim();
   const siteLead = document.getElementById('site-lead').value;
+  const siteLeadEmail = (document.getElementById('site-lead-email') || {}).value || '';
 
   // Look up phone for selected lead
   const leadPerson    = [...(STATE.people || []), ...(STATE.managers || [])].find(p => p.name === siteLead);
@@ -66,10 +71,11 @@ function saveSite() {
       site.address         = address;
       site.site_lead       = siteLead || null;
       site.site_lead_phone = siteLeadPhone || null;
+      site.site_lead_email = siteLeadEmail.trim().toLowerCase() || null;
     }
     showToast(`${name} updated`);
   } else {
-    site = { id: 'temp_' + Date.now(), name, abbr, address, site_lead: siteLead || null, site_lead_phone: siteLeadPhone || null };
+    site = { id: 'temp_' + Date.now(), name, abbr, address, site_lead: siteLead || null, site_lead_phone: siteLeadPhone || null, site_lead_email: siteLeadEmail.trim().toLowerCase() || null };
     STATE.sites.push(site);
     showToast(`${name} added`);
   }

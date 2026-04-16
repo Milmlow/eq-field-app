@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.2';
+const APP_VERSION = '3.4.3';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -51,7 +51,8 @@ let MANAGER_PASSWORD = '';
 // (used by scripts/supabase.js — _isOrgTable lives there)
 const ORG_TABLES = [
   'people', 'sites', 'schedule', 'managers', 'timesheets',
-  'leave_requests', 'audit_log', 'job_numbers'
+  'leave_requests', 'audit_log', 'job_numbers',
+  'leave_balances', 'checkins'
 ];
 
 // ── Group name normalisation ─────────────────────────────────

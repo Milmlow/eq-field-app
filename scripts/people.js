@@ -16,6 +16,8 @@ function openAddPerson() {
   document.getElementById('person-email').value   = '';
   const tafeEl = document.getElementById('person-tafe-day');
   if (tafeEl) tafeEl.value = '';
+  const notifyEl = document.getElementById('person-notify-roster');
+  if (notifyEl) notifyEl.checked = false;
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = '';
   openModal('modal-person');
@@ -35,6 +37,8 @@ function editPerson(id) {
   document.getElementById('person-email').value   = p.email   || '';
   const tafeEl = document.getElementById('person-tafe-day');
   if (tafeEl) tafeEl.value = p.tafe_day || '';
+  const notifyEl = document.getElementById('person-notify-roster');
+  if (notifyEl) notifyEl.checked = !!p.notify_roster;
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = ''; // never pre-fill PIN
   openModal('modal-person');
@@ -51,6 +55,8 @@ function savePerson() {
   const email   = document.getElementById('person-email').value.trim().toLowerCase();
   const tafeEl  = document.getElementById('person-tafe-day');
   const tafeDay = tafeEl ? (tafeEl.value || null) : null;
+  const notifyEl = document.getElementById('person-notify-roster');
+  const notifyRoster = notifyEl ? notifyEl.checked : false;
   const pinRaw  = (document.getElementById('person-pin') || { value: '' }).value.trim();
   const newPin  = (isManager && /^\d{4}$/.test(pinRaw)) ? pinRaw : null;
 
@@ -67,12 +73,13 @@ function savePerson() {
       person.agency   = agency;
       person.email    = email;
       person.tafe_day = tafeDay;
+      person.notify_roster = notifyRoster;
       if (newPin) person.pin = newPin;
     }
     showToast(`${name} updated`);
   } else {
     const newId = Math.max(0, ...STATE.people.map(p => p.id)) + 1;
-    person = { id: newId, name, phone, group, licence, agency, email, tafe_day: tafeDay, pin: newPin || null };
+    person = { id: newId, name, phone, group, licence, agency, email, tafe_day: tafeDay, notify_roster: notifyRoster, pin: newPin || null };
     STATE.people.push(person);
     showToast(`${name} added`);
   }
