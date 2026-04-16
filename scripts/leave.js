@@ -74,9 +74,12 @@ function removeLeaveCC(idx) {
 
 // ── Load from Supabase ────────────────────────────────────────
 
+let showArchivedLeave = false;
+
 async function loadLeaveRequests() {
   try {
-    leaveRequests = await sbFetch('leave_requests?select=*&order=created_at.desc');
+    const archiveFilter = showArchivedLeave ? '' : '&archived=eq.false';
+    leaveRequests = await sbFetch('leave_requests?select=*&order=created_at.desc' + archiveFilter);
   } catch (e) {
     leaveRequests = [];
   }
@@ -382,44 +385,78 @@ async function writeLeaveToSchedule(req) {
   }
 }
 
-// ── Clear all ─────────────────────────────────────────────────
+// ── Archive ──────────────────────────────────────────────────
+// Archiving hides leave requests from the default view but does
+// NOT touch the roster/schedule — approved leave stays on the grid.
 
-function confirmClearLeave() {
+async function archiveLeaveRequest(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const count = leaveRequests.length;
-  if (!count) { showToast('No leave requests to clear'); return; }
-  document.getElementById('confirm-title').textContent = 'Clear All Leave Requests';
-  document.getElementById('confirm-msg').textContent   =
-    `This will permanently delete all ${count} leave requests. This cannot be undone. Continue?`;
-  document.getElementById('confirm-action').textContent = 'Clear All';
+  const req = leaveRequests.find(r => r.id === id);
+  if (!req) return;
+  try {
+    await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: true });
+    req.archived = true;
+    if (!showArchivedLeave) leaveRequests = leaveRequests.filter(r => r.id !== id);
+    updateLeaveBadge();
+    renderLeave();
+    showToast(`${req.requester_name} leave archived`);
+    auditLog(`Archived leave: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
+  } catch (e) {
+    showToast('Archive failed — check connection');
+  }
+}
+
+async function unarchiveLeaveRequest(id) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const req = leaveRequests.find(r => r.id === id);
+  if (!req) return;
+  try {
+    await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: false });
+    req.archived = false;
+    updateLeaveBadge();
+    renderLeave();
+    showToast(`${req.requester_name} leave restored`);
+  } catch (e) {
+    showToast('Restore failed — check connection');
+  }
+}
+
+function confirmArchiveAllResolved() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const resolved = leaveRequests.filter(r => (r.status === 'Approved' || r.status === 'Rejected') && !r.archived);
+  if (!resolved.length) { showToast('No resolved requests to archive'); return; }
+  document.getElementById('confirm-title').textContent = 'Archive Resolved Requests';
+  document.getElementById('confirm-msg').textContent =
+    `Archive ${resolved.length} resolved request${resolved.length !== 1 ? 's' : ''} (Approved + Rejected)? They'll be hidden from this view but preserved for records. The roster is not affected.`;
+  document.getElementById('confirm-action').textContent = 'Archive';
   document.getElementById('confirm-action').onclick = async () => {
     try {
-      // LEV-005: Remove leave codes from schedule for approved requests
-      const approvedReqs = leaveRequests.filter(r => r.status === 'Approved');
-      for (const req of approvedReqs) {
-        const leaveDates = _getLeaveDates(req);
-        for (const ds of leaveDates) {
-          const weekStr = getWeekForDate(new Date(ds + 'T00:00:00'));
-          const dayName = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(ds + 'T00:00:00').getDay()];
-          const sched   = STATE.schedule.find(r => r.name === req.requester_name && r.week === weekStr);
-          if (sched && sched[dayName] && isLeave(sched[dayName])) {
-            sched[dayName] = '';
-            try { await saveCellToSB(req.requester_name, weekStr, dayName, ''); } catch (e) {}
-          }
-        }
+      const ids = resolved.map(r => r.id);
+      for (const id of ids) {
+        await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: true });
       }
-      await sbFetch(`leave_requests?org_id=eq.${TENANT.ORG_UUID}`, 'DELETE');
-      leaveRequests = [];
       closeModal('modal-confirm');
-      updateLeaveBadge();
+      await loadLeaveRequests();
       renderLeave();
-      showToast(`${count} leave requests cleared`);
-      auditLog('Cleared all leave requests', 'Leave', `${count} deleted`, null);
+      showToast(`${resolved.length} request${resolved.length !== 1 ? 's' : ''} archived`);
+      auditLog('Archived all resolved leave requests', 'Leave', `${resolved.length} archived`, null);
     } catch (e) {
-      showToast('Failed to clear: ' + e.message);
+      showToast('Archive failed — check connection');
     }
   };
   openModal('modal-confirm');
+}
+
+async function toggleShowArchived() {
+  showArchivedLeave = !showArchivedLeave;
+  const btn = document.getElementById('leave-archive-toggle');
+  if (btn) {
+    btn.textContent = showArchivedLeave ? '📦 Hide Archived' : '📦 Show Archived';
+    btn.style.background = showArchivedLeave ? 'var(--purple-lt)' : '';
+    btn.style.color = showArchivedLeave ? 'var(--purple)' : '';
+  }
+  await loadLeaveRequests();
+  renderLeave();
 }
 
 // ── Resend email ──────────────────────────────────────────────
@@ -565,12 +602,16 @@ function renderLeave() {
       while (d <= de) { if (d.getDay() !== 0 && d.getDay() !== 6) bizDays++; d.setDate(d.getDate() + 1); }
     }
     const canRespond = isManager && r.status === 'Pending';
-    html += `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);${r.status === 'Pending' ? 'background:#FFFDF5' : ''}">
+    const isResolved = r.status === 'Approved' || r.status === 'Rejected';
+    const isArchived = !!r.archived;
+    const rowBg = isArchived ? 'background:var(--surface-2);opacity:.7' : (r.status === 'Pending' ? 'background:#FFFDF5' : '');
+    html += `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);${rowBg}">
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
           <span style="font-weight:700;color:var(--navy);font-size:14px">${esc(r.requester_name)}</span>
           <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;${statusStyle[r.status] || ''}">${r.status}</span>
           <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:var(--purple-lt);color:var(--purple)">${typeLabels[r.leave_type] || r.leave_type}</span>
+          ${isArchived ? '<span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--ink-4);border:1px solid var(--border)">📦 Archived</span>' : ''}
         </div>
         <div style="font-size:12px;color:var(--ink-2);margin-bottom:2px">${datesStr} — <strong>${bizDays} day${bizDays !== 1 ? 's' : ''}</strong></div>
         <div style="font-size:11px;color:var(--ink-3)">Approver: ${esc(r.approver_name)}</div>
@@ -581,6 +622,8 @@ function renderLeave() {
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
         ${canRespond ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond(${r.id})">Review</button>` : ''}
         ${r.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="resendLeaveEmail(${r.id})" style="font-size:10px">📧 Resend</button>` : ''}
+        ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest(${r.id})" style="font-size:10px">📦 Archive</button>` : ''}
+        ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest(${r.id})" style="font-size:10px">↩ Restore</button>` : ''}
       </div>
     </div>`;
   });
