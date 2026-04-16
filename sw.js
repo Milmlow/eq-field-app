@@ -1,5 +1,5 @@
-// EQ Solves — Field  ·  Service Worker  v3.3.8
-const CACHE = 'eq-field-v3.3.9';
+// EQ Solves — Field  ·  Service Worker  v3.4.2
+const CACHE = 'eq-field-v3.4.2';
 
 const PRECACHE = [
   '/',
@@ -18,6 +18,7 @@ const PRECACHE = [
   '/scripts/dashboard.js',
   '/scripts/batch.js',
   '/scripts/leave.js',
+  '/scripts/tafe.js',
   '/scripts/timesheets.js',
   '/scripts/jobnumbers.js',
   '/scripts/import-export.js',

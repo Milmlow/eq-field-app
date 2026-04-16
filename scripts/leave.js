@@ -139,9 +139,28 @@ function renderPickedDays() {
 
 function openLeaveRequest() {
   const pSel   = document.getElementById('leave-person');
-  const people = [...(STATE.people || [])].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Merge staff (STATE.people) + supervisors (STATE.managers) so
+  // supervisors can also submit leave requests. Dedupe by name.
+  const peopleList = (STATE.people || []).map(p => ({
+    name:  p.name,
+    group: p.group || ''
+  }));
+  const supervisorList = (STATE.managers || []).map(m => ({
+    name:  m.name,
+    group: 'Supervisor'
+  }));
+  const byName = new Map();
+  [...peopleList, ...supervisorList].forEach(x => {
+    if (!byName.has(x.name)) byName.set(x.name, x);
+  });
+  const combined = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+
   pSel.innerHTML = '<option value="">— Select your name —</option>' +
-    people.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+    combined.map(p => {
+      const suffix = p.group === 'Supervisor' ? ' — Supervisor' : '';
+      return `<option value="${esc(p.name)}">${esc(p.name)}${suffix}</option>`;
+    }).join('');
 
   const aSel = document.getElementById('leave-approver');
   const mgrs = [...(STATE.managers || [])].sort((a, b) => a.name.localeCompare(b.name));
@@ -333,6 +352,11 @@ function _getLeaveDates(req) {
 }
 
 async function writeLeaveToSchedule(req) {
+  // Supervisors aren't on the roster — the leave request itself is
+  // the record of record for them. Skip the schedule write-back.
+  const isOnRoster = (STATE.people || []).some(p => p.name === req.requester_name);
+  if (!isOnRoster) return;
+
   const dates = _getLeaveDates(req);
   const byWeek = {};
   dates.forEach(ds => {
