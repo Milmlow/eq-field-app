@@ -593,15 +593,18 @@
         </div>
         <div id="backup-restore-preview" style="display:none;margin-top:12px"></div>
       </div>
-      <div class="section-header" style="margin-bottom:10px"><div class="section-title">👤 People / Contacts</div></div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">👤 All Employees</div></div>
       <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
-        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export contacts as CSV, edit in Excel, re-import. <strong style="color:var(--navy)">Importing will replace all existing contacts.</strong></p>
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export all staff and supervisors as a single CSV. Includes contact details, group, role, and TAFE day.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-          <button class="btn btn-primary btn-sm" onclick="exportPeopleCSV()">↓ Export People CSV</button>
+          <button class="btn btn-primary btn-sm" onclick="exportAllEmployeesCSV()">↓ Export All Employees</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-people-file').click()">↑ Import People CSV</button>
           <input type="file" id="import-people-file" accept=".csv" style="display:none" onchange="importPeopleCSV(this)">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-managers-file2').click()">↑ Import Supervision CSV</button>
+          <input type="file" id="import-managers-file2" accept=".csv" style="display:none" onchange="importManagersCSV(this)">
         </div>
         <div id="import-people-preview" style="display:none"></div>
+        <div id="import-managers-preview2" style="display:none"></div>
       </div>
       <div class="section-header" style="margin-bottom:10px"><div class="section-title">🏗 Sites</div></div>
       <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
@@ -622,16 +625,6 @@
           <input type="file" id="import-schedule-file" accept=".csv" style="display:none" onchange="importScheduleCSV(this)">
         </div>
         <div id="import-schedule-preview" style="display:none"></div>
-      </div>
-      <div class="section-header" style="margin-bottom:10px"><div class="section-title">☎ Supervision Contacts</div></div>
-      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
-        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export supervision contacts, update, re-import. <strong style="color:var(--navy)">Importing will replace all existing contacts.</strong></p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-          <button class="btn btn-primary btn-sm" onclick="exportManagersCSV()">↓ Export Supervision CSV</button>
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-managers-file2').click()">↑ Import Supervision CSV</button>
-          <input type="file" id="import-managers-file2" accept=".csv" style="display:none" onchange="importManagersCSV(this)">
-        </div>
-        <div id="import-managers-preview2" style="display:none"></div>
       </div>
       <div class="section-header" style="margin-bottom:10px"><div class="section-title" style="color:var(--red)">⚠ Reset</div></div>
       <div class="roster-card" style="padding:18px 20px;border-color:#FECACA">
