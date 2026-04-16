@@ -103,6 +103,71 @@ function exportContactsCSV() {
   showToast(`Contacts exported — ${people.length} records`);
 }
 
+// ── Combined employee export ──────────────────────────────────
+// Merges STATE.people + STATE.managers into one CSV, deduped by
+// name. Supervisors who also appear in people get a combined row.
+
+function exportAllEmployeesCSV() {
+  const tafeDayLabel = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday' };
+
+  // Build rows from people (staff)
+  const byName = new Map();
+  (STATE.people || []).forEach(p => {
+    byName.set(p.name, {
+      name:     p.name,
+      type:     p.group || 'Direct',
+      phone:    p.phone || '',
+      email:    p.email || '',
+      licence:  p.licence || '',
+      agency:   p.agency || '',
+      tafe_day: tafeDayLabel[p.tafe_day] || '',
+      role:     '',
+      category: ''
+    });
+  });
+
+  // Merge supervisors — if name already exists, add role/category; otherwise add as new row
+  (STATE.managers || []).forEach(m => {
+    if (byName.has(m.name)) {
+      const existing = byName.get(m.name);
+      existing.role     = m.role || '';
+      existing.category = m.category || '';
+      // If they're in people AND managers, mark them as both
+      if (!existing.type.includes('Supervisor')) existing.type += ' / Supervisor';
+    } else {
+      byName.set(m.name, {
+        name:     m.name,
+        type:     'Supervisor',
+        phone:    m.phone || '',
+        email:    m.email || '',
+        licence:  '',
+        agency:   '',
+        tafe_day: '',
+        role:     m.role || '',
+        category: m.category || ''
+      });
+    }
+  });
+
+  const all = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+  const header = 'Name,Type,Phone,Email,Licence,Agency,TAFE Day,Role,Category';
+  const rows = all.map(r => [
+    csvEscape(r.name),
+    csvEscape(r.type),
+    csvPhone(r.phone),
+    csvEscape(r.email),
+    csvEscape(r.licence),
+    csvEscape(r.agency),
+    csvEscape(r.tafe_day),
+    csvEscape(r.role),
+    csvEscape(r.category)
+  ].join(','));
+
+  downloadCSV(header + '\n' + rows.join('\n'), 'SKS_All_Employees.csv');
+  showToast(`All employees exported — ${all.length} records`);
+}
+
 function importPeopleCSV(input) {
   const file = input.files[0];
   if (!file) return;
