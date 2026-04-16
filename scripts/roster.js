@@ -10,6 +10,7 @@ function siteColor(code) {
   if (!code || !code.trim()) return 'empty';
   const u = code.toUpperCase().trim();
   if (SITE_COLOR_MAP[u]) return SITE_COLOR_MAP[u];
+  if (isEducation(u)) return 'purple';
   if (isLeave(u)) return 'amber';
   // Hash the code to a colour
   let hash = 0;
@@ -24,12 +25,21 @@ function isLeave(code) {
   return LEAVE_TERMS.some(t => u === t || u.startsWith(t));
 }
 
-// Used by the "Leave & Absences" panels — excludes Public Holidays.
-// PH is a site-wide closure, not someone being absent.
+// TAFE / TRAINING — education is a scheduled work activity,
+// not leave. Kept separate so dashboards don't miscount it.
+function isEducation(code) {
+  if (!code || !code.trim()) return false;
+  const u = code.toUpperCase().trim();
+  return EDUCATION_TERMS.some(t => u === t || u.startsWith(t));
+}
+
+// Used by the "Leave & Absences" panels — excludes Public Holidays
+// and education. PH is a site-wide closure; TAFE is scheduled learning.
 function isAbsence(code) {
   if (!code || !code.trim()) return false;
   const u = code.toUpperCase().trim();
   if (u === 'PH') return false;
+  if (isEducation(u)) return false;
   return isLeave(code);
 }
 

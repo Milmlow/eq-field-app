@@ -14,6 +14,8 @@ function openAddPerson() {
   document.getElementById('person-licence').value = '';
   document.getElementById('person-agency').value  = '';
   document.getElementById('person-email').value   = '';
+  const tafeEl = document.getElementById('person-tafe-day');
+  if (tafeEl) tafeEl.value = '';
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = '';
   openModal('modal-person');
@@ -31,6 +33,8 @@ function editPerson(id) {
   document.getElementById('person-licence').value = p.licence || '';
   document.getElementById('person-agency').value  = p.agency  || '';
   document.getElementById('person-email').value   = p.email   || '';
+  const tafeEl = document.getElementById('person-tafe-day');
+  if (tafeEl) tafeEl.value = p.tafe_day || '';
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = ''; // never pre-fill PIN
   openModal('modal-person');
@@ -45,6 +49,8 @@ function savePerson() {
   const licence = document.getElementById('person-licence').value.trim();
   const agency  = document.getElementById('person-agency').value.trim();
   const email   = document.getElementById('person-email').value.trim().toLowerCase();
+  const tafeEl  = document.getElementById('person-tafe-day');
+  const tafeDay = tafeEl ? (tafeEl.value || null) : null;
   const pinRaw  = (document.getElementById('person-pin') || { value: '' }).value.trim();
   const newPin  = (isManager && /^\d{4}$/.test(pinRaw)) ? pinRaw : null;
 
@@ -54,18 +60,19 @@ function savePerson() {
   if (id) {
     person = STATE.people.find(x => x.id === parseInt(id));
     if (person) {
-      person.name    = name;
-      person.phone   = phone;
-      person.group   = group;
-      person.licence = licence;
-      person.agency  = agency;
-      person.email   = email;
+      person.name     = name;
+      person.phone    = phone;
+      person.group    = group;
+      person.licence  = licence;
+      person.agency   = agency;
+      person.email    = email;
+      person.tafe_day = tafeDay;
       if (newPin) person.pin = newPin;
     }
     showToast(`${name} updated`);
   } else {
     const newId = Math.max(0, ...STATE.people.map(p => p.id)) + 1;
-    person = { id: newId, name, phone, group, licence, agency, email, pin: newPin || null };
+    person = { id: newId, name, phone, group, licence, agency, email, tafe_day: tafeDay, pin: newPin || null };
     STATE.people.push(person);
     showToast(`${name} added`);
   }
@@ -158,6 +165,11 @@ function renderContacts() {
     'Labour Hire': '<span style="background:var(--navy-3);color:white;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700">LH</span>'
   };
 
+  const tafeDayLabel = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri' };
+  const tafeBadge = (p) => p.tafe_day && tafeDayLabel[p.tafe_day]
+    ? `<span title="TAFE day" style="background:#EEEDF8;color:#7C77B9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎓 ${tafeDayLabel[p.tafe_day]}</span>`
+    : '';
+
   const isMobile = window.innerWidth <= 768;
 
   if (isMobile) {
@@ -205,7 +217,7 @@ function renderContacts() {
     <tbody>${people.map(p => `
       <tr>
         <td class="name-col">${esc(p.name)}</td>
-        <td style="white-space:nowrap">${groupBadge[p.group] || p.group}</td>
+        <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${tafeBadge(p)}</td>
         <td class="phone-col">${p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : '<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
         <td class="meta-col">${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>` : '—'}</td>
         <td class="meta-col">${p.agency || '—'}</td>

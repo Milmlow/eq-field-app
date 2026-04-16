@@ -325,13 +325,14 @@ async function _upsertById(table, entity, row) {
 
 async function savePersonToSB(person) {
   return _upsertById('people', person, {
-    name:    person.name,
-    phone:   person.phone   || null,
-    group:   (typeof denormaliseGroupForDb === 'function' ? denormaliseGroupForDb(person.group) : person.group),
-    licence: person.licence || null,
-    agency:  person.agency  || null,
-    email:   person.email   || null,
-    pin:     person.pin     || null
+    name:     person.name,
+    phone:    person.phone   || null,
+    group:    (typeof denormaliseGroupForDb === 'function' ? denormaliseGroupForDb(person.group) : person.group),
+    licence:  person.licence || null,
+    agency:   person.agency  || null,
+    email:    person.email   || null,
+    tafe_day: person.tafe_day || null,
+    pin:      person.pin     || null
   });
 }
 
@@ -548,12 +549,13 @@ async function importPeopleToSB(people) {
   try { await _purgeTenantRows('people'); } catch (e) { return; }
   if (!people.length) return;
   const rows = people.map(p => ({
-    name:    p.name,
-    phone:   p.phone   || null,
-    group:   (typeof denormaliseGroupForDb === 'function' ? denormaliseGroupForDb(p.group) : p.group),
-    email:   p.email   || null,
-    licence: p.licence || null,
-    agency:  p.agency  || null
+    name:     p.name,
+    phone:    p.phone   || null,
+    group:    (typeof denormaliseGroupForDb === 'function' ? denormaliseGroupForDb(p.group) : p.group),
+    email:    p.email   || null,
+    licence:  p.licence || null,
+    agency:   p.agency  || null,
+    tafe_day: p.tafe_day || null
   }));
   await sbFetch('people', 'POST', rows);
 }

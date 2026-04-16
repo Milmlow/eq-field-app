@@ -1,0 +1,196 @@
+// ─────────────────────────────────────────────────────────────
+// scripts/tafe.js  —  EQ Solves Field
+// TAFE day handling for apprentices.
+// - Holiday ranges config (NSW school holidays by default)
+// - "Apply TAFE Day" button: fills empty cells only, skips
+//   weeks that fall inside a TAFE holiday range.
+// - Never overwrites existing cell content.
+// Depends on: app-state.js, utils.js, supabase.js, roster.js
+// ─────────────────────────────────────────────────────────────
+
+let tafeHolidays = []; // array of { start:'YYYY-MM-DD', end:'YYYY-MM-DD', label:'' }
+
+// ── Load / save holidays ──────────────────────────────────────
+
+async function loadTafeHolidays() {
+  try {
+    const rows = await sbFetch('app_config?key=eq.tafe_holidays&select=value');
+    if (rows && rows[0] && rows[0].value) {
+      tafeHolidays = JSON.parse(rows[0].value) || [];
+      return;
+    }
+  } catch (e) { /* fall through to localStorage */ }
+  try {
+    tafeHolidays = JSON.parse(localStorage.getItem('eq_tafe_holidays') || '[]');
+  } catch (e) { tafeHolidays = []; }
+}
+
+async function saveTafeHolidays() {
+  const payload = JSON.stringify(tafeHolidays);
+  try {
+    // Try update first (row exists)
+    const res = await sbFetch('app_config?key=eq.tafe_holidays', 'PATCH', { value: payload });
+    // If PATCH returns [] (no row), create it
+    if (!res || (Array.isArray(res) && res.length === 0)) {
+      await sbFetch('app_config', 'POST', { key: 'eq.tafe_holidays', value: payload });
+    }
+  } catch (e) {
+    // Fall back to localStorage
+    try { localStorage.setItem('eq_tafe_holidays', payload); } catch (e2) {}
+  }
+}
+
+// ── Date helpers ──────────────────────────────────────────────
+
+// Parse the app's "DD.MM.YY" week key into a Date for Monday.
+function tafeWeekKeyToMonday(weekKey) {
+  const parts = (weekKey || '').split('.');
+  if (parts.length !== 3) return null;
+  const [dd, mm, yy] = parts.map(x => parseInt(x, 10));
+  if (!dd || !mm || isNaN(yy)) return null;
+  const year = 2000 + yy;
+  return new Date(year, mm - 1, dd);
+}
+
+// True if the given day of that week falls inside any TAFE holiday range.
+function tafeIsHolidayForDay(monday, dayIdx /* 0=Mon..4=Fri */) {
+  if (!monday) return false;
+  const d = new Date(monday);
+  d.setDate(d.getDate() + dayIdx);
+  const iso = d.toISOString().slice(0, 10);
+  return tafeHolidays.some(h => iso >= h.start && iso <= h.end);
+}
+
+// ── Apply TAFE day for current week ───────────────────────────
+// Only touches EMPTY cells for apprentices who have a nominated
+// TAFE day. Skips the day entirely if the date lands in a holiday
+// range. Never overwrites existing roster content.
+
+async function applyTafeDayForWeek() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+
+  const week = STATE.currentWeek;
+  if (!week) { showToast('No active week'); return; }
+
+  const monday = tafeWeekKeyToMonday(week);
+  if (!monday) { showToast('Could not parse week'); return; }
+
+  const dayKeys = ['mon','tue','wed','thu','fri'];
+  const apprentices = (STATE.people || []).filter(p =>
+    p.group === 'Apprentice' && p.tafe_day && dayKeys.includes(p.tafe_day)
+  );
+
+  if (!apprentices.length) {
+    showToast('No apprentices have a TAFE day nominated');
+    return;
+  }
+
+  let filled = 0, skippedHoliday = 0, skippedOccupied = 0;
+  const writes = [];
+
+  for (const p of apprentices) {
+    const dayIdx = dayKeys.indexOf(p.tafe_day);
+
+    // Skip if that date is inside a TAFE holiday range
+    if (tafeIsHolidayForDay(monday, dayIdx)) {
+      skippedHoliday++;
+      continue;
+    }
+
+    // Find or create the schedule entry for this person/week
+    let entry = STATE.schedule.find(r => r.name === p.name && r.week === week);
+    if (!entry) {
+      entry = { name: p.name, week, mon:'', tue:'', wed:'', thu:'', fri:'', sat:'', sun:'' };
+      STATE.schedule.push(entry);
+      if (STATE.scheduleIndex) STATE.scheduleIndex[`${p.name}||${week}`] = entry;
+    }
+
+    const existing = (entry[p.tafe_day] || '').trim();
+    if (existing) { skippedOccupied++; continue; }
+
+    entry[p.tafe_day] = 'TAFE';
+    writes.push(saveCellToSB(p.name, week, p.tafe_day, 'TAFE'));
+    filled++;
+  }
+
+  try {
+    await Promise.all(writes);
+  } catch (e) {
+    showToast('⚠ Some TAFE days failed to save — check connection');
+  }
+
+  const parts = [];
+  parts.push(`🎓 ${filled} TAFE day${filled === 1 ? '' : 's'} filled`);
+  if (skippedOccupied) parts.push(`${skippedOccupied} skipped (cell not empty)`);
+  if (skippedHoliday)  parts.push(`${skippedHoliday} skipped (holiday)`);
+  showToast(parts.join(' · '));
+  auditLog(`Applied TAFE day — ${filled} filled, ${skippedOccupied} skipped (occupied), ${skippedHoliday} skipped (holiday)`, 'TAFE', null, week);
+
+  if (currentPage === 'editor') renderEditor();
+  if (currentPage === 'roster') renderRoster();
+  if (currentPage === 'dashboard') renderDashboard();
+  updateLastUpdated();
+}
+
+// ── Holidays modal ────────────────────────────────────────────
+
+function openTafeHolidaysConfig() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  renderTafeHolidaysList();
+  // Clear inputs
+  const s = document.getElementById('tafe-holiday-start');
+  const e = document.getElementById('tafe-holiday-end');
+  const l = document.getElementById('tafe-holiday-label');
+  if (s) s.value = '';
+  if (e) e.value = '';
+  if (l) l.value = '';
+  openModal('modal-tafe-holidays');
+}
+
+function renderTafeHolidaysList() {
+  const el = document.getElementById('tafe-holidays-list');
+  if (!el) return;
+  if (!tafeHolidays.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--ink-3);padding:8px 0">No TAFE holiday ranges configured yet.</div>';
+    return;
+  }
+  // Sort by start date asc
+  const sorted = [...tafeHolidays].map((h, i) => ({ ...h, _i: i }))
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  el.innerHTML = sorted.map(h => {
+    const label = h.label ? esc(h.label) : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;margin-bottom:4px">
+      <span style="flex:1;font-size:12px;color:var(--ink)">
+        <strong>${esc(h.start)}</strong> &rarr; <strong>${esc(h.end)}</strong>
+        ${label ? `<span style="color:var(--ink-3);margin-left:8px">· ${label}</span>` : ''}
+      </span>
+      <button onclick="removeTafeHoliday(${h._i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function addTafeHoliday() {
+  const start = document.getElementById('tafe-holiday-start').value;
+  const end   = document.getElementById('tafe-holiday-end').value;
+  const label = (document.getElementById('tafe-holiday-label').value || '').trim();
+
+  if (!start || !end) { showToast('Enter both start and end dates'); return; }
+  if (end < start)   { showToast('End date must be on or after start'); return; }
+
+  tafeHolidays.push({ start, end, label });
+  await saveTafeHolidays();
+  document.getElementById('tafe-holiday-start').value = '';
+  document.getElementById('tafe-holiday-end').value   = '';
+  document.getElementById('tafe-holiday-label').value = '';
+  renderTafeHolidaysList();
+  showToast('TAFE holiday range added');
+}
+
+async function removeTafeHoliday(idx) {
+  if (idx < 0 || idx >= tafeHolidays.length) return;
+  tafeHolidays.splice(idx, 1);
+  await saveTafeHolidays();
+  renderTafeHolidaysList();
+  showToast('TAFE holiday range removed');
+}

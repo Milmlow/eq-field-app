@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.1';
+const APP_VERSION = '3.4.2';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -307,10 +307,15 @@ const SITE_COLOR_MAP = {
 };
 
 // ── Leave / status codes ──────────────────────────────────────
+// NOTE: TAFE and TRAINING are education, not leave — kept in a
+// separate EDUCATION_TERMS list so the roster, dashboard, and
+// absence panels classify them correctly.
 const LEAVE_TERMS = [
   'A/L', 'AL', 'LVE', 'LEAVE', 'U/L', 'UL', 'RDO', 'PH',
-  'SICK', 'JURY', 'OFF', 'DAY OFF', 'TAFE', 'TRAINING', 'PENDING'
+  'SICK', 'JURY', 'OFF', 'DAY OFF', 'PENDING'
 ];
+
+const EDUCATION_TERMS = ['TAFE', 'TRAINING'];
 
 // ── Day arrays ────────────────────────────────────────────────
 const ALL_DAYS   = ['mon','tue','wed','thu','fri','sat','sun'];
@@ -345,9 +350,9 @@ const SEED = {
     { id:10, name:'Elliot Brown',    group:'Direct',      phone:'0411000010', licence:'Licensed',  agency:'', email:'elliot@example.com' },
     { id:11, name:'Finn Clarke',     group:'Direct',      phone:'0411000011', licence:'Licensed',  agency:'', email:'finn@example.com' },
     { id:12, name:'Harper Moore',    group:'Direct',      phone:'0411000012', licence:'Licensed',  agency:'', email:'harper@example.com' },
-    { id:13, name:'Indigo White',    group:'Apprentice',  phone:'0411000013', licence:'1st Year',  agency:'', email:'indigo@example.com' },
-    { id:14, name:'Jamie Harris',    group:'Apprentice',  phone:'0411000014', licence:'2nd Year',  agency:'', email:'jamie@example.com' },
-    { id:15, name:'Kai Martin',      group:'Apprentice',  phone:'0411000015', licence:'3rd Year',  agency:'', email:'kai@example.com' },
+    { id:13, name:'Indigo White',    group:'Apprentice',  phone:'0411000013', licence:'1st Year',  agency:'', email:'indigo@example.com', tafe_day:'wed' },
+    { id:14, name:'Jamie Harris',    group:'Apprentice',  phone:'0411000014', licence:'2nd Year',  agency:'', email:'jamie@example.com', tafe_day:'thu' },
+    { id:15, name:'Kai Martin',      group:'Apprentice',  phone:'0411000015', licence:'3rd Year',  agency:'', email:'kai@example.com', tafe_day:'tue' },
     { id:16, name:'Lane Robinson',   group:'Labour Hire', phone:'0411000016', licence:'Licensed',  agency:'Core Labour', email:'lane@example.com' },
     { id:17, name:'Maxine Scott',    group:'Labour Hire', phone:'0411000017', licence:'Licensed',  agency:'Core Labour', email:'maxine@example.com' },
     { id:18, name:'Noah King',       group:'Labour Hire', phone:'0411000018', licence:'Licensed',  agency:'Atom Staff',  email:'noah@example.com' },
