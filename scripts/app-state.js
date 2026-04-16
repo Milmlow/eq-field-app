@@ -1,15 +1,4 @@
-// ,
-  eq: {
-    orgName: 'EQ Solves — Field',
-    gateSub: 'Demo Environment',
-    hideDemoCodes: false,
-    clearDefaultName: false,
-    whiteGateCard: false,
-    rememberMeDays: 1,
-    staffCode: 'demo',
-    supervisorCode: 'demo1234',
-    fallbackManagerPassword: 'demo1234',
-  }─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 // scripts/app-state.js  —  EQ Solves Field
 // Global state, tenant detection, SEED data, config loading.
 // Must be the FIRST script loaded.
@@ -96,7 +85,7 @@ async function loadTenantConfig() {
 
   // Demo / EQ tenant — no Supabase needed
   if (TENANT.ORG_SLUG === 'demo') {
-    TENANT.ORG_NAME = 'EQ Solves — Field (Demo)';
+    TENANT.ORG_NAME = 'EQ Solves — Field';
     TENANT.ORG_UUID = '00000000-0000-0000-0000-000000000001';
     SB_URL          = '';
     SB_KEY          = '';
@@ -198,6 +187,17 @@ const TENANT_BRANDING = {
     // no manager_password row for this org. Replace by inserting an
     // app_config row: { org_id: <sks-uuid>, key: 'manager_password', value: '<pw>' }
     fallbackManagerPassword: 'SKSNSW',
+  },
+  eq: {
+    orgName: 'EQ Solves — Field',
+    gateSub: 'Demo Environment',
+    hideDemoCodes: false,
+    clearDefaultName: false,
+    whiteGateCard: false,
+    rememberMeDays: 1,
+    staffCode: 'demo',
+    supervisorCode: 'demo1234',
+    fallbackManagerPassword: 'demo1234',
   }
 };
 
