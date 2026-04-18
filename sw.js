@@ -1,83 +1,1805 @@
-// EQ Solves — Field  ·  Service Worker  v3.4.5
-const CACHE = 'eq-field-v3.4.5';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EQ Solves — Field</title>
+<meta name="description" content="EQ Solves — Field | Labour Forecast &amp; Roster">
+<meta name="theme-color" content="#3DA8D8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
+<link rel="manifest" href="/manifest.json">
+<!-- SKS Labour — Favicon & Home Screen Icons -->
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/favicon-192x192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-const PRECACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/styles/base.css',
-  '/styles/mobile.css',
-  '/styles/print.css',
-  '/scripts/app-state.js',
-  '/scripts/utils.js',
-  '/scripts/supabase.js',
-  '/scripts/roster.js',
-  '/scripts/people.js',
-  '/scripts/sites.js',
-  '/scripts/managers.js',
-  '/scripts/dashboard.js',
-  '/scripts/batch.js',
-  '/scripts/leave.js',
-  '/scripts/tafe.js',
-  '/scripts/timesheets.js',
-  '/scripts/jobnumbers.js',
-  '/scripts/import-export.js',
-  '/scripts/calendar.js',
-  '/scripts/audit.js',
-  '/scripts/auth.js',
-  '/scripts/trial-dashboard.js',
-];
+<!-- Stylesheets -->
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/print.css">
+<link rel="stylesheet" href="styles/mobile.css">
+<link rel="stylesheet" href="styles/apprentices.css">
 
-// Static assets that rarely change — cache-first is safe
-const CACHE_FIRST_PATHS = ['/manifest.json', '/icons/'];
+<!-- ── Script load order matters — do not reorder ── -->
+<script src="scripts/app-state.js"></script>
+<script src="scripts/utils.js"></script>
+<script src="scripts/supabase.js"></script>
+<script src="scripts/roster.js"></script>
+<script src="scripts/people.js"></script>
+<script src="scripts/sites.js"></script>
+<script src="scripts/managers.js"></script>
+<script src="scripts/dashboard.js"></script>
+<script src="scripts/batch.js"></script>
+<script src="scripts/leave.js"></script>
+<script src="scripts/timesheets.js"></script>
+<script src="scripts/jobnumbers.js"></script>
+<script src="scripts/trial-dashboard.js"></script>
+<script src="scripts/import-export.js"></script>
+<script src="scripts/calendar.js"></script>
+<script src="scripts/audit.js"></script>
+<script src="scripts/realtime.js"></script>
+<script src="scripts/auth.js"></script>
+<script src="scripts/apprentices.js"></script>
+<script src="scripts/tafe.js"></script>
 
-self.addEventListener('install', event => {
-  self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(PRECACHE)).catch(() => {})
-  );
-});
+<style>
+/* ── Gate redesign override ─────────────────────────────────── */
+#access-gate {
+  background: #0B1628 !important;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 35%, rgba(61,168,216,.2) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 50% at 15% 85%, rgba(41,134,180,.1) 0%, transparent 55%) !important;
+}
+#access-gate::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #3DA8D8 40%, #2986B4 60%, transparent 100%);
+  animation: gateShimmer 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes gateShimmer {
+  0%,100% { opacity: .5; transform: scaleX(.7); }
+  50%     { opacity: 1;  transform: scaleX(1); }
+}
+.gate-card {
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(61,168,216,.22) !important;
+  border-radius: 24px !important;
+  padding: 40px 36px 32px !important;
+  max-width: 420px !important;
+  align-items: center !important;
+  text-align: center !important;
+  gap: 0 !important;
+  box-shadow:
+    0 0 0 1px rgba(61,168,216,.06),
+    0 40px 100px rgba(0,0,0,.55),
+    0 0 80px rgba(61,168,216,.06) inset !important;
+  animation: gateCardIn .55s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes gateCardIn {
+  from { opacity: 0; transform: translateY(20px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Logo */
+.gate-logo { 
+  font-size: 28px !important; 
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  margin-bottom: 12px !important;
+}
+/* Title */
+.gate-title {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  color: white !important;
+  text-align: center !important;
+  letter-spacing: -.4px !important;
+  width: 100% !important;
+  margin-bottom: 4px !important;
+}
+/* Subtitle */
+.gate-sub {
+  font-size: 11px !important;
+  color: rgba(255,255,255,.4) !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  letter-spacing: .8px !important;
+  width: 100% !important;
+  margin-bottom: 28px !important;
+}
+/* PIN input */
+.gate-input {
+  background: rgba(255,255,255,.06) !important;
+  border: 1.5px solid rgba(61,168,216,.28) !important;
+  border-radius: 12px !important;
+  font-size: 22px !important;
+  letter-spacing: 10px !important;
+  padding: 14px 16px !important;
+  transition: border-color .2s, background .2s, box-shadow .2s !important;
+}
+.gate-input:focus {
+  border-color: #3DA8D8 !important;
+  background: rgba(61,168,216,.08) !important;
+  box-shadow: 0 0 0 3px rgba(61,168,216,.15) !important;
+}
+.gate-input::placeholder { letter-spacing: 8px !important; }
+/* Enter button */
+.gate-btn {
+  background: linear-gradient(135deg, #3DA8D8 0%, #2986B4 100%) !important;
+  border-radius: 12px !important;
+  padding: 15px !important;
+  font-size: 15px !important;
+  letter-spacing: .5px !important;
+  box-shadow: 0 4px 24px rgba(61,168,216,.4) !important;
+  transition: all .2s !important;
+  margin-top: 4px !important;
+}
+.gate-btn:hover {
+  box-shadow: 0 8px 32px rgba(61,168,216,.55) !important;
+  transform: translateY(-1px) !important;
+}
+.gate-btn:active { transform: translateY(0) !important; }
+/* Error */
+.gate-error { text-align: center !important; width: 100% !important; }
+/* Labels inside gate */
+#gate-pin-wrap label,
+#access-gate label[for="gate-name-search"] {
+  text-align: left !important;
+}
+/* Divider above secondary buttons */
+#access-gate > .gate-card > div:last-of-type {
+  border-top: 1px solid rgba(61,168,216,.12) !important;
+}
+</style>
+</head>
+<body>
 
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
-});
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.6
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-self.addEventListener('fetch', event => {
-  // Only cache GET requests for same origin
-  if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
+  CHANGES IN v3.4.6  (Apprentices v2.2 — Presets + Custom Skills + Passport Fix)
+  ──────────────────────────────────────────────────────────
+  - Skills Passport default period: now prefers the current quarter when
+    it has data (was defaulting to the highest-ranked future period, which
+    could hide a just-submitted self rating). Fall back to latest if the
+    current quarter is empty. (scripts/apprentices.js)
+  - Add Person: Group = Apprentice now swaps the free-text Licence field
+    for a 1st/2nd/3rd/4th Year dropdown. (scripts/people.js, index.html)
+  - Apprentice profile: Technical / Professional / Personal goals now
+    offer a dropdown of year-appropriate example goals plus a "Type my
+    own" option that drops focus into the textarea. Suggestions refresh
+    when year level changes. (scripts/apprentices.js, index.html)
+  - Give Feedback: each of the four text fields (did-well / trust-next /
+    needs-improve / follow-up) now has a preset-suggestion dropdown plus
+    "Type my own". Supportive prompts, not a prescriptive list.
+  - Skills Passport: supervisors can now add a custom skill to a single
+    apprentice's passport (e.g. "Thermal scanning"). Custom skills appear
+    inline with standard comps, carry a ✨ custom tag, can be rated on
+    the self and tradesman forms, and can be removed by the supervisor.
+    Stored as JSON on apprentice_profiles — the global competency catalog
+    stays clean across tenants.
+  - DB: apprentice_profiles gained custom_competencies + custom_ratings
+    JSONB columns (migration applied on demo Supabase).
 
-  const path = url.pathname;
+  CHANGES IN v3.4.5  (Apprentices v2.1 — Growth View + Follow-ups + Check-in)
+  ──────────────────────────────────────────────────────────
+  - Skills Passport: new "How you've grown" panel showing last 4 quarters
+    per competency as a sparkline with delta chips. Positive-framed.
+    Pure SVG — no new deps. (scripts/apprentices.js)
+  - Apprentice Overview: new "Things to help them with" card listing open
+    follow-up items from feedback entries. Inline "Done — had the chat"
+    button resolves the item with an optional note. Items older than 30
+    days get a soft amber background (not red — supportive nudge).
+  - Apprentices list: new manager-only "Who needs a check-in?" card at
+    the top. Flags apprentices who (a) have no self-rating this quarter,
+    (b) haven't had feedback in 60+ days, or (c) have an open follow-up
+    older than 30 days. Click-through opens their profile.
+  - tafe.js: fixed app_config POST fallback that was writing the key as
+    'eq.tafe_holidays' (with Supabase filter operator leaking into the
+    stored key). Now stores as 'tafe_holidays' to match the PATCH path.
+  - DB: feedback_entries gained resolved_at / resolution_note /
+    resolved_by columns (migration already applied on demo Supabase).
 
-  // Cache-first ONLY for truly static assets (icons, manifest)
-  if (CACHE_FIRST_PATHS.some(p => path.startsWith(p))) {
-    event.respondWith(
-      caches.match(event.request).then(cached => {
-        if (cached) return cached;
-        return fetch(event.request).then(res => {
-          const c = res.clone();
-          caches.open(CACHE).then(cache => cache.put(event.request, c));
-          return res;
-        });
-      })
-    );
-    return;
+  CHANGES IN v3.3.9  (Sites Fix + Clear Week + Job Sort + Conflict Fix)
+  ──────────────────────────────────────────────────────────
+  - Sites: added site_lead and site_lead_phone columns to Supabase schema.
+    Sites now save correctly (was failing with PGRST204).
+  - Sites view: "On site this week" headcount replaced with "Active this week"
+    Yes/— indicator (green when someone is rostered).
+  - Edit Roster: replaced per-row Remove Person button (✕) with Clear Week
+    button (⌫). Clears Mon–Sun for that person with a confirmation modal.
+  - Edit conflicts: fillWeek and clearWeek now save all days in a single
+    PATCH request (saveRowToSB) instead of per-day saveCellToSB calls.
+    Eliminates false CAS conflict modals during bulk operations.
+  - Job Numbers: table headers are now sortable — click any column to sort
+    ascending/descending.
+  - Contacts: added CSV export button. Exports Name, Group, Phone, Email,
+    Licence, Agency — respects current search/group filter.
+  - Meta tag: replaced deprecated apple-mobile-web-app-capable with
+    mobile-web-app-capable.
+
+  CHANGES IN v3.3.8  (Trial Dash Headcount Fix + Timesheet Fill Week)
+  ──────────────────────────────────────────────────────────
+  - Trial dashboard: KPI counts now match main dash (e.g. 53 total). Previously
+    only counted people with site allocations in the current week, so anyone
+    unrostered / fully on leave was dropped from Direct/App/LH/Total.
+  - Trial dashboard: removed misleading "vs last week" delta on Direct KPI
+    (KPI is now full headcount, not weekly allocation).
+  - Timesheets: ">> Week" button in each Monday cell copies Mon's job + hours
+    into Tue–Fri for that person. Disabled until Mon is filled. Confirms
+    before overwriting existing Tue–Fri data.
+
+  CHANGES IN v3.3.7  (Copy Week + Job Combobox + Roster Gaps)
+  ──────────────────────────────────────────────────────────
+  - Copy Last Week: parallel saves via Promise.all (was sequential await loop)
+  - Copy Last Week: green highlight on freshly-copied cells, auto-clears on next render
+  - Roster + Editor: empty weekday cells highlighted yellow (needs attention)
+  - Timesheet job inputs: custom combobox dropdown (searchable, shows description)
+  - Combobox works on both manager table view and staff self-entry cards
+  - Removed inputmode="numeric" from job inputs (was suppressing datalist on mobile)
+  - Staff self-entry job inputs now connected to job numbers list
+  - DB migration: added client, notes, status, site_name columns to job_numbers
+
+  CHANGES IN v3.3.5  (Security Hardening)
+  ────────────────────────────────────────
+  - All server-side secrets migrated to Netlify env vars (no fallbacks in code)
+  - send-email.js: authenticated (x-eq-token), input validation (email regex, length caps)
+  - CORS whitelisted on all 3 Netlify Functions (no more Allow-Origin: *)
+  - HSTS header added (max-age=31536000; includeSubDomains)
+  - XSS fix in auth.js name picker (full HTML entity escaping)
+  - EQ Agent audit logging (user, IP, message count, model)
+  - Error responses sanitised (no internal detail leakage)
+
+  CHANGES IN v3.3.4
+  ─────────────────
+  - Privacy notice modal restored to sidebar footer (APP compliance)
+  - Security headers added to netlify.toml (CSP, X-Frame-Options, etc.)
+  - Supabase RLS policies tightened — org_id enforcement on all tables
+  - Mobile nav: 5-tab bottom bar (Home/Roster/My Week/Calendar/More)
+  - Mobile drawer: swipe-down-to-close, logout button, Leave → Testing
+  - Mobile topbar: decluttered (pills hidden, compact sync icon)
+  - Dashboard filters stack on mobile
+
+  WHAT LIVES WHERE
+  ────────────────
+  scripts/app-state.js    STATE, SEED, TENANT, ORG_TABLES, config
+  scripts/utils.js        esc, escHtml, showToast, openModal, csvEscape, formatWeekLabel
+  scripts/supabase.js     sbFetch, write queue, health ping, all save/delete helpers
+  scripts/roster.js       renderRoster, chip, siteColor, getWeekSchedule, renderEditor
+  scripts/people.js       people CRUD + contacts render
+  scripts/sites.js        sites CRUD + sites grid
+  scripts/managers.js     supervision CRUD + render + import/export
+  scripts/dashboard.js    renderDashboard
+  scripts/batch.js        batch fill, copy last week, clean up codes
+  scripts/leave.js        leave requests (all)
+  scripts/timesheets.js   timesheets + staff self-entry
+  scripts/jobnumbers.js   job numbers CRUD + CSV
+  scripts/import-export.js full backup/restore, all CSV import/export
+  scripts/calendar.js     monthly calendar view + side panel
+  scripts/audit.js        audit log write, modal, export
+  scripts/auth.js         gate, PIN check, agency, staff-ts gate, supervisor password
+
+  THIS FILE contains only:
+  - All HTML structure
+  - loadFromSupabase() + schedule index build
+  - initApp() + window.onload
+  - Navigation (showPage, renderCurrentPage, stepWeek, onWeekChange)
+  - refreshData, updateTopStats, updateLastUpdated
+  - Mobile nav (mobileNav, openMobileDrawer, closeMobileDrawer)
+  - Privacy notice modal + openPrivacyNotice()
+  - Loading overlay helpers
+  - EQ Agent overlay (self-contained)
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!-- ═══════════════════════════════════════════════════════════
+     ACCESS GATE
+     ═══════════════════════════════════════════════════════════ -->
+<div id="access-gate" class="hidden">
+  <div class="gate-card" style="">
+    <div class="gate-logo" id="gate-logo"><svg style="height:52px;width:auto;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="130 325 764 370"><path fill="#3DA8D8" d="M721.22,622.17l46.95,47q-31,12.78-67,12.78-70.68,0-121.58-48.84a162,162,0,0,1-31.23-40.81c15.14-18.46,31.52-39,46-58.58q5.83,34.5,28.53,58.21,30.47,31.86,78.27,31.85A121.63,121.63,0,0,0,721.22,622.17Z"/><path fill="#3DA8D8" d="M874.32,508.74q0,36.54-12.29,67l-52.8-52.81c.45-4.58.65-9.33.65-14.2q0-51.27-30.45-83.1t-78.27-31.89c-41.88,0-71.72,22-93.95,55.63-23.45,35.54-44.66,72.83-73.39,104.55C493,599,439.3,647.71,390.38,667.77c-2.58,1.07-5.2,2.09-7.86,3-.53.21-1,.37-1.55.53-1.11.37-2.22.74-3.28,1.11-3.89,1.23-7.41,2.25-10.6,3.11-1.19.33-2.34.61-3.44.86-.82.2-1.6.41-2.37.57-6.47,1.52-10.36,2.09-11.1,2.17a.31.31,0,0,1-.12,0,217.44,217.44,0,0,1-34.71,2.71q-70.68,0-121.58-48.84T142.89,508.74q0-75.47,50.88-124.32t121.58-48.84q56.11,0,96.28,27.35t65.08,77.94L251.61,565.56l-25.05-48.72,164.39-91Q374.32,409.1,358,401.45t-42.65-7.7q-47.83,0-78.31,31.89t-30.5,83.1q0,51.27,30.5,83.14t78.31,31.85a213,213,0,0,0,43.18-6.35c66.73-17.07,122.15-91,160.31-144.09,20.46-28.45,35.28-64.47,60.7-88.87q50.91-48.81,121.58-48.84,71.3,0,122.23,48.84T874.32,508.74Z"/><rect fill="#3DA8D8" x="745.11" y="474.28" width="66.9" height="223.16" transform="translate(-186.23 722.12) rotate(-45)"/></svg></div>
+    <div class="gate-title"><span id="gate-org-name">EQ Solves — Field</span></div>
+    <div class="gate-sub" id="gate-sub">EQ Solves — Field Demo</div>
+    <div style="margin-bottom:16px;width:100%">
+      <label for="gate-name-search" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
+      <input type="hidden" id="gate-name" value="Demo Supervisor">
+      <div id="gate-selected-name" onclick="toggleGateNamePicker()" style="font-size:15px;padding:12px 14px;width:100%;background:var(--surface);color:var(--ink-4);border:2px solid var(--border);border-radius:10px;font-family:inherit;font-weight:600;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:48px">
+        <span id="gate-selected-text" style="color:rgb(31,51,92)">Demo Supervisor</span>
+        <span style="font-size:12px;color:var(--ink-4)">▼</span>
+      </div>
+      <div id="gate-name-picker" style="margin-top:6px;background:white;border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:rgba(0,0,0,.12) 0px 8px 24px;display:none">
+        <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
+          <input type="search" id="gate-name-search" autocomplete="off" placeholder="Search…" oninput="filterGatePickerNames()" style="font-size:14px;padding:8px 12px;width:100%;border:1px solid var(--border);border-radius:8px;font-family:inherit;outline:none;box-sizing:border-box">
+        </div>
+        <div id="gate-name-list" style="max-height:min(300px,50vh);overflow-y:auto;padding:4px 0"></div>
+      </div>
+    </div>
+    <div id="gate-pin-wrap" style="width:100%;margin-bottom:4px">
+      <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
+      <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
+    </div>
+    <div class="gate-error" id="gate-err"></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:14px">
+      <input type="checkbox" id="gate-remember" style="width:16px;height:16px;accent-color:var(--purple)">
+      <label for="gate-remember" id="gate-remember-label" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 24 hours</label>
+    </div>
+    <div id="gate-disclaimer" style="display:none;width:100%;margin-top:14px;padding-top:12px;border-top:1px solid rgba(31,51,92,.12);font-size:10px;line-height:1.4;color:var(--ink-3);text-align:center"></div>
+    <div id="gate-demo-codes" style="background:rgba(255,255,255,.06);border:1px solid rgba(61,168,216,.2);border-radius:12px;padding:14px 18px;margin-bottom:18px;width:100%;box-sizing:border-box">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.5);margin-bottom:10px">🔑 Demo access codes</div>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <div style="text-align:center;flex:1;background:rgba(255,255,255,.08);border-radius:8px;padding:10px 8px">
+          <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Staff</div>
+          <div style="font-size:22px;font-weight:800;color:#fff;letter-spacing:3px;font-family:monospace">demo</div>
+        </div>
+        <div style="text-align:center;flex:1;background:rgba(255,255,255,.08);border-radius:8px;padding:10px 8px">
+          <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Supervisor</div>
+          <div style="font-size:18px;font-weight:800;color:#fff;letter-spacing:2px;font-family:monospace">demo1234</div>
+        </div>
+      </div>
+    </div>
+    <button class="gate-btn" onclick="checkPin()">Enter</button>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(61,168,216,.12);display:flex;flex-direction:column;gap:8px;width:100%">
+      <button onclick="openStaffTsGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">⏱ My Timesheet →</button>
+      <button onclick="openAgencyGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">Agency Access →</button>
+      <button onclick="localStorage.clear();sessionStorage.clear();location.reload()" style="background:none;border:1px solid rgba(61,168,216,.2);color:rgba(61,168,216,.55);font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px;padding:8px 18px;border-radius:8px;width:100%;font-weight:500;text-align:center">Having trouble logging in? Tap here to reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Agency gate -->
+<div id="agency-gate" class="hidden" style="display:none;position:fixed;inset:0;background:rgba(13,27,42,.95);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px;padding:32px;max-width:380px;width:90%;box-shadow:var(--shadow-lg)">
+    <div style="text-align:center;margin-bottom:20px">
+      <div style="font-size:24px;margin-bottom:8px">🏢</div>
+      <div style="font-size:16px;font-weight:700;color:var(--navy)">Agency Access</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:4px">View timesheets for your employees</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:var(--ink-2);display:block;margin-bottom:4px">Agency</label>
+      <select id="agency-select" class="form-input" style="width:100%;background:var(--surface)"><option value="">— Select your agency —</option></select>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:var(--ink-2);display:block;margin-bottom:4px">Access Code</label>
+      <input id="agency-code" class="form-input" type="password" placeholder="Enter agency code" style="width:100%" onkeydown="if(event.key==='Enter')checkAgencyLogin()">
+    </div>
+    <div id="agency-err" style="display:none;color:#EF4444;font-size:12px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="closeAgencyGate()" class="btn btn-secondary" style="flex:1">Back</button>
+      <button onclick="checkAgencyLogin()" class="btn btn-primary" style="flex:1">View Timesheets</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff timesheet gate -->
+<div id="staff-ts-gate" style="display:none;position:fixed;inset:0;background:rgba(13,27,42,.95);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px;padding:32px 36px;max-width:400px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,.35)">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="font-size:30px;margin-bottom:8px">⏱</div>
+      <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:4px">My Timesheet</div>
+      <div style="font-size:13px;color:var(--ink-2)">Enter your name and PIN to record your hours</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;font-weight:600;color:var(--ink-2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">Your Name</label>
+      <select id="staff-ts-name-select" style="width:100%;padding:9px 11px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface);outline:none"><option value="">— Select your name —</option></select>
+    </div>
+    <div style="margin-bottom:6px">
+      <label style="font-size:11px;font-weight:600;color:var(--ink-2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">4-Digit PIN</label>
+      <input id="staff-ts-pin" type="password" maxlength="4" placeholder="· · · ·" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:24px;text-align:center;letter-spacing:8px;font-weight:700;color:var(--navy);outline:none;transition:border-color .15s" onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'" oninput="document.getElementById('staff-ts-err').textContent=''" onkeydown="if(event.key==='Enter')checkStaffTsLogin()">
+      <div id="staff-ts-err" style="color:var(--red);font-size:12px;min-height:18px;margin-top:5px;text-align:center"></div>
+    </div>
+    <button onclick="checkStaffTsLogin()" style="width:100%;padding:12px;background:var(--purple);color:white;border:none;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;transition:background .15s">View My Timesheet →</button>
+    <button onclick="closeStaffTsGate()" style="width:100%;background:none;border:none;color:rgba(255,255,255,.4);font-size:12px;cursor:pointer;font-family:inherit;padding:4px">← Back</button>
+  </div>
+</div>
+
+<div class="shell">
+
+<!-- ═══════════════════════════════════════════════════════════
+     SIDEBAR
+     ═══════════════════════════════════════════════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo" id="sidebar-logo-wrap">
+    <svg style="height:36px;width:auto;flex-shrink:0;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="130 325 764 370"><path fill="#3DA8D8" d="M721.22,622.17l46.95,47q-31,12.78-67,12.78-70.68,0-121.58-48.84a162,162,0,0,1-31.23-40.81c15.14-18.46,31.52-39,46-58.58q5.83,34.5,28.53,58.21,30.47,31.86,78.27,31.85A121.63,121.63,0,0,0,721.22,622.17Z"/><path fill="#3DA8D8" d="M874.32,508.74q0,36.54-12.29,67l-52.8-52.81c.45-4.58.65-9.33.65-14.2q0-51.27-30.45-83.1t-78.27-31.89c-41.88,0-71.72,22-93.95,55.63-23.45,35.54-44.66,72.83-73.39,104.55C493,599,439.3,647.71,390.38,667.77c-2.58,1.07-5.2,2.09-7.86,3-.53.21-1,.37-1.55.53-1.11.37-2.22.74-3.28,1.11-3.89,1.23-7.41,2.25-10.6,3.11-1.19.33-2.34.61-3.44.86-.82.2-1.6.41-2.37.57-6.47,1.52-10.36,2.09-11.1,2.17a.31.31,0,0,1-.12,0,217.44,217.44,0,0,1-34.71,2.71q-70.68,0-121.58-48.84T142.89,508.74q0-75.47,50.88-124.32t121.58-48.84q56.11,0,96.28,27.35t65.08,77.94L251.61,565.56l-25.05-48.72,164.39-91Q374.32,409.1,358,401.45t-42.65-7.7q-47.83,0-78.31,31.89t-30.5,83.1q0,51.27,30.5,83.14t78.31,31.85a213,213,0,0,0,43.18-6.35c66.73-17.07,122.15-91,160.31-144.09,20.46-28.45,35.28-64.47,60.7-88.87q50.91-48.81,121.58-48.84,71.3,0,122.23,48.84T874.32,508.74Z"/><rect fill="#3DA8D8" x="745.11" y="474.28" width="66.9" height="223.16" transform="translate(-186.23 722.12) rotate(-45)"/></svg>
+    <div style="display:flex;flex-direction:column;justify-content:center;border-left:1px solid rgba(255,255,255,.15);padding-left:10px;margin-left:2px">
+      <span style="color:rgba(255,255,255,.9);font-size:13px;font-weight:700;letter-spacing:.5px;line-height:1">Solves</span>
+      <span style="color:rgba(255,255,255,.4);font-size:10px;font-weight:500;letter-spacing:.3px;line-height:1;margin-top:3px">Field</span>
+    </div>
+  </div>
+  <div class="nav">
+    <div class="nav-section">
+      <div class="nav-label">Forecast</div>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">◈</span> Dashboard</button>
+      <button class="nav-item" onclick="showPage('schedule')" id="nav-schedule"><span class="nav-icon">◷</span> My Schedule</button>
+      <button class="nav-item" onclick="showPage('calendar')" id="nav-calendar"><span class="nav-icon">📅</span> Calendar</button>
+      <button class="nav-item" onclick="showPage('contacts')" id="nav-contacts"><span class="nav-icon">◉</span> Contacts <span class="nav-badge" id="badge-contacts">0</span></button>
+      <button class="nav-item" onclick="showPage('managers')" id="nav-managers"><span class="nav-icon">☎</span> Supervision <span class="nav-badge" id="badge-managers">0</span></button>
+      <button class="nav-item" onclick="showPage('sites')" id="nav-sites"><span class="nav-icon">⬡</span> Sites</button>
+      <button class="nav-item" onclick="showPage('roster')" id="nav-roster"><span class="nav-icon">⊞</span> Weekly Roster</button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Manage</div>
+      <button class="nav-item edit-only" onclick="showPage('editor')" id="nav-editor"><span class="nav-icon">✎</span> Edit Roster</button>
+      <button class="nav-item edit-only" onclick="openPinManagement()" id="nav-pins"><span class="nav-icon">🔢</span> PIN Management</button>
+      <button class="nav-item" onclick="openAddPerson()" id="nav-addperson"><span class="nav-icon">＋</span> Add Person</button>
+      <button class="nav-item" onclick="showPage('data')" id="nav-data"><span class="nav-icon">⇅</span> Import / Export</button>
+      <button class="nav-item" onclick="showPage('help')" id="nav-help"><span class="nav-icon">❓</span> Help</button>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Testing</div>
+      <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
+      <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices</button>
+      <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
+    </div>
+  </div>
+  <div class="sidebar-footer" style="padding:0">
+    <button id="manager-lock-btn" onclick="toggleManagerMode()" style="width:100%;border:none;cursor:pointer;padding:12px 16px;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.25);border-top:1px solid rgba(255,255,255,.08);transition:background .15s;font-family:inherit" onmouseover="this.style.background='rgba(0,0,0,.4)'" onmouseout="this.style.background='rgba(0,0,0,.25)'">
+      <span id="lock-icon" style="font-size:18px;flex-shrink:0">🔒</span>
+      <span style="text-align:left">
+        <span id="lock-label" style="display:block;font-size:11px;font-weight:700;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.6px">Access</span>
+        <span id="lock-status" style="display:block;font-size:13px;font-weight:600;color:rgba(255,255,255,.9);margin-top:1px">View only — tap to unlock</span>
+      </span>
+    </button>
+    <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
+      <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.6</span><br>
+      <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
+      &nbsp;·&nbsp;
+      <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
+      &nbsp;·&nbsp;
+      <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CONTENT AREA
+     ═══════════════════════════════════════════════════════════ -->
+<div class="content">
+  <div class="topbar">
+    <h1 class="topbar-title" id="page-title">Dashboard</h1>
+    <div class="topbar-week">
+      <button onclick="stepWeek(-1)" style="background:none;border:none;cursor:pointer;color:var(--navy-2);font-size:15px;padding:0 2px;line-height:1;font-family:inherit">‹</button>
+      <span id="week-label-text" style="font-size:12px;font-weight:600;color:var(--navy-2)">Loading…</span>
+      <select id="globalWeek" onchange="onWeekChange()" style="border:none;background:transparent;font-family:inherit;font-size:11px;color:var(--ink-3);outline:none;cursor:pointer;padding:0;max-width:80px"></select>
+      <button onclick="stepWeek(1)" style="background:none;border:none;cursor:pointer;color:var(--navy-2);font-size:15px;padding:0 2px;line-height:1;font-family:inherit">›</button>
+    </div>
+    <span class="pill pill-green" id="stat-active">— active</span>
+    <span class="pill pill-amber" id="stat-leave">— on leave</span>
+    <span class="pill pill-blue" id="stat-total">— total</span>
+    <div class="topbar-actions">
+      <button class="btn btn-secondary btn-sm" id="refresh-btn" onclick="refreshData()" title="Refresh data"><span class="hide-mobile">↻ Sync</span><span class="show-mobile">↻</span></button>
+      <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Print</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportCSV()">↓ CSV</button>
+    </div>
+  </div>
+
+  <div id="offline-banner">⚠ No connection — changes may not be saving.</div>
+
+  <div id="last-updated-bar" style="background:var(--surface-2);border-bottom:1px solid var(--border);padding:6px 20px;display:flex;align-items:center;gap:8px">
+    <span style="font-size:13px">🔄</span>
+    <span id="last-updated" style="font-size:13px;font-weight:600;color:var(--navy)">—</span>
+    <span id="last-updated-manager" style="font-size:12px;color:var(--ink-3)"></span>
+    <span id="sync-status" style="display:none;background:var(--amber-lt);color:var(--amber);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto"></span>
+  </div>
+
+  <!-- Pages — content injected by render functions -->
+  <div class="page print-active" id="page-dashboard">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-card-label">⚡ Direct</div><div class="stat-card-value" id="sc-direct">—</div><div class="stat-card-sub">employees</div><div class="stat-accent-bar" style="background:var(--navy)"></div></div>
+      <div class="stat-card"><div class="stat-card-label">🎓 Apprentices</div><div class="stat-card-value" id="sc-app">—</div><div class="stat-card-sub">On roster</div><div class="stat-accent-bar" style="background:var(--purple)"></div></div>
+      <div class="stat-card"><div class="stat-card-label">🔧 Labour Hire</div><div class="stat-card-value" id="sc-lh">—</div><div class="stat-card-sub">Contractors</div><div class="stat-accent-bar" style="background:var(--navy-3)"></div></div>
+      <div class="stat-card"><div class="stat-card-label">🏗 Active Sites</div><div class="stat-card-value" id="sc-sites">—</div><div class="stat-card-sub">This week</div><div class="stat-accent-bar" style="background:var(--blue)"></div></div>
+    </div>
+    <div class="section-header">
+      <div class="section-title">Site Breakdown — Per Day</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+        <input id="dash-site-filter" class="form-input" type="text" placeholder="Filter sites…" style="width:180px;height:30px;font-size:12px;padding:4px 10px" oninput="renderDashboard()">
+        <select id="dash-group-filter" class="form-input" style="width:150px;height:30px;font-size:12px;padding:4px 10px" onchange="renderDashboard()">
+          <option value="">All groups</option>
+          <option value="Direct">Direct only</option>
+          <option value="Apprentice">Apprentices</option>
+          <option value="Labour Hire">Labour Hire</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="dashResetFilters()" title="Clear filters">✕</button>
+      </div>
+    </div>
+    <div id="dashboard-sites" style="margin-bottom:20px;overflow-x:auto"></div>
+    <div class="section-header"><div class="section-title">Leave &amp; Absences This Week</div></div>
+    <div id="dashboard-leave" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    <div id="dashboard-leave-requests" style="margin-top:20px"></div>
+  </div>
+
+  <div class="page hidden" id="page-roster">
+    <div id="roster-print-header" style="display:none"></div>
+    <div class="legend-bar" id="legend-bar" style="display:none"></div>
+    <div class="filter-row">
+      <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="roster-search" placeholder="Search name…" oninput="renderRoster()"></div>
+      <select class="filter-select" id="roster-group" onchange="renderRoster()"><option value="">All Groups</option><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select>
+      <select class="filter-select" id="roster-site" onchange="renderRoster()"><option value="">All Sites</option></select>
+    </div>
+    <div id="roster-week-nav"></div>
+    <div id="roster-swipe-hint" style="display:none;align-items:center;gap:5px;font-size:11px;color:var(--ink-3);padding:4px 2px 8px"><span style="font-size:14px">👈</span> Swipe left or right to change day</div>
+    <div id="roster-content"></div>
+  </div>
+
+  <div class="page hidden" id="page-schedule">
+    <div class="filter-row">
+      <select class="filter-select" id="schedule-person" onchange="renderSchedule()" style="min-width:220px;font-size:13px"><option value="">— Select your name —</option></select>
+    </div>
+    <div id="schedule-content"><div class="empty" style="margin-top:40px"><div class="empty-icon">👤</div><p>Select your name above to see your schedule</p></div></div>
+  </div>
+
+  <div class="page hidden" id="page-contacts">
+    <div class="filter-row">
+      <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="contacts-search" placeholder="Search contacts…" oninput="renderContacts()"></div>
+      <select class="filter-select" id="contacts-group" onchange="renderContacts()"><option value="">All Groups</option><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select>
+      <button class="btn btn-secondary btn-sm" onclick="exportContactsCSV()" style="margin-left:auto">↓ CSV</button>
+    </div>
+    <div id="contacts-content"></div>
+  </div>
+
+  <div class="page hidden" id="page-sites">
+    <div class="section-header">
+      <div class="section-title">Active Sites</div>
+      <div class="section-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openCleanupCodes()">🧹 Clean Up Codes</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddSite()">＋ Add Site</button>
+      </div>
+    </div>
+    <div id="sites-content" class="sites-grid"></div>
+  </div>
+
+  <div class="page hidden" id="page-managers">
+    <div class="filter-row">
+      <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="managers-search" placeholder="Search name, role or company…" oninput="renderManagers()"></div>
+      <select class="filter-select" id="managers-category" onchange="renderManagers()"><option value="">All Categories</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select>
+      <button class="btn btn-secondary btn-sm" onclick="openAddManager()">＋ Add Contact</button>
+    </div>
+    <div id="managers-content"></div>
+  </div>
+
+  <div class="page hidden" id="page-timesheets">
+    <div class="filter-row" style="margin-bottom:14px">
+      <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="ts-search" placeholder="Search name…" oninput="renderTimesheets()"></div>
+      <select class="filter-select" id="ts-group-filter" onchange="renderTimesheets()">
+        <option value="">All Groups</option>
+        <option value="Apprentice">🎓 Apprentice</option>
+        <option value="Labour Hire">🔧 Labour Hire</option>
+      </select>
+      <div style="display:flex;gap:6px;margin-left:auto;align-items:center">
+        <span style="font-size:11px;color:var(--ink-3);max-width:360px;line-height:1.4">Job numbers will be updated as required — we will focus on ensuring longer projects are included, speak to Royce if you have any questions</span>
+        <button id="ts-job-panel-btn" class="btn btn-secondary btn-sm" onclick="toggleTsJobPanel()">🔢 Job Numbers</button>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="openTsBatch()">⚡ Batch Fill</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;align-items:flex-start;min-width:0">
+      <div id="ts-content" style="flex:1;min-width:0"></div>
+      <div id="ts-job-panel" style="display:none;width:260px;flex-shrink:0;margin-left:12px;border:1px solid var(--border);border-radius:var(--radius-lg);background:white;box-shadow:var(--shadow-sm);overflow:hidden;position:sticky;top:0;max-height:calc(100vh - 120px);display:none;flex-direction:column">
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;font-weight:700;color:var(--navy);flex:1">Job Numbers</span>
+          <button onclick="toggleTsJobPanel()" style="background:none;border:none;color:var(--ink-3);cursor:pointer;font-size:16px;padding:0;line-height:1">✕</button>
+        </div>
+        <div style="padding:8px">
+          <input type="text" id="ts-job-panel-search" placeholder="Search…" oninput="filterTsJobPanel()" style="width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:12px;outline:none;box-sizing:border-box">
+        </div>
+        <div id="ts-job-panel-list" style="overflow-y:auto;flex:1;max-height:calc(100vh - 220px)"></div>
+        <div style="padding:8px 12px;border-top:1px solid var(--border);font-size:10px;color:var(--ink-4)">Tap a job to copy · Click a job field first to fill directly</div>
+      </div>
+    </div>
+    <div style="margin-top:14px">
+      <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+        <div class="stat-card"><div class="stat-card-label">Staff Tracked</div><div class="stat-card-value" id="ts-stat-total">—</div></div>
+        <div class="stat-card"><div class="stat-card-label">Complete</div><div class="stat-card-value" style="color:var(--green)" id="ts-stat-complete">—</div></div>
+        <div class="stat-card"><div class="stat-card-label">Incomplete</div><div class="stat-card-value" style="color:var(--amber)" id="ts-stat-partial">—</div></div>
+        <div class="stat-card"><div class="stat-card-label">No Data</div><div class="stat-card-value" style="color:var(--red)" id="ts-stat-empty">—</div></div>
+      </div>
+      <div id="ts-completion-tracker" style="margin-top:12px"></div>
+    </div>
+    <div class="export-bar">
+      <span style="flex:1;font-size:12px;color:var(--ink-2)">Import / export weekly timesheet for payroll reconciliation</span>
+      <input type="file" id="ts-import-file" accept=".csv,text/csv" style="display:none" onchange="importTsCSV(event)">
+      <button class="btn btn-secondary btn-sm edit-only" onclick="document.getElementById('ts-import-file').click()">↑ Import CSV</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportTsCSV()">↓ Export CSV</button>
+      <button class="btn btn-primary btn-sm" onclick="exportTsPayroll()">↓ Payroll Report</button>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-editor">
+    <div class="section-header" style="margin-bottom:10px">
+      <div class="section-title">Edit Roster — <span id="editor-week-label" style="color:var(--navy-3);font-weight:500"></span></div>
+      <div class="section-actions">
+        <span style="font-size:11px;color:var(--ink-3);margin-right:8px">Auto-saves</span>
+        <button class="btn btn-secondary btn-sm" id="editor-sort-btn" onclick="toggleEditorSort()">A–Z ▲</button>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="copyLastWeek()"
+        >>📋 Copy Last Week</button>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="applyTafeDayForWeek()" title="Fill empty cells for apprentices on their nominated TAFE day (skips holidays)">🎓 Apply TAFE Day</button>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="openTafeHolidaysConfig()" title="Manage TAFE holiday date ranges">📆 TAFE Holidays</button>
+        <button class="btn btn-secondary btn-sm" onclick="openBatchFill()">⚡ Batch Fill</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddPerson()">＋ Add Person</button>
+        <button class="btn btn-secondary btn-sm" onclick="openAddSite()">＋ Add Site</button>
+      </div>
+    </div>
+    <div id="editor-content"></div>
+  </div>
+
+  <div class="page hidden" id="page-leave">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <button class="btn btn-sm" id="leave-view-list" onclick="setLeaveView('list')" style="border-radius:7px 0 0 7px;border:none;font-size:11px">📋 List</button>
+        <button class="btn btn-secondary btn-sm" id="leave-view-cal" onclick="setLeaveView('calendar')" style="border-radius:0 7px 7px 0;border:none;font-size:11px">📅 Calendar</button>
+      </div>
+      <select class="filter-select" id="leave-filter-status" onchange="renderLeave()"><option value="">All Requests</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Rejected">Rejected</option></select>
+      <input type="text" id="leave-search" placeholder="Search name…" oninput="renderLeave()" class="filter-select" style="min-width:160px">
+      <span style="flex:1"></span>
+      <button class="btn btn-secondary btn-sm edit-only" onclick="openLeaveCCConfig()" style="font-size:11px">✉ Email CC List</button>
+      <button class="btn btn-secondary btn-sm edit-only" onclick="confirmClearLeave()" style="font-size:11px;color:var(--red)">🗑 Clear All</button>
+      <button class="btn btn-secondary btn-sm" onclick="printLeaveRequests()" style="font-size:11px">🖨 Print</button>
+      <button class="btn btn-primary btn-sm" onclick="openLeaveRequest()">＋ New Leave Request</button>
+    </div>
+    <div id="leave-calendar" style="display:none;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <button onclick="stepLeaveMonth(-1)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px">‹</button>
+        <span id="leave-cal-month" style="font-size:15px;font-weight:700;color:var(--navy);min-width:160px;text-align:center"></span>
+        <button onclick="stepLeaveMonth(1)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px">›</button>
+      </div>
+      <div id="leave-cal-grid"></div>
+    </div>
+    <div id="leave-content"><div class="empty"><div class="empty-icon">🏖</div><p>Loading leave requests…</p></div></div>
+  </div>
+
+  <div class="page hidden" id="page-staff-ts">
+    <div id="staff-ts-layout" style="display:flex;gap:16px;min-height:0">
+      <div id="staff-ts-content" style="flex:1;min-width:0;overflow-y:auto;padding:4px 8px 20px 0"></div>
+      <div id="staff-jobs-panel" style="width:340px;flex-shrink:0;border-left:1px solid var(--border);padding:0 0 20px 16px;display:none;position:sticky;top:60px;max-height:calc(100vh - 70px);overflow-y:auto">
+        <div style="position:sticky;top:0;background:var(--bg);padding:8px 0 10px;z-index:2">
+          <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px">🔢 Job Numbers</div>
+          <input type="text" id="staff-jobs-search" placeholder="Search…" oninput="filterStaffJobs(this.value)" style="font-size:12px;padding:7px 10px;width:100%;border:1px solid var(--border);border-radius:8px;font-family:inherit;outline:none;box-sizing:border-box">
+        </div>
+        <div id="staff-jobs-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-calendar">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <button onclick="stepCalMonth(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:16px;color:var(--navy-2);font-family:inherit">‹</button>
+      <span id="cal-month-label" style="font-size:18px;font-weight:700;color:var(--navy);min-width:200px;text-align:center"></span>
+      <button onclick="stepCalMonth(1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:16px;color:var(--navy-2);font-family:inherit">›</button>
+      <button onclick="goToCalToday()" class="btn btn-secondary btn-sm" style="margin-left:4px">Today</button>
+      <span style="flex:1"></span>
+      <div style="display:flex;gap:8px;align-items:center;font-size:11px;flex-wrap:wrap">
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--blue-lt);border:1px solid var(--blue)"></span>Site work</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#FEF3C7;border:2px solid #F59E0B"></span>Public Holiday</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--green-lt);border:1px solid var(--green)"></span>Annual Leave</span>
+        <span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--amber-lt);border:1px solid var(--amber)"></span>RDO / Other leave</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:0;align-items:flex-start">
+      <div id="cal-grid-wrap" style="flex:1;min-width:0"></div>
+      <div id="cal-side-panel" style="width:0;overflow:hidden;transition:width .25s cubic-bezier(.4,0,.2,1);flex-shrink:0">
+        <div id="cal-side-inner" style="width:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-left:12px;box-shadow:var(--shadow);overflow:hidden">
+          <div style="background:var(--navy);padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div id="cal-panel-date" style="font-size:15px;font-weight:700;color:white"></div>
+              <div id="cal-panel-sub" style="font-size:11px;color:rgba(255,255,255,.5);margin-top:2px"></div>
+            </div>
+            <button onclick="closeCalPanel()" style="background:rgba(255,255,255,.12);border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;color:white;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+          </div>
+          <div id="cal-panel-body" style="padding:14px 16px;max-height:calc(100vh - 280px);overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-jobnumbers">
+    <div style="max-width:820px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+        <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:2px 8px;border-radius:4px">BETA</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="exportJobNumbersCSV()" style="font-size:11px">↓ CSV</button>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="document.getElementById('import-jobs-file').click()" style="font-size:11px">↑ Import</button>
+        <input type="file" id="import-jobs-file" accept=".csv" style="display:none" onchange="importJobNumbersCSV(this)">
+        <button class="btn btn-primary btn-sm edit-only" onclick="openAddJobNumber()">＋ Add Job Number</button>
+      </div>
+      <div id="jobnumbers-search-bar" style="margin-bottom:12px">
+        <input type="text" id="jobnumbers-search" placeholder="Search job number or project name…" oninput="renderJobNumbers()" class="filter-select" style="min-width:240px;width:100%">
+      </div>
+      <div id="jobnumbers-content"><div class="empty"><div class="empty-icon">🔢</div><p>No job numbers added yet</p></div></div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-trial">
+    <div id="trial-root" class="trial-wrap"></div>
+  </div>
+
+  <div class="page hidden" id="page-data">
+    <div style="max-width:820px">
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">💾 Full Backup</div></div>
+      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px;border:1px solid var(--purple);background:var(--purple-lt)">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Download a complete backup of all data as a single JSON file. Use for disaster recovery or before major changes.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" onclick="exportFullBackup()">💾 Download Full Backup</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-backup-file').click()">↑ Restore from Backup</button>
+          <input type="file" id="import-backup-file" accept=".json" style="display:none" onchange="importFullBackup(this)">
+        </div>
+        <div id="backup-restore-preview" style="display:none;margin-top:12px"></div>
+      </div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">👤 People / Contacts</div></div>
+      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export contacts as CSV, edit in Excel, re-import. <strong style="color:var(--navy)">Importing will replace all existing contacts.</strong></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="exportPeopleCSV()">↓ Export People CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-people-file').click()">↑ Import People CSV</button>
+          <input type="file" id="import-people-file" accept=".csv" style="display:none" onchange="importPeopleCSV(this)">
+        </div>
+        <div id="import-people-preview" style="display:none"></div>
+      </div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">🏗 Sites</div></div>
+      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export sites, update in Excel, re-import. <strong style="color:var(--navy)">Importing will replace all existing sites.</strong></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="exportSitesCSV()">↓ Export Sites CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-sites-file').click()">↑ Import Sites CSV</button>
+          <input type="file" id="import-sites-file" accept=".csv" style="display:none" onchange="importSitesCSV(this)">
+        </div>
+        <div id="import-sites-preview" style="display:none"></div>
+      </div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">📅 Schedule (all weeks)</div></div>
+      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export full schedule. <strong style="color:var(--navy)">Importing merges — same person+week will be overwritten.</strong></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="exportScheduleCSV()">↓ Export Schedule CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-schedule-file').click()">↑ Import Schedule CSV</button>
+          <input type="file" id="import-schedule-file" accept=".csv" style="display:none" onchange="importScheduleCSV(this)">
+        </div>
+        <div id="import-schedule-preview" style="display:none"></div>
+      </div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">☎ Supervision Contacts</div></div>
+      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export supervision contacts, update, re-import. <strong style="color:var(--navy)">Importing will replace all existing contacts.</strong></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="exportManagersCSV()">↓ Export Supervision CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-managers-file2').click()">↑ Import Supervision CSV</button>
+          <input type="file" id="import-managers-file2" accept=".csv" style="display:none" onchange="importManagersCSV(this)">
+        </div>
+        <div id="import-managers-preview2" style="display:none"></div>
+      </div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title" style="color:var(--red)">⚠ Reset</div></div>
+      <div class="roster-card" style="padding:18px 20px;border-color:#FECACA">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Clear all saved data and reload the original seed data.</p>
+        <button class="btn btn-danger btn-sm" onclick="confirmReset()">Reset to seed data</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-help">
+    <div style="max-width:700px">
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="btn btn-sm" id="help-tab-emp" onclick="showHelpTab('emp')" style="font-size:12px">Employee Guide</button>
+        <button class="btn btn-secondary btn-sm" id="help-tab-sup" onclick="showHelpTab('sup')" style="font-size:12px">Supervisor Guide</button>
+      </div>
+      <div id="help-emp">
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Logging In</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Go to <strong>eq-solves-field.netlify.app</strong><br><strong>2.</strong> Select your name<br><strong>3.</strong> Enter your 4-digit access code<br><strong>4.</strong> Tick "Remember me" to stay logged in</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Checking Your Schedule</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Your schedule loads after login<br><strong>2.</strong> Each day shows the site name, address, and site lead<br><strong>3.</strong> Tap ↗ to open in Google Maps<br><strong>4.</strong> Use week arrows to see other weeks</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Submitting Leave</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Tap <strong>Leave</strong> → <strong>+ New Leave Request</strong><br><strong>2.</strong> Select name, leave type, and dates<br><strong>3.</strong> Choose an approver and submit</div></div>
+      </div>
+      <div id="help-sup" style="display:none">
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Supervisor Login</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Enter the supervisor code at the gate, or unlock from the sidebar lock button after logging in as staff.</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Editing the Roster</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Go to <strong>Edit Roster</strong>. Click a cell, type the site abbreviation. Changes save automatically. Use <strong>Copy Last Week</strong> or <strong>Batch Fill</strong> for bulk edits.</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Backup &amp; Security</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>Full Backup</strong> — Import / Export page. Download regularly.<br><strong>Audit Log</strong> — sidebar footer. All supervisor actions logged.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-apprentices">
+    <div id="apprentices-content"></div>
+  </div>
+
+</div><!-- /content -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     MOBILE BOTTOM NAV + DRAWER
+     ═══════════════════════════════════════════════════════════ -->
+<nav id="mobile-nav" aria-label="Main navigation">
+  <button class="mobile-nav-item active" id="mnav-dashboard" onclick="mobileNav('dashboard')" aria-label="Dashboard"><span class="mnav-icon">📊</span>Home</button>
+  <button class="mobile-nav-item" id="mnav-roster" onclick="mobileNav('roster')" aria-label="Roster"><span class="mnav-icon">⊞</span>Roster</button>
+  <button class="mobile-nav-item" id="mnav-schedule" onclick="mobileNav('schedule')" aria-label="My Week"><span class="mnav-icon">◷</span>My Week</button>
+  <button class="mobile-nav-item" id="mnav-calendar" onclick="mobileNav('calendar')" aria-label="Calendar"><span class="mnav-icon">📅</span>Calendar</button>
+  <button class="mobile-nav-item" id="mnav-more" onclick="openMobileDrawer()" aria-label="More options"><span class="mnav-icon">☰</span>More</button>
+</nav>
+
+<div id="mobile-drawer">
+  <div id="mobile-drawer-backdrop" onclick="closeMobileDrawer()"></div>
+  <div id="mobile-drawer-panel">
+    <div class="drawer-handle"></div>
+    <div class="drawer-label">Forecast</div>
+    <button class="drawer-item" onclick="mobileNav('dashboard');closeMobileDrawer()" id="ditem-dashboard"><span class="d-icon">◈</span> Dashboard</button>
+    <button class="drawer-item" onclick="mobileNav('calendar');closeMobileDrawer()" id="ditem-calendar"><span class="d-icon">📅</span> Calendar</button>
+    <button class="drawer-item" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
+    <button class="drawer-item" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
+    <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
+    <div class="drawer-divider"></div>
+    <div class="drawer-label">Manage</div>
+    <button class="drawer-item edit-only" onclick="mobileNav('editor');closeMobileDrawer()" id="ditem-editor"><span class="d-icon">✎</span> Edit Roster</button>
+    <button class="drawer-item edit-only" onclick="openAddPerson();closeMobileDrawer()"><span class="d-icon">＋</span> Add Person</button>
+    <button class="drawer-item" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
+    <button class="drawer-item" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
+    <div class="drawer-divider"></div>
+    <div class="drawer-label">Testing</div>
+    <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences <span class="beta-tag">BETA</span></button>
+    <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
+    <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets <span class="beta-tag">BETA</span></button>
+    <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices</button>
+    <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
+    <div class="drawer-divider"></div>
+    <button id="audit-drawer-btn" class="drawer-item edit-only" onclick="openAuditLog();closeMobileDrawer()"><span class="d-icon">📋</span> Audit Log</button>
+    <div class="drawer-divider"></div>
+    <button id="mobile-lock-btn" class="drawer-item locked" onclick="toggleManagerMode();closeMobileDrawer()">
+      <span class="d-icon" id="mobile-lock-icon">🔒</span>
+      <span><span style="display:block;font-size:13px" id="mobile-lock-status">View only — tap to unlock</span><span style="display:block;font-size:10px;opacity:.5;margin-top:2px">Password required</span></span>
+    </button>
+    <button class="drawer-item" onclick="openPrivacyNotice();closeMobileDrawer()"><span class="d-icon">🔒</span> Privacy Notice</button>
+    <div class="drawer-divider"></div>
+    <button class="drawer-item" onclick="logoutUser();closeMobileDrawer()" style="color:var(--red)"><span class="d-icon">🚪</span> Log Out</button>
+  </div>
+</div>
+
+</div><!-- /shell -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     PRIVACY NOTICE MODAL
+     Australian Privacy Principles (APP) — Privacy Act 1988 (Cth)
+     ═══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-privacy" style="z-index:500">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3>🔒 Privacy Notice</h3>
+      <button class="modal-close" onclick="closeModal('modal-privacy')">✕</button>
+    </div>
+    <div class="modal-body" style="font-size:12.5px;color:var(--ink-2);line-height:1.8;max-height:65vh;overflow-y:auto">
+      <p style="font-weight:700;color:var(--navy);margin-bottom:8px">SKS Technologies Pty Ltd — Collection Notice</p>
+      <p style="margin-bottom:12px">SKS Technologies Pty Ltd (ABN 51 168 906 956) collects and holds personal information about its employees and contractors in order to manage workforce rostering, timesheets, leave, and site operations. This notice is provided in accordance with the <strong>Australian Privacy Principles (APPs)</strong> under the <em>Privacy Act 1988</em> (Cth).</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">What information we collect</p>
+      <p style="margin-bottom:12px">We collect your name, mobile number, email address, employment group (Direct / Apprentice / Labour Hire), licence class, agency (where applicable), weekly site allocations, timesheet hours, and leave requests. Access codes (PINs) are stored as one-way cryptographic hashes — your raw PIN is never stored or accessible to anyone.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Why we collect it (APP 3)</p>
+      <p style="margin-bottom:12px">Personal information is collected for the primary purpose of workforce management — including rostering, timesheet processing, payroll reconciliation, leave management, and site supervision. It is not used for any secondary purpose without your consent.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Who can see your information (APP 6)</p>
+      <p style="margin-bottom:12px">Your information is accessible to SKS Technologies management and supervisors who are authorised users of this system. Labour hire staff information is visible to the relevant agency for timesheet verification only. Information is not disclosed to third parties except where required by law or for payroll processing by our contracted provider.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">How we protect it (APP 11)</p>
+      <p style="margin-bottom:12px">Access to this application requires a shared access code and individual identification. All data is stored in an encrypted cloud database hosted in the AWS ap-southeast-2 (Sydney) region. All connections use TLS encryption in transit. Supervisor actions are recorded in a tamper-evident audit trail. Login attempts are rate-limited and accounts are locked after repeated failures. Database-level row security controls enforce strict isolation between organisations.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Overseas disclosure (APP 8)</p>
+      <p style="margin-bottom:12px">This application is hosted on infrastructure operated by Supabase Inc. (USA) and Netlify Inc. (USA) under data processing agreements consistent with Australian privacy obligations. No personal information is otherwise disclosed overseas.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Your rights (APP 12 &amp; 13)</p>
+      <p style="margin-bottom:12px">You may request access to your personal information, or request a correction if it is inaccurate, by contacting your supervisor or the NSW Operations Manager. Requests will be responded to within a reasonable time and at no charge.</p>
+
+      <p style="font-weight:600;color:var(--navy);margin-bottom:4px">Complaints</p>
+      <p style="margin-bottom:4px">If you believe your privacy has been breached, you may contact SKS Technologies at <strong>admin@sks.com.au</strong>. If you are not satisfied with our response, you may lodge a complaint with the <strong>Office of the Australian Information Commissioner (OAIC)</strong> at <strong>oaic.gov.au</strong> or on 1300 363 992.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('modal-privacy')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODALS
+     ═══════════════════════════════════════════════════════════ -->
+
+<!-- Person modal -->
+<div class="modal-overlay" id="modal-person"><div class="modal"><div class="modal-header"><h3 id="modal-person-title">Add Person</h3><button class="modal-close" onclick="closeModal('modal-person')">✕</button></div><div class="modal-body"><input type="hidden" id="person-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="person-name" placeholder="e.g. Alex Mitchell"></div><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="person-phone" placeholder="04XX XXX XXX"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Group</label><select class="form-select" id="person-group" onchange="onPersonGroupChange()"><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select></div><div class="form-group"><label class="form-label" id="person-licence-label">Licence</label><div id="person-licence-slot"><input class="form-input" id="person-licence" placeholder="e.g. Licensed"></div></div></div><div class="form-group"><label class="form-label">Agency (Labour Hire only)</label><input class="form-input" id="person-agency" placeholder="e.g. Core, Atom"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="person-email" type="email" placeholder="name@example.com"></div><div class="form-group"><label class="form-label">TAFE Day <span style="font-size:10px;color:var(--ink-3);font-weight:400">(apprentices)</span></label><select class="form-select" id="person-tafe-day"><option value="">— None —</option><option value="mon">Monday</option><option value="tue">Tuesday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option><option value="fri">Friday</option></select><div class="form-hint">Used by the "Apply TAFE Day" button on the roster editor.</div></div>
+<div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
+
+<!-- Site modal -->
+<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
+
+<!-- Confirm modal -->
+<div class="modal-overlay" id="modal-confirm" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="confirm-title">Confirm</h3><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div><div class="modal-body"><p id="confirm-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6"></p></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancel</button><button class="btn btn-danger" id="confirm-action">Confirm</button></div></div></div>
+
+<!-- Cell edit conflict modal -->
+<div class="modal-overlay" id="modal-cell-conflict" style="z-index:450">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h3>Edit Conflict</h3>
+      <button class="modal-close" onclick="closeModal('modal-cell-conflict')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-2);line-height:1.5;margin-bottom:14px">
+        Another user updated this cell while you were editing. Which value should win?
+      </p>
+      <div id="conflict-meta" style="font-size:11px;color:var(--ink-3);margin-bottom:14px;padding:8px 10px;background:var(--surface-2);border-radius:6px;line-height:1.6"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button id="conflict-keep-mine" class="btn btn-primary" style="padding:14px;flex-direction:column;gap:4px;display:flex;align-items:center">
+          <span style="font-size:11px;opacity:.8;font-weight:500">Use mine</span>
+          <span id="conflict-mine-val" style="font-size:16px;font-weight:700"></span>
+        </button>
+        <button id="conflict-use-theirs" class="btn btn-secondary" style="padding:14px;flex-direction:column;gap:4px;display:flex;align-items:center">
+          <span style="font-size:11px;opacity:.8;font-weight:500">Use theirs</span>
+          <span id="conflict-theirs-val" style="font-size:16px;font-weight:700"></span>
+        </button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-cell-conflict')">Decide later</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manager modal -->
+<div class="modal-overlay" id="modal-manager"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="modal-manager-title">Add Contact</h3><button class="modal-close" onclick="closeModal('modal-manager')">✕</button></div><div class="modal-body"><input type="hidden" id="manager-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Name</label><input class="form-input" id="manager-name" placeholder="e.g. Ian Marston"></div><div class="form-group"><label class="form-label">Category</label><select class="form-select" id="manager-category"><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select></div></div><div class="form-group"><label class="form-label">Role</label><input class="form-input" id="manager-role" placeholder="e.g. Project Manager"></div><div class="form-row"><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="manager-phone" placeholder="04XX XXX XXX"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="manager-email" placeholder="name@example.com" type="email"></div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager')">Cancel</button><button class="btn btn-primary" onclick="saveManager()">Save</button></div></div></div>
+
+<!-- Supervisor password modal -->
+<div class="modal-overlay" id="modal-manager-pw"><div class="modal" style="max-width:380px"><div class="modal-header"><h3>🔓 Supervision Access</h3><button class="modal-close" onclick="closeModal('modal-manager-pw')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="manager-name-select" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Password</label><input class="form-input" id="manager-pw-input" type="password" placeholder="Enter supervision password" onkeydown="if(event.key==='Enter') submitManagerPassword()"></div><div id="manager-pw-error" style="display:none;color:#EF4444;font-size:12px;margin-top:6px">Incorrect password or no name selected.</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager-pw')">Cancel</button><button class="btn btn-primary" onclick="submitManagerPassword()">Unlock</button></div></div></div>
+
+<!-- Batch fill modal -->
+<div class="modal-overlay" id="modal-batch"><div class="modal" style="max-width:640px"><div class="modal-header"><h3>⚡ Batch Fill</h3><button class="modal-close" onclick="closeModal('modal-batch')">✕</button></div><div class="modal-body" style="padding-bottom:8px"><div class="form-group"><label class="form-label">Site / Status Code</label><input class="form-input" id="batch-code" list="site-datalist" placeholder="e.g. STG, A/L" autocomplete="off" spellcheck="false" oninput="this.value=this.value.toUpperCase()"><div class="form-hint">Code to apply to selected people on selected days</div></div><div class="form-group"><label class="form-label">Days</label><div style="display:flex;gap:6px;flex-wrap:wrap" id="batch-days"><label class="batch-day-lbl"><input type="checkbox" value="mon"> Mon</label><label class="batch-day-lbl"><input type="checkbox" value="tue"> Tue</label><label class="batch-day-lbl"><input type="checkbox" value="wed"> Wed</label><label class="batch-day-lbl"><input type="checkbox" value="thu"> Thu</label><label class="batch-day-lbl"><input type="checkbox" value="fri"> Fri</label><label class="batch-day-lbl"><input type="checkbox" value="sat"> Sat</label><label class="batch-day-lbl"><input type="checkbox" value="sun"> Sun</label><button class="btn btn-secondary btn-sm" onclick="batchSelectWeekdays()" style="margin-left:8px">Mon–Fri</button><button class="btn btn-secondary btn-sm" onclick="batchSelectAllDays()" style="margin-left:4px" id="batch-days-all-btn">All</button></div></div><div class="form-group" style="margin-bottom:4px"><label class="form-label" style="display:flex;align-items:center;justify-content:space-between"><span>People</span><span style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" onclick="batchToggleGroup('Direct')">⚡ Direct</button><button class="btn btn-secondary btn-sm" onclick="batchToggleGroup('Apprentice')">🎓 Apprentices</button><button class="btn btn-secondary btn-sm" onclick="batchToggleGroup('Labour Hire')">🔧 Labour Hire</button><button class="btn btn-secondary btn-sm" onclick="batchSelectAll()">Select All</button><button class="btn btn-secondary btn-sm" onclick="batchClearAll()">Clear</button></span></label><div id="batch-people-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 0"></div></div><div id="batch-selection-count" style="font-size:11px;color:var(--ink-3);padding:4px 0 8px">0 people selected</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-batch')">Cancel</button><button class="btn btn-primary" onclick="runBatchFill()">Apply</button></div></div></div>
+
+<!-- Cleanup codes modal -->
+<div class="modal-overlay" id="modal-cleanup"><div class="modal" style="max-width:580px"><div class="modal-header"><h3>🧹 Clean Up Codes</h3><button class="modal-close" onclick="closeModal('modal-cleanup')">✕</button></div><div class="modal-body"><p style="font-size:12.5px;color:var(--ink-2);margin-bottom:16px;line-height:1.6">These codes appear in your schedule history but don't match any site in your Sites list.</p><div id="cleanup-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 0;margin-bottom:12px"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><button class="btn btn-secondary btn-sm" onclick="cleanupSelectAll()">Select All</button><button class="btn btn-secondary btn-sm" onclick="cleanupClearAll()">Clear</button><span id="cleanup-count" style="font-size:11px;color:var(--ink-3);margin-left:4px">0 selected</span></div></div><div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><div style="display:flex;gap:8px;align-items:center"><span style="font-size:11.5px;color:var(--ink-2);font-weight:600">Remove selected from:</span><button class="btn btn-secondary btn-sm" onclick="runCleanup('current')">Current week</button><button class="btn btn-secondary btn-sm" onclick="runCleanup('all')">All weeks</button></div><button class="btn btn-secondary" onclick="closeModal('modal-cleanup')">Cancel</button></div></div></div>
+
+<!-- Leave request modal -->
+<div class="modal-overlay" id="modal-leave-request"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="leave-modal-title">New Leave Request</h3><button class="modal-close" onclick="closeModal('modal-leave-request')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="leave-person" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Leave Type</label><select class="form-input" id="leave-type" style="background:var(--surface)"><option value="A/L">Annual Leave (A/L)</option><option value="U/L">Unpaid Leave (U/L)</option><option value="RDO">RDO</option></select></div><div class="form-group"><label class="form-label">Date Selection</label><div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-sm" id="leave-mode-range" onclick="setLeaveMode('range')" style="flex:1">Date Range</button><button class="btn btn-secondary btn-sm" id="leave-mode-pick" onclick="setLeaveMode('pick')" style="flex:1">Pick Days</button></div></div><div id="leave-range-fields"><div style="display:flex;gap:8px"><div class="form-group" style="flex:1"><label class="form-label">Start Date</label><input class="form-input" id="leave-start" type="date"></div><div class="form-group" style="flex:1"><label class="form-label">End Date</label><input class="form-input" id="leave-end" type="date"></div></div></div><div id="leave-pick-fields" style="display:none"><div class="form-group"><label class="form-label">Add a date</label><div style="display:flex;gap:6px"><input class="form-input" id="leave-pick-date" type="date" style="flex:1"><button class="btn btn-secondary btn-sm" onclick="addPickedDay()">Add</button></div></div><div id="leave-picked-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px"></div></div><div class="form-group"><label class="form-label">Approver</label><select class="form-input" id="leave-approver" style="background:var(--surface)"><option value="">— Select approver —</option></select></div><div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="leave-note" placeholder="e.g. Family holiday, pre-approved verbally"></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-leave-request')">Cancel</button><button class="btn btn-primary" onclick="submitLeaveRequest()">Submit Request</button></div></div></div>
+
+<!-- Leave CC config -->
+<div class="modal-overlay" id="modal-leave-cc"><div class="modal" style="max-width:440px"><div class="modal-header"><h3>✉ Email Notification CC List</h3><button class="modal-close" onclick="closeModal('modal-leave-cc')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">These people will be CC'd on every leave request email.</p><div id="leave-cc-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px"><input class="form-input" id="leave-cc-new" type="email" placeholder="email@example.com.au" style="flex:1" onkeydown="if(event.key==='Enter')addLeaveCC()"><button class="btn btn-primary btn-sm" onclick="addLeaveCC()">Add</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-leave-cc')">Done</button></div></div></div>
+
+<!-- Leave respond modal -->
+<div class="modal-overlay" id="modal-leave-respond"><div class="modal" style="max-width:480px"><div class="modal-header"><h3>Review Leave Request</h3><button class="modal-close" onclick="closeModal('modal-leave-respond')">✕</button></div><div class="modal-body"><div id="leave-respond-detail" style="margin-bottom:14px"></div><div class="form-group"><label class="form-label">Response Note (optional)</label><input class="form-input" id="leave-response-note" placeholder="e.g. Approved, enjoy your break"></div><input type="hidden" id="leave-respond-id"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-leave-respond')">Cancel</button><button class="btn" onclick="respondLeave('Rejected')" style="background:var(--red);color:white">Reject</button><button class="btn btn-primary" onclick="respondLeave('Approved')" style="background:var(--green);color:white">Approve</button></div></div></div>
+
+<!-- Timesheet batch fill -->
+<div class="modal-overlay" id="modal-ts-batch"><div class="modal"><div class="modal-header"><h3>⚡ Timesheet Batch Fill</h3><button class="modal-close" onclick="closeModal('modal-ts-batch')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Select Days</label><div class="batch-days" id="ts-batch-days"></div></div><div style="display:flex;gap:12px"><div class="form-group" style="flex:1"><label class="form-label">Job / Docket Number</label><input class="form-input" id="ts-batch-job" placeholder="e.g. D5384" style="font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></div><div class="form-group" style="width:80px"><label class="form-label">Hours/Day</label><input class="form-input" id="ts-batch-hrs" type="number" min="0" max="24" step="0.5" placeholder="8"></div></div><div class="form-group"><label class="form-label">Apply To</label><div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-secondary btn-sm" onclick="tsBatchSelectAll()">Select All</button><button class="btn btn-secondary btn-sm" onclick="tsBatchClearAll()">Clear All</button></div><div id="ts-batch-people" style="max-height:min(220px,40vh);overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:8px"></div><div id="ts-batch-count" style="font-size:12px;color:var(--ink-3)">0 people selected</div></div><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" id="ts-batch-skip" checked> Skip cells that already have data</label></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-ts-batch')">Cancel</button><button class="btn btn-primary" onclick="runTsBatch()">Apply</button></div></div></div>
+
+<!-- Job number modal -->
+<div class="modal-overlay" id="modal-jobnumber"><div class="modal" style="max-width:440px"><div class="modal-header"><h3 id="modal-jobnumber-title">Add Job Number</h3><button class="modal-close" onclick="closeModal('modal-jobnumber')">✕</button></div><div class="modal-body"><input type="hidden" id="jn-edit-id"><div class="form-group"><label class="form-label">Job Number</label><input class="form-input" id="jn-number" placeholder="e.g. 32510" inputmode="numeric"></div><div class="form-group"><label class="form-label">Project / Description</label><input class="form-input" id="jn-description" placeholder="e.g. Equinix SY7 — Level 2 Fitout"></div><div class="form-row"><div class="form-group"><label class="form-label">Client</label><input class="form-input" id="jn-client" placeholder="e.g. Equinix"></div><div class="form-group"><label class="form-label">Site</label><select class="form-input" id="jn-site" style="background:var(--surface)"><option value="">— Select site —</option></select></div></div><div class="form-group"><label class="form-label">Status</label><select class="form-input" id="jn-status" style="background:var(--surface)"><option value="Active">Active</option><option value="Complete">Complete</option><option value="On Hold">On Hold</option></select></div><div class="form-group"><label class="form-label">Notes (optional)</label><input class="form-input" id="jn-notes" placeholder="Any extra info for the team"></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-jobnumber')">Cancel</button><button class="btn btn-primary" onclick="saveJobNumber()">Save</button></div></div></div>
+
+<!-- Audit log modal -->
+<div class="modal-overlay" id="modal-audit"><div class="modal" style="max-width:720px"><div class="modal-header"><h3>📋 Audit Log</h3><button class="modal-close" onclick="closeModal('modal-audit')">✕</button></div><div class="modal-body" style="padding:0"><div style="display:flex;gap:8px;padding:14px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center"><select id="audit-filter-manager" class="filter-select" onchange="renderAuditLog()" style="font-size:12px"><option value="">All Supervision</option></select><select id="audit-filter-category" class="filter-select" onchange="renderAuditLog()" style="font-size:12px"><option value="">All Categories</option><option value="Roster">Roster</option><option value="Timesheet">Timesheet</option><option value="People">People</option><option value="Sites">Sites</option><option value="Leave">Leave</option><option value="Access">Access</option></select><span style="flex:1"></span><span id="audit-count" style="font-size:11px;color:var(--ink-3)"></span></div><div id="audit-log-content" style="max-height:60vh;overflow-y:auto"><div class="empty"><div class="empty-icon">📋</div><p>Loading…</p></div></div></div><div class="modal-footer"><button class="btn btn-secondary btn-sm" onclick="exportAuditCSV()">↓ Export CSV</button><button class="btn btn-primary" onclick="closeModal('modal-audit')">Close</button></div></div></div>
+
+
+<!-- PIN Management modal -->
+<div class="modal-overlay" id="modal-pin-mgmt"><div class="modal" style="max-width:580px"><div class="modal-header"><h3>🔢 Staff PIN Management</h3><button class="modal-close" onclick="closeModal('modal-pin-mgmt')">✕</button></div><div class="modal-body">
+  <p style="font-size:12px;color:var(--ink-2);margin-bottom:16px;line-height:1.6">Set or reset 4-digit PINs for staff timesheet self-entry. PINs apply to Apprentice and Labour Hire staff only.</p>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <input type="text" id="pin-search" placeholder="Search name…" oninput="renderPinList()" class="filter-select" style="flex:1;min-width:160px">
+    <button class="btn btn-secondary btn-sm" onclick="pinSelectAll()">Select All</button>
+    <button class="btn btn-secondary btn-sm" onclick="pinClearAll()">Clear</button>
+  </div>
+  <div id="pin-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px"></div>
+  <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
+    <div style="font-size:11px;font-weight:700;color:var(--ink-2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Bulk action for selected staff</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="number" id="pin-bulk-value" placeholder="New PIN (4 digits)" min="1000" max="9999" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;width:160px;text-align:center;letter-spacing:4px">
+      <button class="btn btn-primary btn-sm" onclick="applyBulkPin()">Apply to Selected</button>
+      <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="clearBulkPin()">Clear PINs</button>
+    </div>
+  </div>
+</div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-pin-mgmt')">Done</button></div></div></div>
+
+<datalist id="site-datalist"></datalist>
+<datalist id="ts-job-list"></datalist>
+
+<div class="toast" id="toast"></div>
+
+<div id="loading-overlay" class="hidden">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Loading…</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     INLINE SCRIPT — Navigation, init, data load, top stats
+     Everything else lives in scripts/*.js
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+
+// ── Loading overlay ───────────────────────────────────────────
+function showLoadingOverlay(msg) {
+  const el = document.getElementById('loading-overlay');
+  const txt = document.getElementById('loading-text');
+  if (el)  el.classList.remove('hidden');
+  if (txt) txt.textContent = msg || 'Loading…';
+}
+function hideLoadingOverlay() {
+  const el = document.getElementById('loading-overlay');
+  if (el) el.classList.add('hidden');
+}
+
+// ── Load all data from Supabase ───────────────────────────────
+async function loadFromSupabase() {
+  showLoadingOverlay('Loading…');
+
+  // Demo / EQ tenant — load from SEED, no Supabase
+  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
+    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.sites     = SEED.sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:'', site_lead_phone:'' }));
+    STATE.schedule  = SEED.schedule.map(r => ({ id:r.id||Math.random(), name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:'', sun:'' }));
+    STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.timesheets = [];
+    // PERF: Build O(1) schedule index
+    STATE.scheduleIndex = {};
+    STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
+    hideLoadingOverlay();
+    updateLastUpdated();
+    return true;
   }
 
-  // Network-first for everything else (HTML, JS, CSS)
-  // Ensures updates are picked up immediately, with cache fallback for offline
-  event.respondWith(
-    fetch(event.request)
-      .then(res => {
-        const c = res.clone();
-        caches.open(CACHE).then(cache => cache.put(event.request, c));
-        return res;
-      })
-      .catch(() => caches.match(event.request))
-  );
+  try {
+    const [people, sites, schedule, managers, tsRows] = await Promise.all([
+      sbFetch('people?select=*&order=name'),
+      sbFetch('sites?select=*&order=name'),
+      sbFetch('schedule?select=*'),
+      sbFetch('managers?select=*&order=name'),
+      sbFetch('timesheets?select=*'),
+    ]);
+
+    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.sites  = sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:r.site_lead||'', site_lead_phone:r.site_lead_phone||'' }));
+
+    // BUG-004 FIX: raw string key — esc() breaks names with & < > chars
+    const scheduleMap = {};
+    schedule.forEach(r => {
+      const key = `${r.name}||${r.week}`;
+      if (!scheduleMap[key] || r.id > scheduleMap[key].id) scheduleMap[key] = r;
+    });
+    STATE.schedule = Object.values(scheduleMap).map(r => ({ id:r.id, name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:r.sat||'', sun:r.sun||'', updated_at:r.updated_at||null }));
+
+    // PERF: O(1) index
+    STATE.scheduleIndex = {};
+    STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
+
+    STATE.timesheets = tsRows;
+    STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    hideLoadingOverlay();
+    updateLastUpdated();
+    return true;
+  } catch(e) {
+    hideLoadingOverlay();
+    if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
+      showToast('⚠ Connection error — showing last known data. Do not edit until connection restored.');
+    }
+    return false;
+  }
+}
+
+// ── Navigation ────────────────────────────────────────────────
+let currentPage = 'dashboard';
+
+const PAGE_TITLES = {
+  dashboard:'Dashboard', roster:'Weekly Roster', schedule:'My Schedule',
+  contacts:'Contacts', sites:'Sites', editor:'Edit Roster',
+  data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
+  leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
+  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices'
+};
+
+function showPage(id) {
+  if (typeof agencyMode !== 'undefined' && agencyMode && id !== 'timesheets') return;
+  if (id === 'editor' && !isManager) { showToast('Supervision access required'); return; }
+  document.querySelectorAll('.page').forEach(p => { p.classList.add('hidden'); p.classList.remove('print-active'); });
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const activePage = document.getElementById('page-' + id);
+  if (activePage) { activePage.classList.remove('hidden'); activePage.classList.add('print-active'); }
+  const navEl = document.getElementById('nav-' + id);
+  if (navEl) navEl.classList.add('active');
+  const pageTitleEl = document.getElementById('page-title');
+  if (pageTitleEl) pageTitleEl.textContent = PAGE_TITLES[id] || id;
+  currentPage = id;
+  const lb = document.getElementById('legend-bar');
+  if (lb) lb.style.display = (id === 'roster') ? '' : 'none';
+  renderCurrentPage();
+}
+
+function renderCurrentPage() {
+  if      (currentPage === 'dashboard')  renderDashboard();
+  else if (currentPage === 'roster')     { renderRosterWeekNav(); renderRoster(); }
+  else if (currentPage === 'schedule')   renderSchedule();
+  else if (currentPage === 'contacts')   renderContacts();
+  else if (currentPage === 'sites')      renderSites();
+  else if (currentPage === 'editor')     renderEditor();
+  else if (currentPage === 'managers')   renderManagers();
+  else if (currentPage === 'timesheets') renderTimesheets();
+  else if (currentPage === 'leave')      renderLeave();
+  else if (currentPage === 'jobnumbers') renderJobNumbers();
+  else if (currentPage === 'staff-ts')   renderStaffTs();
+  else if (currentPage === 'calendar')   renderCalendar();
+  else if (currentPage === 'trial')      renderTrialDashboard();
+  else if (currentPage === 'apprentices') renderApprentices();
+}
+
+// ── Week controls ─────────────────────────────────────────────
+function stepWeek(dir) {
+  const sel  = document.getElementById('globalWeek');
+  const opts = [...sel.options];
+  const idx  = opts.findIndex(o => o.value === sel.value);
+  const next = idx + dir;
+  if (next >= 0 && next < opts.length) { sel.value = opts[next].value; onWeekChange(); }
+}
+
+function onWeekChange() {
+  STATE.currentWeek = document.getElementById('globalWeek').value;
+  saveCurrentWeek();
+  updateWeekLabel();
+  updateTopStats();
+  renderCurrentPage();
+}
+
+function updateWeekLabel() {
+  const lbl = document.getElementById('week-label-text');
+  if (lbl) lbl.textContent = formatWeekLabel(STATE.currentWeek);
+}
+
+// ── Top stats ─────────────────────────────────────────────────
+function updateTopStats() {
+  const week  = STATE.currentWeek;
+  const sched = getWeekSchedule(week);
+  const days  = ['mon','tue','wed','thu','fri','sat','sun'];
+  const peopleOnLeave = new Set(sched.filter(r => days.every(d => isLeave(r[d]))).map(r => r.name));
+  const active = STATE.people.filter(p => !peopleOnLeave.has(p.name)).length;
+  document.getElementById('stat-active').textContent = `${active} active`;
+  document.getElementById('stat-leave').textContent  = `${peopleOnLeave.size} on leave`;
+  document.getElementById('stat-total').textContent  = `${STATE.people.length} total`;
+  const bySite = {};
+  sched.forEach(r => days.forEach(d => { const s = r[d]; if (s && !isLeave(s) && s.trim()) bySite[s] = (bySite[s]||0)+1; }));
+  document.getElementById('sc-direct').textContent = STATE.people.filter(p => p.group==='Direct').length;
+  document.getElementById('sc-app').textContent    = STATE.people.filter(p => p.group==='Apprentice').length;
+  document.getElementById('sc-lh').textContent     = STATE.people.filter(p => p.group==='Labour Hire').length;
+  document.getElementById('sc-sites').textContent  = Object.keys(bySite).length;
+}
+
+// ── Last updated ──────────────────────────────────────────────
+function updateLastUpdated() {
+  const el  = document.getElementById('last-updated');
+  const mgr = document.getElementById('last-updated-manager');
+  if (!el) return;
+  const now = new Date();
+  el.textContent  = `Updated ${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  if (mgr) mgr.textContent = currentManagerName ? `by ${currentManagerName}` : '';
+}
+
+// ── Refresh ───────────────────────────────────────────────────
+async function refreshData(silent) {
+  if (silent && currentPage === 'editor' && document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (silent && Object.keys(_sbPendingRows).length > 0) return;
+  const btn = document.getElementById('refresh-btn');
+  if (btn && !silent) { btn.disabled = true; btn.textContent = '↻ Syncing…'; }
+  try {
+    const ok = await loadFromSupabase();
+    if (typeof loadLeaveRequests === 'function') await loadLeaveRequests();
+    if (ok) { renderCurrentPage(); updateTopStats(); if (typeof updateLeaveBadge === 'function') updateLeaveBadge(); if (!silent) showToast('Data refreshed ✓'); }
+  } catch(e) {
+    if (!silent && TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') showToast('Sync failed — check connection. Your data is safe.');
+  }
+  if (btn && !silent) { btn.disabled = false; btn.textContent = '↻ Sync'; }
+}
+
+// ── Person selects ────────────────────────────────────────────
+function refreshPersonSelects() {
+  const sel = document.getElementById('schedule-person');
+  const loggedInName = sessionStorage.getItem('eq_logged_in_name') || '';
+  let matchedName = loggedInName;
+  if (loggedInName && !STATE.people.find(p => p.name === loggedInName)) {
+    const lower = loggedInName.toLowerCase();
+    const fuzzy = STATE.people.find(p => p.name.toLowerCase() === lower || p.name.toLowerCase().includes(lower) || lower.includes(p.name.toLowerCase()));
+    if (fuzzy) matchedName = fuzzy.name;
+  }
+  const cur = sel.value || matchedName;
+  sel.innerHTML = '<option value="">— Select your name —</option>';
+  [...STATE.people].sort((a,b) => a.name.localeCompare(b.name)).forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.name; o.textContent = p.name;
+    if (p.name === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+  if (cur && sel.value === cur) renderSchedule();
+
+  const siteSel = document.getElementById('roster-site');
+  const curSite = siteSel.value;
+  siteSel.innerHTML = '<option value="">All Sites</option>';
+  getAllSiteCodes().forEach(s => {
+    const o    = document.createElement('option');
+    o.value    = s;
+    const site = STATE.sites.find(x => x.abbr === s);
+    o.textContent = site ? `${s} — ${site.name}${site.address ? ' — ' + site.address : ''}` : s;
+    if (s === curSite) o.selected = true;
+    siteSel.appendChild(o);
+  });
+}
+
+// ── Mobile nav ────────────────────────────────────────────────
+// Must match the bottom-bar buttons in <nav id="mobile-nav"> (excluding 'more')
+const MOBILE_NAV_PAGES  = ['dashboard','roster','schedule','calendar'];
+const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial','apprentices'];
+
+function mobileNav(id) {
+  showPage(id);
+  MOBILE_NAV_PAGES.forEach(p => { const el = document.getElementById('mnav-' + p); if (el) el.classList.toggle('active', p===id); });
+  const moreBtn = document.getElementById('mnav-more');
+  if (moreBtn) moreBtn.classList.toggle('active', !MOBILE_NAV_PAGES.includes(id));
+  DRAWER_NAV_PAGES.forEach(p => {
+    const el = document.getElementById('ditem-' + p);
+    if (el) el.classList.toggle('active-page', p===id);
+  });
+}
+
+function openMobileDrawer()  { const d = document.getElementById('mobile-drawer'); if (d) { d.classList.add('open'); updateMobileLock(); } }
+function closeMobileDrawer() { const d = document.getElementById('mobile-drawer'); if (d) d.classList.remove('open'); }
+
+// ── Swipe-down-to-close for mobile drawer ──────────────────
+(function() {
+  let startY = 0, currentY = 0, dragging = false;
+  const panel = () => document.getElementById('mobile-drawer-panel');
+  const drawer = () => document.getElementById('mobile-drawer');
+
+  document.addEventListener('touchstart', function(e) {
+    const p = panel();
+    if (!p || !drawer()?.classList.contains('open')) return;
+    if (!p.contains(e.target)) return;
+    // Only start drag if at scroll top or on the handle
+    if (p.scrollTop > 0 && !e.target.closest('.drawer-handle')) return;
+    startY = e.touches[0].clientY;
+    currentY = startY;
+    dragging = true;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    currentY = e.touches[0].clientY;
+    const dy = currentY - startY;
+    if (dy > 0) {
+      const p = panel();
+      if (p) p.style.transform = `translateY(${dy}px)`;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', function() {
+    if (!dragging) return;
+    dragging = false;
+    const dy = currentY - startY;
+    const p = panel();
+    if (p) p.style.transform = '';
+    if (dy > 80) closeMobileDrawer();
+  }, { passive: true });
+})();
+
+// ── Help tabs ─────────────────────────────────────────────────
+// ── Privacy notice ────────────────────────────────────────────
+function openPrivacyNotice() { openModal('modal-privacy'); }
+
+function showHelpTab(tab) {
+  document.getElementById('help-emp').style.display = tab === 'emp' ? '' : 'none';
+  document.getElementById('help-sup').style.display = tab === 'sup' ? '' : 'none';
+  document.getElementById('help-tab-emp').className = tab === 'emp' ? 'btn btn-sm' : 'btn btn-secondary btn-sm';
+  document.getElementById('help-tab-sup').className = tab === 'sup' ? 'btn btn-sm' : 'btn btn-secondary btn-sm';
+}
+
+// ── Print ─────────────────────────────────────────────────────
+window.addEventListener('beforeprint', function() {
+  renderCurrentPage();
+  if (currentPage === 'roster') {
+    renderRosterLegend();
+    const pw = document.getElementById('roster-print-week');
+    if (pw) pw.textContent = formatWeekLabel(STATE.currentWeek);
+  }
 });
+
+// ── Init ──────────────────────────────────────────────────────
+async function initApp() {
+  await loadFromSupabase();
+  if (typeof loadLeaveRequests  === 'function') await loadLeaveRequests();
+  if (typeof loadLeaveCCList    === 'function') await loadLeaveCCList();
+  if (typeof loadJobNumbers     === 'function') await loadJobNumbers();
+  if (typeof loadApprenticeData  === 'function') await loadApprenticeData();
+    if (typeof loadTafeHolidays    === 'function') await loadTafeHolidays();
+  if (typeof populateJobNumberDatalist === 'function') populateJobNumberDatalist();
+
+  // Build week selector
+  const weekSet = new Set(STATE.schedule.map(r => r.week));
+  const today   = new Date();
+  for (let i = 0; i < 16; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - d.getDay() + 1 + i*7);
+    const dd = String(d.getDate()).padStart(2,'0'), mm = String(d.getMonth()+1).padStart(2,'0'), yy = String(d.getFullYear()).slice(-2);
+    weekSet.add(`${dd}.${mm}.${yy}`);
+  }
+  const allWeeks = [...weekSet].sort((a,b) => {
+    const [da,ma,ya]=a.split('.'); const [db,mb,yb]=b.split('.');
+    return new Date(`20${ya}-${ma}-${da}`) - new Date(`20${yb}-${mb}-${db}`);
+  });
+  const sel = document.getElementById('globalWeek');
+  sel.innerHTML = '';
+
+  // Compute this week's Monday for highlighting
+  const _thisMonday = (() => {
+    const d = new Date(), mon = new Date(d);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
+  })();
+
+  allWeeks.forEach(w => {
+    const o = document.createElement('option');
+    o.value = w;
+    o.textContent = w === _thisMonday ? '\u25C9  ' + w + '  (this week)' : w;
+    if (w === _thisMonday) { o.style.fontWeight = '700'; o.style.color = '#2563EB'; }
+    sel.appendChild(o);
+  });
+
+  // Set current week to this Monday
+  const todayStr = (() => {
+    const d = new Date(), mon = new Date(d);
+    mon.setDate(d.getDate() - d.getDay() + 1);
+    return String(mon.getDate()).padStart(2,'0') + '.' + String(mon.getMonth()+1).padStart(2,'0') + '.' + String(mon.getFullYear()).slice(-2);
+  })();
+  const savedWeek = STATE.currentWeek;
+  const weekToUse = allWeeks.includes(savedWeek) ? savedWeek : (allWeeks.includes(todayStr) ? todayStr : allWeeks[0]);
+  STATE.currentWeek = weekToUse;
+  sel.value = weekToUse;
+
+  updateWeekLabel();
+  refreshPersonSelects();
+  document.getElementById('badge-contacts').textContent = STATE.people.length;
+  document.getElementById('badge-managers').textContent = (STATE.managers||[]).length;
+  updateTopStats();
+  if (typeof applyManagerMode === 'function') applyManagerMode();
+
+  // Auto-admin if logged in with supervisor password at gate
+  if (sessionStorage.getItem('eq_auto_admin') === '1') {
+    const loggedInName = sessionStorage.getItem('eq_logged_in_name') || 'Admin';
+    isManager = true;
+    currentManagerName = loggedInName;
+    if (typeof applyManagerMode === 'function') applyManagerMode();
+    showToast('Supervision mode — ' + loggedInName);
+    sessionStorage.removeItem('eq_auto_admin');
+    showPage('dashboard');
+    mobileNav('dashboard');
+  }
+
+  // Restore agency session
+  const savedAgency = sessionStorage.getItem('eq_agency');
+  if (savedAgency) { agencyMode = true; agencyName = savedAgency; }
+
+  if (typeof agencyMode !== 'undefined' && agencyMode) {
+    if (typeof applyAgencyMode === 'function') applyAgencyMode();
+  } else if (!isManager) {
+    showPage('schedule');
+    mobileNav('schedule');
+  }
+
+  // Start background polling for live tenants
+  startPolling();
+
+  // Start Supabase Realtime (live multi-user updates on schedule table).
+  if (typeof startRealtime === 'function') startRealtime();
+}
+
+window.onload = async function() {
+  await loadTenantConfig();
+  const ok = await checkAccess();
+  if (!ok) return;
+  initApp();
+};
+
+// ── Background polling ───────────────────────────────────────
+let _pollInterval = null;
+
+function startPolling() {
+  if (_pollInterval) clearInterval(_pollInterval);
+  _pollInterval = setInterval(() => {
+    // Skip if: demo tenant, editor active, user typing, writes pending
+    if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') return;
+    if (currentPage === 'editor') return;
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+    if (typeof _pendingWriteCount !== 'undefined' && _pendingWriteCount > 0) return;
+    refreshData(true); // silent=true — no toast
+  }, 30000);
+}
+
+function stopPolling() {
+  if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+}
+
+// ── Service worker ────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW registration failed:', err));
+  });
+}
+
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     EQ AGENT OVERLAY  (self-contained)
+     ═══════════════════════════════════════════════════════════ -->
+<button id="eq-agent-fab" onclick="eqAgent.toggle()" title="Ask EQ Agent" aria-label="Open EQ Agent">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+</button>
+
+<div id="eq-agent-panel" role="dialog" aria-label="EQ Agent">
+  <div id="eq-agent-header">
+    <div class="eq-agent-avatar">⚡</div>
+    <div class="eq-agent-title"><strong>EQ Agent</strong><span>Field Ops Assistant</span></div>
+    <button id="eq-agent-close" onclick="eqAgent.toggle()" aria-label="Close">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div id="eq-agent-chat" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+    <div id="eq-agent-messages"></div>
+    <div id="eq-agent-quick">
+      <button class="eq-qbtn" onclick="eqAgent.send('Who is available this week?')">Who's available?</button>
+      <button class="eq-qbtn" onclick="eqAgent.send('Are there any gaps in the schedule this week?')">Gaps this week?</button>
+      <button class="eq-qbtn" onclick="eqAgent.send('Which sites are understaffed?')">Understaffed sites?</button>
+      <button class="eq-qbtn" onclick="eqAgent.send('Suggest fill-ins for any open shifts this week')">Suggest fill-ins</button>
+    </div>
+    <div id="eq-agent-input-row">
+      <textarea id="eq-agent-input" placeholder="Ask about staff, shifts, availability…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();eqAgent.send();}"></textarea>
+      <button id="eq-agent-send-btn" onclick="eqAgent.send()" aria-label="Send">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const eqAgent = (function() {
+  'use strict';
+  let panelOpen   = false;
+  let chatHistory = [];
+  let greeted     = false;
+
+  function getSessionToken() {
+    // 7-day agent token in localStorage (preferred — survives reloads
+    // and works for tenant-code-gated tenants like SKS that don't go
+    // through the server-side PIN flow on every login).
+    // Fallbacks: in-tab session token, then long-lived remember-me token.
+    return localStorage.getItem('eq_agent_token')
+        || sessionStorage.getItem('eq_session_token')
+        || localStorage.getItem('eq_remember_token')
+        || null;
+  }
+
+  function toggle() {
+    panelOpen = !panelOpen;
+    document.getElementById('eq-agent-panel').classList.toggle('open', panelOpen);
+    if (panelOpen && !greeted) {
+      addMsg('agent', 'Hi! I\'m the EQ Field Agent.\n\nI can see your current roster, staff list and sites. Try:\n• "Who\'s available Thursday?"\n• "Any gaps at Equinix this week?"\n• "Suggest fill-ins for Monday"');
+      greeted = true;
+    }
+  }
+
+  function addMsg(role, text) {
+    const msgs = document.getElementById('eq-agent-messages');
+    const div  = document.createElement('div');
+    div.className   = 'eq-msg ' + role;
+    div.textContent = text;
+    msgs.appendChild(div);
+    msgs.scrollTop  = msgs.scrollHeight;
+    return div;
+  }
+
+  function buildSystemPrompt() {
+    const src   = (typeof STATE !== 'undefined' && STATE && STATE.people && STATE.people.length > 0) ? STATE : (typeof SEED !== 'undefined' ? SEED : { people:[], schedule:[], sites:[] });
+    const week  = (typeof STATE !== 'undefined' && STATE.currentWeek) ? STATE.currentWeek : 'unknown';
+    const today = new Date().toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const leaveTerms = ['LVE','A/L','U/L','RDO','PH','JURY','OFF','LEAVE','TAFE','PENDING','DAY OFF','SICK'];
+    const isLv = s => !s || !s.trim() || leaveTerms.some(l => s.toUpperCase().trim().startsWith(l));
+    const staffLines = (src.people||[]).map(p => `  - ${p.name} (${[p.group,p.licence,p.agency].filter(Boolean).join(', ')})`).join('\n') || '  (none)';
+    const siteLines  = (src.sites||[]).map(s => `  - ${s.abbr}: ${s.name}${s.address?' — '+s.address:''}${s.site_lead?' [Lead: '+s.site_lead+']':''}`).join('\n') || '  (none)';
+    const days = ['mon','tue','wed','thu','fri','sat','sun'];
+    const dlbls = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const weekSched = (src.schedule||[]).filter(r => r.week === week);
+    const schedLines = weekSched.map(r => '  - ' + r.name + ': ' + days.map((d,i) => r[d]?dlbls[i]+':'+r[d]:'').filter(Boolean).join(' | ')).join('\n') || '  (no data)';
+    const onLeave = weekSched.filter(r => days.every(d => isLv(r[d]))).map(r => r.name);
+    return `You are EQ Agent, an AI scheduling assistant for an Australian electrical contracting business.\nToday: ${today}\nRoster week: ${week}\n\nBe direct and concise. Only reference data listed below — never invent staff or sites.\n\nSTAFF:\n${staffLines}\n\nSITES:\n${siteLines}\n\nSCHEDULE:\n${schedLines}\n\n${onLeave.length?'ON LEAVE ALL WEEK: '+onLeave.join(', ')+'\n\n':''}Leave codes: A/L=Annual Leave, RDO=RDO, U/L=Unpaid Leave, PH=Public Holiday. TAFE/TRAINING are education (not leave — still scheduled).\n\nPlain text only. Under 120 words unless detail requested.`;
+  }
+
+  async function send(overrideText) {
+    const input = document.getElementById('eq-agent-input');
+    const text  = (overrideText || input.value || '').trim();
+    if (!text) return;
+    const token = getSessionToken();
+    if (!token) {
+      addMsg('agent', 'Agent not authorised yet. Click your name in the top-right → Log out, then log back in with your PIN. (One-time setup after this update.)');
+      return;
+    }
+    input.value = ''; input.style.height = 'auto';
+    addMsg('user', text);
+    const sendBtn = document.getElementById('eq-agent-send-btn');
+    sendBtn.disabled = true;
+    chatHistory.push({ role:'user', content:text });
+    const thinking = addMsg('thinking', 'Thinking');
+    try {
+      const resp = await fetch('/.netlify/functions/eq-agent', {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-eq-token':   token
+        },
+        body: JSON.stringify({
+          system:   buildSystemPrompt(),
+          messages: chatHistory
+        })
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        // 401 → token expired/invalid → ask user to re-login
+        if (resp.status === 401) {
+          thinking.remove();
+          addMsg('agent', 'Agent session expired. Log out and log back in to refresh your access.');
+          return;
+        }
+        throw new Error(data.error || ('API error ' + resp.status));
+      }
+      const reply = data.reply || '(no response)';
+      chatHistory.push({ role:'assistant', content:reply });
+      thinking.remove();
+      addMsg('agent', reply);
+      if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+    } catch(err) {
+      thinking.remove();
+      addMsg('agent', 'Error: ' + err.message);
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const ta = document.getElementById('eq-agent-input');
+    if (ta) ta.addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 90) + 'px'; });
+  });
+
+  return { toggle, send };
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     APPRENTICE MODULE MODALS
+══════════════════════════════════════════════════════════════ -->
+
+<!-- Self-assessment modal -->
+<div class="modal-overlay" id="modal-apprentice-self">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h3 id="modal-sa-title">How am I going? 🤔</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-self')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sa-apprentice-id">
+      <div class="form-group">
+        <label class="form-label">Period</label>
+        <div id="sa-period-wrap"></div>
+      </div>
+      <div id="sa-competencies-grid" style="max-height:420px;overflow-y:auto;padding-right:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-self')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSelfAssessment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tradesman rating modal -->
+<div class="modal-overlay" id="modal-apprentice-trade-rating">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h3 id="modal-tr-title">How are they actually going? 😎</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-trade-rating')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="tr-apprentice-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <div id="tr-rater-wrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Period</label>
+          <div id="tr-period-wrap"></div>
+        </div>
+      </div>
+      <div id="tr-competencies-grid" style="max-height:380px;overflow-y:auto;padding-right:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-trade-rating')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTradesmanRating()">Save Ratings</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback modal -->
+<div class="modal-overlay" id="modal-apprentice-feedback">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3 id="modal-fb-title">Give Feedback</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-feedback')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fb-apprentice-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <div id="fb-name-wrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Site / Job Number</label>
+          <div id="fb-site-wrap"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Competency (optional)</label>
+          <select class="form-input" id="fb-competency" style="background:var(--surface)"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rating (optional)</label>
+          <select class="form-input" id="fb-rating" style="background:var(--surface)">
+            <option value="">— No rating —</option>
+            <option value="1">1 — Not confident</option>
+            <option value="2">2 — Need supervision</option>
+            <option value="3">3 — Some help</option>
+            <option value="4">4 — Confident</option>
+            <option value="5">5 — Could teach</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">✅ What they did well</label>
+        <select class="form-input" id="fb-did-well-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-did-well')"></select>
+        <textarea class="form-input" id="fb-did-well" rows="2" placeholder="Be specific — what did you actually observe?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">⏭ Trust them next with</label>
+        <select class="form-input" id="fb-trust-next-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-trust-next')"></select>
+        <textarea class="form-input" id="fb-trust-next" rows="2" placeholder="What's the next skill/task to stretch them?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🔧 Needs to improve</label>
+        <select class="form-input" id="fb-needs-improve-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-needs-improve')"></select>
+        <textarea class="form-input" id="fb-needs-improve" rows="2" placeholder="Specific and actionable"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">📌 Follow-up (optional)</label>
+        <select class="form-input" id="fb-follow-up-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-follow-up')"></select>
+        <input class="form-input" id="fb-follow-up" placeholder="Any actions or check-ins needed?">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-feedback')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFeedback()">Save Feedback</button>
+    </div>
+  </div>
+</div>
+
+<!-- Apprentice profile / goals modal -->
+<div class="modal-overlay" id="modal-apprentice-profile">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3 id="modal-ap-title">Add Apprentice Profile</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ap-edit-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Apprentice</label>
+          <select class="form-input" id="ap-person" style="background:var(--surface)"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Year Level</label>
+          <select class="form-input" id="ap-year" style="background:var(--surface)" onchange="refreshGoalSuggestions()">
+            <option value="1">1st Year</option>
+            <option value="2">2nd Year</option>
+            <option value="3">3rd Year</option>
+            <option value="4">4th Year</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Date</label>
+          <input class="form-input" id="ap-start-date" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Current Site</label>
+          <select class="form-input" id="ap-site" style="background:var(--surface)"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🔧 Technical Goal</label>
+        <select class="form-input" id="ap-goal-tech-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('tech')"></select>
+        <textarea class="form-input" id="ap-goal-tech" rows="2" placeholder="What technical skill are they working towards?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">💼 Professional Goal</label>
+        <select class="form-input" id="ap-goal-prof-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('prof')"></select>
+        <textarea class="form-input" id="ap-goal-prof" rows="2" placeholder="Workplace behaviour, communication, leadership..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🌱 Personal Goal</label>
+        <select class="form-input" id="ap-goal-personal-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('personal')"></select>
+        <textarea class="form-input" id="ap-goal-personal" rows="2" placeholder="Something personal they want to achieve..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-input" id="ap-notes" rows="2" placeholder="Any extra context for supervisors"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">Cancel</button>
+      <button class="btn btn-primary" onclick="saveApprenticeProfile()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rotation modal -->
+<div class="modal-overlay" id="modal-apprentice-rotation">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h3 id="modal-rot-title">Add Rotation</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-rotation')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="rot-apprentice-id">
+      <div class="form-group">
+        <label class="form-label">Project / Site Name</label>
+        <div id="rot-site-wrap"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Project Type</label>
+        <select class="form-input" id="rot-type" style="background:var(--surface)">
+          <option>Commercial</option>
+          <option>Data Centre</option>
+          <option>Healthcare</option>
+          <option>Industrial</option>
+          <option>Residential</option>
+          <option>Infrastructure</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Date</label>
+          <input class="form-input" id="rot-start" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Date (optional)</label>
+          <input class="form-input" id="rot-end" type="date">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Supervising Tradesman</label>
+        <div id="rot-supervisor-wrap"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Main Work Performed</label>
+        <textarea class="form-input" id="rot-main-work" rows="2" placeholder="What did they mainly work on?"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-rotation')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRotation()">Save</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- TAFE holidays modal -->
+<div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addTafeHoliday()">Add range</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-tafe-holidays')">Done</button></div></div></div>
+</body>
+</html>
