@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-// scripts/apprentices.js  —  EQ Solves Field  v2.0
+// scripts/apprentices.js  —  EQ Solves Field  v2.1
 // Apprentice Management: profiles, Skills Passport,
 // tradesman feedback, self-assessment, rotations.
 // Depends on: app-state.js, utils.js, supabase.js
@@ -12,6 +12,10 @@
 //   - Rater name dropdowns: contacts + supervision list, type-to-find
 //   - Feedback name: same combobox
 //   - Site/Project: job numbers list + free text
+// Changes v2.1 (shipped in app v3.4.5):
+//   - Growth view — positive-framed QoQ sparkline on Skills Passport
+//   - Follow-ups card — resolvable "things to help them with" on Overview
+//   - Check-in card — gentle flag of apprentices going quiet
 // ─────────────────────────────────────────────────────────────
 
 let apprenticeProfiles = [];
@@ -35,6 +39,13 @@ function getCurrentPeriod() {
   const yr = new Date().getFullYear();
   const q = m < 3 ? 1 : m < 6 ? 2 : m < 9 ? 3 : 4;
   return 'Q' + q + ' ' + yr;
+}
+
+// Parse a period string 'Q1 2026' into a comparable number: year*10+q
+function _periodRank(p) {
+  const m = /Q(\d)\s+(\d{4})/.exec(p || '');
+  if (!m) return 0;
+  return parseInt(m[2], 10) * 10 + parseInt(m[1], 10);
 }
 
 function periodSelectHtml(id, selected) {
@@ -172,6 +183,61 @@ function starDisplay(rating) {
   ).join('');
 }
 
+// ── Check-in signal helpers (v2.1) ────────────────────────────
+// Keep it simple: three cheap checks against already-loaded data.
+// Designed to nudge supervisors, not admin-ify anything.
+
+function _daysSince(isoOrDateStr) {
+  if (!isoOrDateStr) return Infinity;
+  const d = new Date(isoOrDateStr + (isoOrDateStr.length === 10 ? 'T00:00:00' : ''));
+  if (isNaN(d.getTime())) return Infinity;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+// Returns reasons (array of strings) this apprentice could use a check-in.
+// Empty array = doing fine.
+function checkInReasonsFor(profileId) {
+  const reasons = [];
+
+  // 1. No self-rating this quarter — only fires after the first 30 days of
+  //    the quarter, so we're not nagging people on 1 July.
+  const now = new Date();
+  const m = now.getMonth();
+  const qStartMonth = (m < 3 ? 0 : m < 6 ? 3 : m < 9 ? 6 : 9);
+  const qStart = new Date(now.getFullYear(), qStartMonth, 1);
+  const daysIntoQuarter = Math.floor((now - qStart) / 86400000);
+  if (daysIntoQuarter >= 30) {
+    const thisPeriod = getCurrentPeriod();
+    const hasSelfThisQ = skillsRatings.some(r =>
+      r.apprentice_id === profileId && r.rating_type === 'self' && r.period === thisPeriod
+    );
+    if (!hasSelfThisQ) reasons.push('No self-rating yet this quarter');
+  }
+
+  // 2. No feedback in 60+ days
+  const theirFeedback = feedbackEntries.filter(f => f.apprentice_id === profileId);
+  if (theirFeedback.length === 0) {
+    reasons.push('No feedback recorded yet');
+  } else {
+    const mostRecent = theirFeedback.reduce((best, f) => {
+      const d = _daysSince(f.feedback_date);
+      return d < best ? d : best;
+    }, Infinity);
+    if (mostRecent >= 60) reasons.push('No feedback in ' + mostRecent + ' days');
+  }
+
+  // 3. Open follow-up older than 30 days
+  const staleFollowUp = feedbackEntries.find(f =>
+    f.apprentice_id === profileId &&
+    f.follow_up &&
+    !f.resolved_at &&
+    _daysSince(f.feedback_date) >= 30
+  );
+  if (staleFollowUp) reasons.push('Open follow-up from ' + staleFollowUp.feedback_date);
+
+  return reasons;
+}
+
 // ── Main list render ──────────────────────────────────────────
 
 function renderApprentices() {
@@ -198,6 +264,11 @@ function renderApprentices() {
     html += '<button class="btn btn-primary btn-sm" onclick="openAddContact()">+ Add Contact</button>';
   }
   html += '</div>';
+
+  // Check-in card (manager-only, only if at least one apprentice has reasons)
+  if (isManager) {
+    html += renderCheckInCard(apprenticePeople);
+  }
 
   html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">';
 
@@ -242,6 +313,44 @@ function renderApprentices() {
 
   html += '</div>';
   container.innerHTML = html;
+}
+
+// ── Check-in card (v2.1) ──────────────────────────────────────
+// Gentle manager-only nudge. If no apprentice has any signal, the
+// card doesn't render at all (keeps the view clean most days).
+
+function renderCheckInCard(apprenticePeople) {
+  const flagged = [];
+  apprenticePeople.forEach(person => {
+    const profile = apprenticeProfiles.find(p =>
+      String(p.person_id) === String(person.id) || p._resolvedName === person.name
+    );
+    if (!profile) return; // no profile yet — handled elsewhere
+    const reasons = checkInReasonsFor(profile.id);
+    if (reasons.length) flagged.push({ person, profile, reasons });
+  });
+
+  if (!flagged.length) return '';
+
+  let html = '<div class="roster-card" style="padding:16px 20px;margin-bottom:16px;background:linear-gradient(135deg,#FFFBEB 0%,#FEF3C7 100%);border-left:4px solid #D97706">';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+  html += '<div style="font-size:22px">☕</div>';
+  html += '<div>';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--navy)">Who could use a quick check-in?</div>';
+  html += '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">A 5-minute chat goes a long way — these apprentices have gone a bit quiet.</div>';
+  html += '</div></div>';
+
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  flagged.forEach(f => {
+    const reasonText = f.reasons.join(' · ');
+    html += '<button onclick="openApprenticeProfile(' + f.profile.id + ',\'' + esc(f.person.name) + '\')" style="background:white;border:1px solid #FDE68A;border-radius:10px;padding:10px 14px;text-align:left;cursor:pointer;font-family:inherit;min-width:200px;transition:transform .1s" onmouseover="this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.transform=\'\'">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:2px">' + esc(f.person.name) + '</div>';
+    html += '<div style="font-size:11px;color:var(--ink-3);line-height:1.4">' + esc(reasonText) + '</div>';
+    html += '</button>';
+  });
+  html += '</div>';
+  html += '</div>';
+  return html;
 }
 
 // ── Open profile (or redirect to Add Contact) ─────────────────
@@ -346,6 +455,9 @@ function renderApprenticeOverviewTab(profile, personName, person) {
   });
   html += '</div></div>';
 
+  // Follow-ups card (v2.1) — only shows if there's something to resolve
+  html += renderFollowUpsCard(profile, personName);
+
   // Details card — from contact record
   html += '<div class="roster-card" style="padding:18px 20px">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">';
@@ -397,10 +509,79 @@ function renderApprenticeOverviewTab(profile, personName, person) {
   return html;
 }
 
+// ── Follow-ups card (v2.1) ────────────────────────────────────
+// "Things to help them with" — unresolved follow_up items on the
+// apprentice's feedback history. One-tap resolve. Soft amber nudge
+// only on items older than 30 days. Card hides itself when empty.
+
+function renderFollowUpsCard(profile, personName) {
+  const open = feedbackEntries
+    .filter(f => f.apprentice_id === profile.id && f.follow_up && !f.resolved_at)
+    .sort((a, b) => (a.feedback_date || '').localeCompare(b.feedback_date || ''));
+
+  if (!open.length) return '';
+
+  let html = '<div class="roster-card" style="padding:18px 20px;grid-column:1/-1">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  html += '<div>';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--navy)">🌱 Things to help ' + esc((personName || '').split(' ')[0] || 'them') + ' with</div>';
+  html += '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">Open follow-ups from recent feedback — tick them off as you chat.</div>';
+  html += '</div>';
+  html += '<div style="font-size:11px;color:var(--ink-3);font-weight:600">' + open.length + ' open</div>';
+  html += '</div>';
+
+  open.forEach(f => {
+    const ageDays = _daysSince(f.feedback_date);
+    const stale = ageDays >= 30;
+    const dateStr = new Date(f.feedback_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    const cardBg = stale ? '#FFFBEB' : 'var(--surface-2)';
+    const cardBorder = stale ? '1px solid #FDE68A' : '1px solid var(--border)';
+
+    html += '<div style="background:' + cardBg + ';border:' + cardBorder + ';border-radius:8px;padding:10px 12px;margin-bottom:8px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:12px;color:var(--ink);line-height:1.5">' + esc(f.follow_up) + '</div>';
+    html += '<div style="font-size:10px;color:var(--ink-3);margin-top:4px">From ' + esc(f.submitted_by || 'feedback') + ' · ' + dateStr;
+    if (stale) html += ' <span style="color:#D97706;font-weight:600">· ' + ageDays + ' days open</span>';
+    html += '</div></div>';
+    if (isManager) {
+      html += '<button onclick="resolveFollowUp(' + f.id + ',' + profile.id + ')" class="btn btn-primary btn-sm" style="white-space:nowrap">Done — had the chat</button>';
+    }
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+async function resolveFollowUp(feedbackId, profileId) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const note = prompt('How did it go? (optional — leave blank to just mark done)', '') || null;
+  try {
+    await sbFetch('feedback_entries?id=eq.' + feedbackId, 'PATCH', {
+      resolved_at: new Date().toISOString(),
+      resolution_note: note && note.trim() ? note.trim() : null,
+      resolved_by: currentManagerName || null,
+    });
+    // Update in-memory
+    const idx = feedbackEntries.findIndex(f => f.id === feedbackId);
+    if (idx >= 0) {
+      feedbackEntries[idx].resolved_at = new Date().toISOString();
+      feedbackEntries[idx].resolution_note = note && note.trim() ? note.trim() : null;
+      feedbackEntries[idx].resolved_by = currentManagerName || null;
+    }
+    showToast('Nice — marked sorted ✓');
+    renderApprenticeProfile(profileId);
+  } catch (e) {
+    showToast('Couldn\'t save — check connection');
+  }
+}
+
 // ── Skills Passport tab ───────────────────────────────────────
 
 function renderSkillsPassportTab(profile) {
-  const periods = [...new Set(skillsRatings.filter(r => r.apprentice_id === profile.id).map(r => r.period))].sort();
+  const periods = [...new Set(skillsRatings.filter(r => r.apprentice_id === profile.id).map(r => r.period))]
+    .sort((a, b) => _periodRank(a) - _periodRank(b));
   const latestPeriod = periods[periods.length - 1] || null;
 
   let html = '<div style="margin-top:16px">';
@@ -418,6 +599,10 @@ function renderSkillsPassportTab(profile) {
     return html;
   }
   html += renderPassportGrid(profile.id, latestPeriod);
+
+  // Growth view (v2.1) — only shows if there are at least 2 periods of self ratings
+  html += renderGrowthView(profile.id, periods);
+
   html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">';
   html += '<button class="btn btn-primary btn-sm" onclick="openSelfAssessmentForm(' + profile.id + ')">How am I going? 🤔</button>';
   if (isManager) {
@@ -482,6 +667,110 @@ function renderPassportGrid(apprenticeId, period) {
   return html;
 }
 
+// ── Growth view (v2.1) ────────────────────────────────────────
+// Positive-framed QoQ sparkline. Uses SELF ratings (apprentice's own
+// view of their progress). Shows last 4 periods, one row per
+// competency, coloured dots + delta chip. Flat/dipping periods get
+// soft amber framing (not red) — this is about forward momentum,
+// not compliance.
+
+function renderGrowthView(apprenticeId, allPeriods) {
+  if (!allPeriods || allPeriods.length < 2) return '';
+
+  const window4 = allPeriods.slice(-4); // last up to 4 periods
+  const selfForApp = skillsRatings.filter(r =>
+    r.apprentice_id === apprenticeId && r.rating_type === 'self'
+  );
+  // Only include competencies that have at least 2 data points in the window
+  const trendRows = [];
+  competencies.forEach(comp => {
+    const points = window4.map(p => {
+      const hit = selfForApp.find(r => r.competency_id === comp.id && r.period === p);
+      return hit ? hit.rating : null;
+    });
+    const dataPoints = points.filter(v => v !== null);
+    if (dataPoints.length < 2) return;
+    const first = dataPoints[0];
+    const last = dataPoints[dataPoints.length - 1];
+    const delta = last - first;
+    trendRows.push({ comp, points, first, last, delta });
+  });
+
+  if (!trendRows.length) return '';
+
+  const grewCount = trendRows.filter(r => r.delta > 0).length;
+
+  let html = '<div class="roster-card" style="padding:16px 20px;margin-top:14px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--navy)">📈 How you\'ve grown</div>';
+  html += '<div style="font-size:11px;color:var(--ink-3)">Last ' + window4.length + ' quarters · self ratings</div>';
+  html += '</div>';
+
+  if (grewCount > 0) {
+    html += '<div style="font-size:12px;color:var(--ink-2);margin-bottom:12px">You\'ve gained ground in <strong style="color:#16A34A">' + grewCount + ' area' + (grewCount === 1 ? '' : 's') + '</strong> across this window — nice work.</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--ink-2);margin-bottom:12px">Steady through this window. A new rating will show fresh movement.</div>';
+  }
+
+  // Row per competency: label | dots | delta chip
+  trendRows.forEach(({ comp, points, delta }) => {
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">';
+    html += '<div style="flex:1;min-width:0;color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(comp.name) + '</div>';
+    html += '<div>' + _renderDotStrip(points) + '</div>';
+    html += '<div style="min-width:52px;text-align:right">' + _renderDeltaChip(delta) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function _renderDotStrip(points) {
+  // points is array of (1-5 rating | null). Render as SVG horizontal dots.
+  const w = 96;
+  const h = 22;
+  const n = points.length;
+  const gap = n > 1 ? w / (n - 1) : 0;
+  let svg = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block">';
+  // Connector line (low-contrast)
+  for (let i = 0; i < n - 1; i++) {
+    if (points[i] !== null && points[i + 1] !== null) {
+      const x1 = i * gap;
+      const x2 = (i + 1) * gap;
+      const y1 = _scoreToY(points[i], h);
+      const y2 = _scoreToY(points[i + 1], h);
+      svg += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#CBD5E1" stroke-width="1.5"/>';
+    }
+  }
+  // Dots
+  points.forEach((p, i) => {
+    const x = i * gap;
+    const y = p !== null ? _scoreToY(p, h) : (h / 2);
+    const col = p !== null ? ratingColor(p) : '#E5E7EB';
+    const r = p !== null ? 4 : 3;
+    svg += '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + col + '"/>';
+  });
+  svg += '</svg>';
+  return svg;
+}
+
+function _scoreToY(score, h) {
+  // 1 → bottom, 5 → top, with small inset
+  const inset = 3;
+  const usable = h - inset * 2;
+  const t = (score - 1) / 4; // 0..1
+  return (h - inset) - t * usable;
+}
+
+function _renderDeltaChip(delta) {
+  if (delta > 0) {
+    return '<span style="display:inline-block;font-size:11px;font-weight:700;color:#16A34A;background:#F0FDF4;padding:2px 8px;border-radius:10px">▲ +' + delta.toFixed(0) + '</span>';
+  }
+  if (delta < 0) {
+    return '<span style="display:inline-block;font-size:11px;font-weight:700;color:#D97706;background:#FFFBEB;padding:2px 8px;border-radius:10px">▼ ' + delta.toFixed(0) + '</span>';
+  }
+  return '<span style="display:inline-block;font-size:11px;font-weight:700;color:#64748B;background:#F1F5F9;padding:2px 8px;border-radius:10px">— steady</span>';
+}
+
 function renderPassportForPeriod(apprenticeId, period) {
   const container = document.getElementById('apprentices-content');
   if (!container) return;
@@ -527,6 +816,15 @@ function renderFeedbackTab(profile, personName) {
       html += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">' + label + '</div>';
       html += '<div style="font-size:12px;color:var(--ink-2);line-height:1.5;padding-left:8px;border-left:3px solid var(--border)">' + esc(val) + '</div></div>';
     });
+    // v2.1 — show resolution state on follow-ups inline in feedback feed
+    if (entry.follow_up && entry.resolved_at) {
+      const resolvedStr = new Date(entry.resolved_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      html += '<div style="margin-top:6px;padding:8px 10px;background:#F0FDF4;border-left:3px solid #16A34A;border-radius:4px;font-size:11px;color:#166534">';
+      html += '✓ Sorted ' + resolvedStr;
+      if (entry.resolved_by) html += ' by ' + esc(entry.resolved_by);
+      if (entry.resolution_note) html += ' — <em>' + esc(entry.resolution_note) + '</em>';
+      html += '</div>';
+    }
     html += '</div>';
   });
   html += '</div>';

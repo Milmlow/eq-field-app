@@ -32,7 +32,10 @@ async function saveTafeHolidays() {
     const res = await sbFetch('app_config?key=eq.tafe_holidays', 'PATCH', { value: payload });
     // If PATCH returns [] (no row), create it
     if (!res || (Array.isArray(res) && res.length === 0)) {
-      await sbFetch('app_config', 'POST', { key: 'eq.tafe_holidays', value: payload });
+      // NOTE: key stored as literal 'tafe_holidays' — 'eq.' is a Supabase
+      // filter operator used in the PATCH query string above, not part of
+      // the stored key value. (Fixed v3.4.5.)
+      await sbFetch('app_config', 'POST', { key: 'tafe_holidays', value: payload });
     }
   } catch (e) {
     // Fall back to localStorage
