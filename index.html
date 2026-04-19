@@ -5,18 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EQ Solves — Field</title>
 <meta name="description" content="EQ Solves — Field | Labour Forecast &amp; Roster">
-<meta name="theme-color" content="#1F335C">
+<meta name="theme-color" content="#3DA8D8">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
 <link rel="manifest" href="/manifest.json">
 <!-- SKS Labour — Favicon & Home Screen Icons -->
-<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48x48.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/favicon-192x192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icons/favicon-512x512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,6 +22,7 @@
 <link rel="stylesheet" href="styles/base.css">
 <link rel="stylesheet" href="styles/print.css">
 <link rel="stylesheet" href="styles/mobile.css">
+<link rel="stylesheet" href="styles/apprentices.css">
 
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
@@ -38,7 +35,6 @@
 <script src="scripts/dashboard.js"></script>
 <script src="scripts/batch.js"></script>
 <script src="scripts/leave.js"></script>
-<script src="scripts/tafe.js"></script>
 <script src="scripts/timesheets.js"></script>
 <script src="scripts/jobnumbers.js"></script>
 <script src="scripts/trial-dashboard.js"></script>
@@ -47,26 +43,238 @@
 <script src="scripts/audit.js"></script>
 <script src="scripts/realtime.js"></script>
 <script src="scripts/auth.js"></script>
+<script src="scripts/apprentices.js"></script>
+<script src="scripts/journal.js"></script>
+<script src="scripts/tafe.js"></script>
+
+<style>
+/* ── Gate redesign override ─────────────────────────────────── */
+#access-gate {
+  background: #0B1628 !important;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 35%, rgba(61,168,216,.2) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 50% at 15% 85%, rgba(41,134,180,.1) 0%, transparent 55%) !important;
+}
+#access-gate::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #3DA8D8 40%, #2986B4 60%, transparent 100%);
+  animation: gateShimmer 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+@keyframes gateShimmer {
+  0%,100% { opacity: .5; transform: scaleX(.7); }
+  50%     { opacity: 1;  transform: scaleX(1); }
+}
+.gate-card {
+  background: rgba(255,255,255,.045) !important;
+  border: 1px solid rgba(61,168,216,.22) !important;
+  border-radius: 24px !important;
+  padding: 40px 36px 32px !important;
+  max-width: 420px !important;
+  align-items: center !important;
+  text-align: center !important;
+  gap: 0 !important;
+  box-shadow:
+    0 0 0 1px rgba(61,168,216,.06),
+    0 40px 100px rgba(0,0,0,.55),
+    0 0 80px rgba(61,168,216,.06) inset !important;
+  animation: gateCardIn .55s cubic-bezier(.2,.8,.2,1) both;
+}
+@keyframes gateCardIn {
+  from { opacity: 0; transform: translateY(20px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Logo */
+.gate-logo { 
+  font-size: 28px !important; 
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  margin-bottom: 12px !important;
+}
+/* Title */
+.gate-title {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  color: white !important;
+  text-align: center !important;
+  letter-spacing: -.4px !important;
+  width: 100% !important;
+  margin-bottom: 4px !important;
+}
+/* Subtitle */
+.gate-sub {
+  font-size: 11px !important;
+  color: rgba(255,255,255,.4) !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  letter-spacing: .8px !important;
+  width: 100% !important;
+  margin-bottom: 28px !important;
+}
+/* PIN input */
+.gate-input {
+  background: rgba(255,255,255,.06) !important;
+  border: 1.5px solid rgba(61,168,216,.28) !important;
+  border-radius: 12px !important;
+  font-size: 22px !important;
+  letter-spacing: 10px !important;
+  padding: 14px 16px !important;
+  transition: border-color .2s, background .2s, box-shadow .2s !important;
+}
+.gate-input:focus {
+  border-color: #3DA8D8 !important;
+  background: rgba(61,168,216,.08) !important;
+  box-shadow: 0 0 0 3px rgba(61,168,216,.15) !important;
+}
+.gate-input::placeholder { letter-spacing: 8px !important; }
+/* Enter button */
+.gate-btn {
+  background: linear-gradient(135deg, #3DA8D8 0%, #2986B4 100%) !important;
+  border-radius: 12px !important;
+  padding: 15px !important;
+  font-size: 15px !important;
+  letter-spacing: .5px !important;
+  box-shadow: 0 4px 24px rgba(61,168,216,.4) !important;
+  transition: all .2s !important;
+  margin-top: 4px !important;
+}
+.gate-btn:hover {
+  box-shadow: 0 8px 32px rgba(61,168,216,.55) !important;
+  transform: translateY(-1px) !important;
+}
+.gate-btn:active { transform: translateY(0) !important; }
+/* Error */
+.gate-error { text-align: center !important; width: 100% !important; }
+/* Labels inside gate */
+#gate-pin-wrap label,
+#access-gate label[for="gate-name-search"] {
+  text-align: left !important;
+}
+/* Divider above secondary buttons */
+#access-gate > .gate-card > div:last-of-type {
+  border-top: 1px solid rgba(61,168,216,.12) !important;
+}
+</style>
 </head>
 <body>
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.0
+  EQ Solves — Field  v3.4.8
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.4.0  (Timesheet Upsert Fix + Cache Busting)
+  CHANGES IN v3.4.8  (Leave Module — ported from SKS v3.4.5)
   ──────────────────────────────────────────────────────────
-  - Timesheets: fixed 409 Conflict errors on save. PostgREST upsert
-    on_conflict columns were incorrectly placed in the URL query string
-    instead of the Prefer header. Affects saveTsCell, runTsBatch, and
-    the CSV import path. All three now use the correct Prefer header
-    format: resolution=merge-duplicates,on_conflict=name,week,org_id.
-  - Service worker: bumped cache to eq-field-v3.4.0 and updated comment
-    version. SW already uses network-first strategy for JS/CSS so updates
-    propagate immediately after SW reinstall.
-  - Data: cleaned orphaned timesheet rows (hrs without job, job without
-    hrs, and test data from 06.04.26) from production Supabase.
+  - scripts/leave.js now shipped on EQ Field demo. Previously the leave
+    modals in index.html were a UI stub with no JS behind them. All leave
+    handlers (openLeaveRequest, submitLeaveRequest, respondLeave, CC
+    config, calendar, archive, withdraw, resend) are now live.
+  - Supervisor selection is required on submit. Empty approver →
+    red-highlight + scroll + focus + toast: "⚠ Choose your supervisor —
+    they need to approve this request". Approver dropdown excludes the
+    requester so people can't pick themselves.
+  - Rejection now requires a reason note. Empty response note on Reject →
+    red-highlight + toast: "⚠ Add a reason when rejecting — the
+    requester will see this".
+  - Backdated-leave guard. Submitting a request with a start date before
+    today triggers modal-confirm before insert — prevents stale
+    date-picker accidents.
+  - Withdraw pending request. New "Withdrawn" status. Button visible to
+    the requester (matched via sessionStorage eq_logged_in_name) or any
+    supervisor. Only available while status is Pending.
+  - Confirmation email to the requester on submit (new
+    submit_confirmation type on triggerLeaveEmail) — recipients have a
+    receipt in their inbox.
+  - CC supervisors on status emails. Approval/rejection emails now CC
+    leaveCCList so the whole supervisor chain sees outcomes, not just
+    the requester.
+  - Status-update emails fall through to STATE.managers when the
+    requester isn't in STATE.people — supervisors submitting their own
+    leave still receive the approved/rejected email.
+  - CC config modal: new "Quick-add from Supervisors" chip strip above
+    the manual CC list. Toggleable chips (✓/+) keep the CC list and the
+    chip state in sync.
+  - Approver field copy updated. Label is now "Your Supervisor *" with
+    helper text "📧 Your approval email will be sent to this supervisor
+    — the request is not flagged to anyone without a selection."
+    Placeholder changed to "Select your supervisor".
+  - Email CTA URLs now use ${window.location.origin} so preview/branch
+    deploys link back to themselves, not the hard-coded host.
+  - DB: new migration makes leave_requests.approver_name NOT NULL +
+    CHECK (approver_name <> ''). Pre-check query in the migration file.
+    Apply to EQ demo Supabase (ktmjmdzqrogauaevbktn) after confirming
+    the count is 0.
+
+  CHANGES IN v3.4.7  (Apprentices v2.3 — Tier 2: Self-goals + Ask for Feedback + Journal)
+  ──────────────────────────────────────────────────────────
+  - Apprentices can edit their own Development Goals without supervisor
+    unlock. Year, start date, site & notes stay supervisor-managed (they
+    appear dimmed in the edit modal for apprentices). Audit line shows
+    "Last edited by X on DATE" under the goals grid.
+    (scripts/apprentices.js — canEditThisProfile gate)
+  - New "💬 Ask for Feedback" button on the apprentice's own Overview.
+    Apprentice picks a supervisor, optional prompt, fires an email with
+    a deep link (?request=<id>) and drops a row in feedback_requests.
+    Supervisor sees inbound asks as a purple card above their Check-in
+    card. When they submit via the deep link, the request is stamped
+    completed_at + feedback_entry_id. Email uses navy/purple brand.
+    (scripts/apprentices.js, modal-request-feedback)
+  - New 📓 Journal tab on apprentice profiles. Apprentice-initiated only
+    (no streaks, no nagging). Rotating prompts across Technical /
+    Professional / Personal / Open axes; all prompts are "Another" or
+    "Skip" — free-text always fine. Entries are private by default with
+    a per-entry "Share with supervisor" toggle. Manager view only shows
+    shared entries; rest stays private.
+    (NEW: scripts/journal.js)
+  - DB: apprentice_profiles gained goals_updated_at + goals_updated_by;
+    new feedback_requests and apprentice_journal tables on demo Supabase.
+
+  CHANGES IN v3.4.6  (Apprentices v2.2 — Presets + Custom Skills + Passport Fix)
+  ──────────────────────────────────────────────────────────
+  - Skills Passport default period: now prefers the current quarter when
+    it has data (was defaulting to the highest-ranked future period, which
+    could hide a just-submitted self rating). Fall back to latest if the
+    current quarter is empty. (scripts/apprentices.js)
+  - Add Person: Group = Apprentice now swaps the free-text Licence field
+    for a 1st/2nd/3rd/4th Year dropdown. (scripts/people.js, index.html)
+  - Apprentice profile: Technical / Professional / Personal goals now
+    offer a dropdown of year-appropriate example goals plus a "Type my
+    own" option that drops focus into the textarea. Suggestions refresh
+    when year level changes. (scripts/apprentices.js, index.html)
+  - Give Feedback: each of the four text fields (did-well / trust-next /
+    needs-improve / follow-up) now has a preset-suggestion dropdown plus
+    "Type my own". Supportive prompts, not a prescriptive list.
+  - Skills Passport: supervisors can now add a custom skill to a single
+    apprentice's passport (e.g. "Thermal scanning"). Custom skills appear
+    inline with standard comps, carry a ✨ custom tag, can be rated on
+    the self and tradesman forms, and can be removed by the supervisor.
+    Stored as JSON on apprentice_profiles — the global competency catalog
+    stays clean across tenants.
+  - DB: apprentice_profiles gained custom_competencies + custom_ratings
+    JSONB columns (migration applied on demo Supabase).
+
+  CHANGES IN v3.4.5  (Apprentices v2.1 — Growth View + Follow-ups + Check-in)
+  ──────────────────────────────────────────────────────────
+  - Skills Passport: new "How you've grown" panel showing last 4 quarters
+    per competency as a sparkline with delta chips. Positive-framed.
+    Pure SVG — no new deps. (scripts/apprentices.js)
+  - Apprentice Overview: new "Things to help them with" card listing open
+    follow-up items from feedback entries. Inline "Done — had the chat"
+    button resolves the item with an optional note. Items older than 30
+    days get a soft amber background (not red — supportive nudge).
+  - Apprentices list: new manager-only "Who needs a check-in?" card at
+    the top. Flags apprentices who (a) have no self-rating this quarter,
+    (b) haven't had feedback in 60+ days, or (c) have an open follow-up
+    older than 30 days. Click-through opens their profile.
+  - tafe.js: fixed app_config POST fallback that was writing the key as
+    'eq.tafe_holidays' (with Supabase filter operator leaking into the
+    stored key). Now stores as 'tafe_holidays' to match the PATCH path.
+  - DB: feedback_entries gained resolved_at / resolution_note /
+    resolved_by columns (migration already applied on demo Supabase).
 
   CHANGES IN v3.3.9  (Sites Fix + Clear Week + Job Sort + Conflict Fix)
   ──────────────────────────────────────────────────────────
@@ -165,10 +373,10 @@
      ═══════════════════════════════════════════════════════════ -->
 <div id="access-gate" class="hidden">
   <div class="gate-card" style="">
-    <div class="gate-logo" id="gate-logo">🔑</div>
+    <div class="gate-logo" id="gate-logo"><svg style="height:52px;width:auto;display:block;margin:0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="130 325 764 370"><path fill="#3DA8D8" d="M721.22,622.17l46.95,47q-31,12.78-67,12.78-70.68,0-121.58-48.84a162,162,0,0,1-31.23-40.81c15.14-18.46,31.52-39,46-58.58q5.83,34.5,28.53,58.21,30.47,31.86,78.27,31.85A121.63,121.63,0,0,0,721.22,622.17Z"/><path fill="#3DA8D8" d="M874.32,508.74q0,36.54-12.29,67l-52.8-52.81c.45-4.58.65-9.33.65-14.2q0-51.27-30.45-83.1t-78.27-31.89c-41.88,0-71.72,22-93.95,55.63-23.45,35.54-44.66,72.83-73.39,104.55C493,599,439.3,647.71,390.38,667.77c-2.58,1.07-5.2,2.09-7.86,3-.53.21-1,.37-1.55.53-1.11.37-2.22.74-3.28,1.11-3.89,1.23-7.41,2.25-10.6,3.11-1.19.33-2.34.61-3.44.86-.82.2-1.6.41-2.37.57-6.47,1.52-10.36,2.09-11.1,2.17a.31.31,0,0,1-.12,0,217.44,217.44,0,0,1-34.71,2.71q-70.68,0-121.58-48.84T142.89,508.74q0-75.47,50.88-124.32t121.58-48.84q56.11,0,96.28,27.35t65.08,77.94L251.61,565.56l-25.05-48.72,164.39-91Q374.32,409.1,358,401.45t-42.65-7.7q-47.83,0-78.31,31.89t-30.5,83.1q0,51.27,30.5,83.14t78.31,31.85a213,213,0,0,0,43.18-6.35c66.73-17.07,122.15-91,160.31-144.09,20.46-28.45,35.28-64.47,60.7-88.87q50.91-48.81,121.58-48.84,71.3,0,122.23,48.84T874.32,508.74Z"/><rect fill="#3DA8D8" x="745.11" y="474.28" width="66.9" height="223.16" transform="translate(-186.23 722.12) rotate(-45)"/></svg></div>
     <div class="gate-title"><span id="gate-org-name">EQ Solves — Field</span></div>
     <div class="gate-sub" id="gate-sub">EQ Solves — Field Demo</div>
-    <div style="margin-bottom:12px;width:100%">
+    <div style="margin-bottom:16px;width:100%">
       <label for="gate-name-search" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Who are you?</label>
       <input type="hidden" id="gate-name" value="Demo Supervisor">
       <div id="gate-selected-name" onclick="toggleGateNamePicker()" style="font-size:15px;padding:12px 14px;width:100%;background:var(--surface);color:var(--ink-4);border:2px solid var(--border);border-radius:10px;font-family:inherit;font-weight:600;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;align-items:center;min-height:48px">
@@ -182,17 +390,17 @@
         <div id="gate-name-list" style="max-height:min(300px,50vh);overflow-y:auto;padding:4px 0"></div>
       </div>
     </div>
-    <div id="gate-pin-wrap" style="width:100%">
+    <div id="gate-pin-wrap" style="width:100%;margin-bottom:4px">
       <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
       <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
     </div>
     <div class="gate-error" id="gate-err"></div>
-    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px">
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:14px">
       <input type="checkbox" id="gate-remember" style="width:16px;height:16px;accent-color:var(--purple)">
       <label for="gate-remember" id="gate-remember-label" style="font-size:11px;color:var(--ink-3);cursor:pointer">Remember me for 24 hours</label>
     </div>
     <div id="gate-disclaimer" style="display:none;width:100%;margin-top:14px;padding-top:12px;border-top:1px solid rgba(31,51,92,.12);font-size:10px;line-height:1.4;color:var(--ink-3);text-align:center"></div>
-    <div id="gate-demo-codes" style="background:linear-gradient(135deg,#1F335C 0%,#2a4a7f 100%);border-radius:12px;padding:14px 18px;margin-bottom:14px;width:100%;box-sizing:border-box">
+    <div id="gate-demo-codes" style="background:rgba(255,255,255,.06);border:1px solid rgba(61,168,216,.2);border-radius:12px;padding:14px 18px;margin-bottom:18px;width:100%;box-sizing:border-box">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:rgba(255,255,255,.5);margin-bottom:10px">🔑 Demo access codes</div>
       <div style="display:flex;gap:12px;justify-content:center">
         <div style="text-align:center;flex:1;background:rgba(255,255,255,.08);border-radius:8px;padding:10px 8px">
@@ -206,10 +414,10 @@
       </div>
     </div>
     <button class="gate-btn" onclick="checkPin()">Enter</button>
-    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:8px">
-      <button onclick="openStaffTsGate()" style="background:none;border:1px solid rgba(124,119,185,.4);color:var(--purple);font-size:11px;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600">⏱ My Timesheet →</button>
-      <button onclick="openAgencyGate()" style="background:none;border:1px solid rgba(31,51,92,.2);color:var(--navy-3);font-size:11px;padding:8px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%">Agency Access →</button>
-      <button onclick="localStorage.clear();sessionStorage.clear();location.reload()" style="background:none;border:1px solid rgba(124,119,185,.3);color:var(--purple);font-size:12px;cursor:pointer;font-family:inherit;margin-top:10px;padding:8px 18px;border-radius:8px;width:100%;font-weight:600">Having trouble logging in? Tap here to reset</button>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(61,168,216,.12);display:flex;flex-direction:column;gap:8px;width:100%">
+      <button onclick="openStaffTsGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">⏱ My Timesheet →</button>
+      <button onclick="openAgencyGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">Agency Access →</button>
+      <button onclick="localStorage.clear();sessionStorage.clear();location.reload()" style="background:none;border:1px solid rgba(61,168,216,.2);color:rgba(61,168,216,.55);font-size:11px;cursor:pointer;font-family:inherit;margin-top:4px;padding:8px 18px;border-radius:8px;width:100%;font-weight:500;text-align:center">Having trouble logging in? Tap here to reset</button>
     </div>
   </div>
 </div>
@@ -297,6 +505,7 @@
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices</button>
       <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
   </div>
@@ -310,7 +519,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.5</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.8</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
@@ -479,10 +688,10 @@
       <div class="section-actions">
         <span style="font-size:11px;color:var(--ink-3);margin-right:8px">Auto-saves</span>
         <button class="btn btn-secondary btn-sm" id="editor-sort-btn" onclick="toggleEditorSort()">A–Z ▲</button>
-        <button class="btn btn-secondary btn-sm edit-only" onclick="copyLastWeek()">📋 Copy Last Week</button>
+        <button class="btn btn-secondary btn-sm edit-only" onclick="copyLastWeek()"
+        >>📋 Copy Last Week</button>
         <button class="btn btn-secondary btn-sm edit-only" onclick="applyTafeDayForWeek()" title="Fill empty cells for apprentices on their nominated TAFE day (skips holidays)">🎓 Apply TAFE Day</button>
         <button class="btn btn-secondary btn-sm edit-only" onclick="openTafeHolidaysConfig()" title="Manage TAFE holiday date ranges">📆 TAFE Holidays</button>
-        <button class="btn btn-secondary btn-sm edit-only" onclick="sendWeeklyRosterEmails()" title="Email this week's roster to site leads">📧 Email Roster</button>
         <button class="btn btn-secondary btn-sm" onclick="openBatchFill()">⚡ Batch Fill</button>
         <button class="btn btn-secondary btn-sm" onclick="openAddPerson()">＋ Add Person</button>
         <button class="btn btn-secondary btn-sm" onclick="openAddSite()">＋ Add Site</button>
@@ -497,7 +706,7 @@
         <button class="btn btn-sm" id="leave-view-list" onclick="setLeaveView('list')" style="border-radius:7px 0 0 7px;border:none;font-size:11px">📋 List</button>
         <button class="btn btn-secondary btn-sm" id="leave-view-cal" onclick="setLeaveView('calendar')" style="border-radius:0 7px 7px 0;border:none;font-size:11px">📅 Calendar</button>
       </div>
-      <select class="filter-select" id="leave-filter-status" onchange="renderLeave()"><option value="">All Requests</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Rejected">Rejected</option><option value="Withdrawn">Withdrawn</option></select>
+      <select class="filter-select" id="leave-filter-status" onchange="renderLeave()"><option value="">All Requests</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Rejected">Rejected</option></select>
       <input type="text" id="leave-search" placeholder="Search name…" oninput="renderLeave()" class="filter-select" style="min-width:160px">
       <span style="flex:1"></span>
       <button class="btn btn-secondary btn-sm edit-only" onclick="openLeaveCCConfig()" style="font-size:11px">✉ Email CC List</button>
@@ -594,18 +803,15 @@
         </div>
         <div id="backup-restore-preview" style="display:none;margin-top:12px"></div>
       </div>
-      <div class="section-header" style="margin-bottom:10px"><div class="section-title">👤 All Employees</div></div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">👤 People / Contacts</div></div>
       <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
-        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export all staff and supervisors as a single CSV. Includes contact details, group, role, and TAFE day.</p>
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export contacts as CSV, edit in Excel, re-import. <strong style="color:var(--navy)">Importing will replace all existing contacts.</strong></p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-          <button class="btn btn-primary btn-sm" onclick="exportAllEmployeesCSV()">↓ Export All Employees</button>
+          <button class="btn btn-primary btn-sm" onclick="exportPeopleCSV()">↓ Export People CSV</button>
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-people-file').click()">↑ Import People CSV</button>
           <input type="file" id="import-people-file" accept=".csv" style="display:none" onchange="importPeopleCSV(this)">
-          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-managers-file2').click()">↑ Import Supervision CSV</button>
-          <input type="file" id="import-managers-file2" accept=".csv" style="display:none" onchange="importManagersCSV(this)">
         </div>
         <div id="import-people-preview" style="display:none"></div>
-        <div id="import-managers-preview2" style="display:none"></div>
       </div>
       <div class="section-header" style="margin-bottom:10px"><div class="section-title">🏗 Sites</div></div>
       <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
@@ -626,6 +832,16 @@
           <input type="file" id="import-schedule-file" accept=".csv" style="display:none" onchange="importScheduleCSV(this)">
         </div>
         <div id="import-schedule-preview" style="display:none"></div>
+      </div>
+      <div class="section-header" style="margin-bottom:10px"><div class="section-title">☎ Supervision Contacts</div></div>
+      <div class="roster-card" style="padding:18px 20px;margin-bottom:20px">
+        <p style="font-size:12px;color:var(--ink-2);margin-bottom:14px;line-height:1.6">Export supervision contacts, update, re-import. <strong style="color:var(--navy)">Importing will replace all existing contacts.</strong></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="exportManagersCSV()">↓ Export Supervision CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-managers-file2').click()">↑ Import Supervision CSV</button>
+          <input type="file" id="import-managers-file2" accept=".csv" style="display:none" onchange="importManagersCSV(this)">
+        </div>
+        <div id="import-managers-preview2" style="display:none"></div>
       </div>
       <div class="section-header" style="margin-bottom:10px"><div class="section-title" style="color:var(--red)">⚠ Reset</div></div>
       <div class="roster-card" style="padding:18px 20px;border-color:#FECACA">
@@ -652,6 +868,10 @@
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Backup &amp; Security</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>Full Backup</strong> — Import / Export page. Download regularly.<br><strong>Audit Log</strong> — sidebar footer. All supervisor actions logged.</div></div>
       </div>
     </div>
+  </div>
+
+  <div class="page hidden" id="page-apprentices">
+    <div id="apprentices-content"></div>
   </div>
 
 </div><!-- /content -->
@@ -688,6 +908,7 @@
     <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets <span class="beta-tag">BETA</span></button>
+    <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices</button>
     <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
     <div class="drawer-divider"></div>
     <button id="audit-drawer-btn" class="drawer-item edit-only" onclick="openAuditLog();closeMobileDrawer()"><span class="d-icon">📋</span> Audit Log</button>
@@ -750,10 +971,11 @@
      ═══════════════════════════════════════════════════════════ -->
 
 <!-- Person modal -->
-<div class="modal-overlay" id="modal-person"><div class="modal"><div class="modal-header"><h3 id="modal-person-title">Add Person</h3><button class="modal-close" onclick="closeModal('modal-person')">✕</button></div><div class="modal-body"><input type="hidden" id="person-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="person-name" placeholder="e.g. Alex Mitchell"></div><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="person-phone" placeholder="04XX XXX XXX"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Group</label><select class="form-select" id="person-group"><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select></div><div class="form-group"><label class="form-label">Licence / Year</label><input class="form-input" id="person-licence" placeholder="e.g. Licensed / 2nd Year"></div></div><div class="form-group"><label class="form-label">Agency (Labour Hire only)</label><input class="form-input" id="person-agency" placeholder="e.g. Core, Atom"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="person-email" type="email" placeholder="name@example.com"></div><div class="form-group"><label class="form-label">TAFE Day <span style="font-size:10px;color:var(--ink-3);font-weight:400">(apprentices)</span></label><select class="form-select" id="person-tafe-day"><option value="">— None —</option><option value="mon">Monday</option><option value="tue">Tuesday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option><option value="fri">Friday</option></select><div class="form-hint">Used by the "Apply TAFE Day" button on the roster editor.</div></div><div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px"><input type="checkbox" id="person-notify-roster" style="width:16px;height:16px;accent-color:var(--purple)"> <span>Email when roster changes <span style="font-size:10px;color:var(--ink-3);font-weight:400">(requires email address)</span></span></label></div><div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
+<div class="modal-overlay" id="modal-person"><div class="modal"><div class="modal-header"><h3 id="modal-person-title">Add Person</h3><button class="modal-close" onclick="closeModal('modal-person')">✕</button></div><div class="modal-body"><input type="hidden" id="person-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="person-name" placeholder="e.g. Alex Mitchell"></div><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="person-phone" placeholder="04XX XXX XXX"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Group</label><select class="form-select" id="person-group" onchange="onPersonGroupChange()"><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select></div><div class="form-group"><label class="form-label" id="person-licence-label">Licence</label><div id="person-licence-slot"><input class="form-input" id="person-licence" placeholder="e.g. Licensed"></div></div></div><div class="form-group"><label class="form-label">Agency (Labour Hire only)</label><input class="form-input" id="person-agency" placeholder="e.g. Core, Atom"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="person-email" type="email" placeholder="name@example.com"></div><div class="form-group"><label class="form-label">TAFE Day <span style="font-size:10px;color:var(--ink-3);font-weight:400">(apprentices)</span></label><select class="form-select" id="person-tafe-day"><option value="">— None —</option><option value="mon">Monday</option><option value="tue">Tuesday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option><option value="fri">Friday</option></select><div class="form-hint">Used by the "Apply TAFE Day" button on the roster editor.</div></div>
+<div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
 
 <!-- Site modal -->
-<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div><div class="form-group"><label class="form-label">Site Lead Email <span style="font-size:10px;color:var(--ink-3);font-weight:400">(for weekly roster email)</span></label><input class="form-input" id="site-lead-email" type="email" placeholder="lead@example.com"></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
+<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
 
 <!-- Confirm modal -->
 <div class="modal-overlay" id="modal-confirm" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="confirm-title">Confirm</h3><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div><div class="modal-body"><p id="confirm-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6"></p></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancel</button><button class="btn btn-danger" id="confirm-action">Confirm</button></div></div></div>
@@ -804,9 +1026,6 @@
 
 <!-- Leave CC config -->
 <div class="modal-overlay" id="modal-leave-cc"><div class="modal" style="max-width:440px"><div class="modal-header"><h3>✉ Email Notification CC List</h3><button class="modal-close" onclick="closeModal('modal-leave-cc')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">These people will be CC'd on every leave request email.</p><div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Quick-add from Supervisors</div><div id="leave-cc-supervisors" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px"></div><div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Current CC List</div><div id="leave-cc-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px"><input class="form-input" id="leave-cc-new" type="email" placeholder="email@example.com.au" style="flex:1" onkeydown="if(event.key==='Enter')addLeaveCC()"><button class="btn btn-primary btn-sm" onclick="addLeaveCC()">Add</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-leave-cc')">Done</button></div></div></div>
-
-<!-- TAFE holidays modal -->
-<div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addTafeHoliday()">Add range</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-tafe-holidays')">Done</button></div></div></div>
 
 <!-- Leave respond modal -->
 <div class="modal-overlay" id="modal-leave-respond"><div class="modal" style="max-width:480px"><div class="modal-header"><h3>Review Leave Request</h3><button class="modal-close" onclick="closeModal('modal-leave-respond')">✕</button></div><div class="modal-body"><div id="leave-respond-detail" style="margin-bottom:14px"></div><div class="form-group"><label class="form-label">Response Note (optional)</label><input class="form-input" id="leave-response-note" placeholder="e.g. Approved, enjoy your break"></div><input type="hidden" id="leave-respond-id"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-leave-respond')">Cancel</button><button class="btn" onclick="respondLeave('Rejected')" style="background:var(--red);color:white">Reject</button><button class="btn btn-primary" onclick="respondLeave('Approved')" style="background:var(--green);color:white">Approve</button></div></div></div>
@@ -874,10 +1093,10 @@ async function loadFromSupabase() {
 
   // Demo / EQ tenant — load from SEED, no Supabase
   if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
-    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'' }));
+    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
     STATE.sites     = SEED.sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:'', site_lead_phone:'' }));
     STATE.schedule  = SEED.schedule.map(r => ({ id:r.id||Math.random(), name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:'', sun:'' }));
-    STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'' }));
+    STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
     STATE.timesheets = [];
     // PERF: Build O(1) schedule index
     STATE.scheduleIndex = {};
@@ -896,8 +1115,8 @@ async function loadFromSupabase() {
       sbFetch('timesheets?select=*'),
     ]);
 
-    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', notify_roster:!!r.notify_roster }));
-    STATE.sites  = sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:r.site_lead||'', site_lead_phone:r.site_lead_phone||'', site_lead_email:r.site_lead_email||'' }));
+    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.sites  = sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:r.site_lead||'', site_lead_phone:r.site_lead_phone||'' }));
 
     // BUG-004 FIX: raw string key — esc() breaks names with & < > chars
     const scheduleMap = {};
@@ -912,7 +1131,7 @@ async function loadFromSupabase() {
     STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
 
     STATE.timesheets = tsRows;
-    STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'' }));
+    STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
     hideLoadingOverlay();
     updateLastUpdated();
     return true;
@@ -933,7 +1152,7 @@ const PAGE_TITLES = {
   contacts:'Contacts', sites:'Sites', editor:'Edit Roster',
   data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
-  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard'
+  jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices'
 };
 
 function showPage(id) {
@@ -967,6 +1186,7 @@ function renderCurrentPage() {
   else if (currentPage === 'staff-ts')   renderStaffTs();
   else if (currentPage === 'calendar')   renderCalendar();
   else if (currentPage === 'trial')      renderTrialDashboard();
+  else if (currentPage === 'apprentices') renderApprentices();
 }
 
 // ── Week controls ─────────────────────────────────────────────
@@ -1071,7 +1291,7 @@ function refreshPersonSelects() {
 // ── Mobile nav ────────────────────────────────────────────────
 // Must match the bottom-bar buttons in <nav id="mobile-nav"> (excluding 'more')
 const MOBILE_NAV_PAGES  = ['dashboard','roster','schedule','calendar'];
-const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial'];
+const DRAWER_NAV_PAGES  = ['dashboard','calendar','sites','managers','contacts','editor','data','help','jobnumbers','leave','timesheets','trial','apprentices'];
 
 function mobileNav(id) {
   showPage(id);
@@ -1150,8 +1370,10 @@ async function initApp() {
   await loadFromSupabase();
   if (typeof loadLeaveRequests  === 'function') await loadLeaveRequests();
   if (typeof loadLeaveCCList    === 'function') await loadLeaveCCList();
-  if (typeof loadTafeHolidays   === 'function') await loadTafeHolidays();
   if (typeof loadJobNumbers     === 'function') await loadJobNumbers();
+  if (typeof loadApprenticeData  === 'function') await loadApprenticeData();
+  if (typeof handleFeedbackRequestDeepLink === 'function') handleFeedbackRequestDeepLink();
+    if (typeof loadTafeHolidays    === 'function') await loadTafeHolidays();
   if (typeof populateJobNumberDatalist === 'function') populateJobNumberDatalist();
 
   // Build week selector
@@ -1343,7 +1565,7 @@ const eqAgent = (function() {
     const src   = (typeof STATE !== 'undefined' && STATE && STATE.people && STATE.people.length > 0) ? STATE : (typeof SEED !== 'undefined' ? SEED : { people:[], schedule:[], sites:[] });
     const week  = (typeof STATE !== 'undefined' && STATE.currentWeek) ? STATE.currentWeek : 'unknown';
     const today = new Date().toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    const leaveTerms = ['LVE','A/L','U/L','RDO','PH','JURY','OFF','LEAVE','PENDING','DAY OFF','SICK'];
+    const leaveTerms = ['LVE','A/L','U/L','RDO','PH','JURY','OFF','LEAVE','TAFE','PENDING','DAY OFF','SICK'];
     const isLv = s => !s || !s.trim() || leaveTerms.some(l => s.toUpperCase().trim().startsWith(l));
     const staffLines = (src.people||[]).map(p => `  - ${p.name} (${[p.group,p.licence,p.agency].filter(Boolean).join(', ')})`).join('\n') || '  (none)';
     const siteLines  = (src.sites||[]).map(s => `  - ${s.abbr}: ${s.name}${s.address?' — '+s.address:''}${s.site_lead?' [Lead: '+s.site_lead+']':''}`).join('\n') || '  (none)';
@@ -1414,5 +1636,300 @@ const eqAgent = (function() {
 })();
 </script>
 
+<!-- ══════════════════════════════════════════════════════════════
+     APPRENTICE MODULE MODALS
+══════════════════════════════════════════════════════════════ -->
+
+<!-- Self-assessment modal -->
+<div class="modal-overlay" id="modal-apprentice-self">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h3 id="modal-sa-title">How am I going? 🤔</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-self')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="sa-apprentice-id">
+      <div class="form-group">
+        <label class="form-label">Period</label>
+        <div id="sa-period-wrap"></div>
+      </div>
+      <div id="sa-competencies-grid" style="max-height:420px;overflow-y:auto;padding-right:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-self')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSelfAssessment()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tradesman rating modal -->
+<div class="modal-overlay" id="modal-apprentice-trade-rating">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h3 id="modal-tr-title">How are they actually going? 😎</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-trade-rating')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="tr-apprentice-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <div id="tr-rater-wrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Period</label>
+          <div id="tr-period-wrap"></div>
+        </div>
+      </div>
+      <div id="tr-competencies-grid" style="max-height:380px;overflow-y:auto;padding-right:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-trade-rating')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitTradesmanRating()">Save Ratings</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback modal -->
+<div class="modal-overlay" id="modal-apprentice-feedback">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3 id="modal-fb-title">Give Feedback</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-feedback')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="fb-apprentice-id">
+      <input type="hidden" id="fb-request-id">
+      <div id="fb-request-banner" style="display:none"></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <div id="fb-name-wrap"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Site / Job Number</label>
+          <div id="fb-site-wrap"></div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Competency (optional)</label>
+          <select class="form-input" id="fb-competency" style="background:var(--surface)"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rating (optional)</label>
+          <select class="form-input" id="fb-rating" style="background:var(--surface)">
+            <option value="">— No rating —</option>
+            <option value="1">1 — Not confident</option>
+            <option value="2">2 — Need supervision</option>
+            <option value="3">3 — Some help</option>
+            <option value="4">4 — Confident</option>
+            <option value="5">5 — Could teach</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">✅ What they did well</label>
+        <select class="form-input" id="fb-did-well-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-did-well')"></select>
+        <textarea class="form-input" id="fb-did-well" rows="2" placeholder="Be specific — what did you actually observe?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">⏭ Trust them next with</label>
+        <select class="form-input" id="fb-trust-next-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-trust-next')"></select>
+        <textarea class="form-input" id="fb-trust-next" rows="2" placeholder="What's the next skill/task to stretch them?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🔧 Needs to improve</label>
+        <select class="form-input" id="fb-needs-improve-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-needs-improve')"></select>
+        <textarea class="form-input" id="fb-needs-improve" rows="2" placeholder="Specific and actionable"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">📌 Follow-up (optional)</label>
+        <select class="form-input" id="fb-follow-up-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyFeedbackSuggestion('fb-follow-up')"></select>
+        <input class="form-input" id="fb-follow-up" placeholder="Any actions or check-ins needed?">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-feedback')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFeedback()">Save Feedback</button>
+    </div>
+  </div>
+</div>
+
+<!-- Apprentice request feedback modal (v2.3 / Tier 2 / 3F) -->
+<div class="modal-overlay" id="modal-request-feedback">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h3>💬 Ask for Feedback</h3>
+      <button class="modal-close" onclick="closeModal('modal-request-feedback')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="rfb-apprentice-id">
+      <div style="background:#F5F3FF;border-left:4px solid #6B5BD6;padding:10px 12px;border-radius:4px;margin-bottom:14px;font-size:12px;color:#4C3E9E;line-height:1.5">
+        No pressure — just picking someone who's been around you lately and asking for their take. Even a 2-line reply is valuable.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ask who?</label>
+        <select class="form-input" id="rfb-supervisor" style="background:var(--surface)"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">What do you want to know? <span style="color:var(--ink-3);font-weight:400">(optional)</span></label>
+        <select class="form-input" id="rfb-prompt-suggest" style="background:var(--surface);margin-bottom:6px"></select>
+        <textarea class="form-input" id="rfb-prompt" rows="3" placeholder="Leave blank for a general check-in, or ask about a specific thing"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-request-feedback')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFeedbackRequest()">Send Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- Apprentice journal entry modal (v2.3 / Tier 2 / 3G) -->
+<div class="modal-overlay" id="modal-journal-entry">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h3 id="modal-jn-title">📓 Journal entry</h3>
+      <button class="modal-close" onclick="closeModal('modal-journal-entry')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="jn-apprentice-id">
+      <input type="hidden" id="jn-prompt-key">
+      <input type="hidden" id="jn-prompt-text">
+      <div id="jn-prompt-display" style="margin-bottom:14px"></div>
+      <div class="form-group">
+        <label class="form-label">Your reflection</label>
+        <textarea class="form-input" id="jn-reflection" rows="7" placeholder="Write whatever you want — nobody else sees this unless you tick the share box below."></textarea>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--ink-2);line-height:1.5">
+          <input type="checkbox" id="jn-shared" style="width:18px;height:18px;cursor:pointer">
+          <span><strong>Share this entry with your supervisor</strong> — off by default. You can flip this on or off for any entry later.</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-journal-entry')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitJournalEntry()">Save Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Apprentice profile / goals modal -->
+<div class="modal-overlay" id="modal-apprentice-profile">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3 id="modal-ap-title">Add Apprentice Profile</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="ap-edit-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Apprentice</label>
+          <select class="form-input" id="ap-person" style="background:var(--surface)"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Year Level</label>
+          <select class="form-input" id="ap-year" style="background:var(--surface)" onchange="refreshGoalSuggestions()">
+            <option value="1">1st Year</option>
+            <option value="2">2nd Year</option>
+            <option value="3">3rd Year</option>
+            <option value="4">4th Year</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Date</label>
+          <input class="form-input" id="ap-start-date" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Current Site</label>
+          <select class="form-input" id="ap-site" style="background:var(--surface)"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🔧 Technical Goal</label>
+        <select class="form-input" id="ap-goal-tech-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('tech')"></select>
+        <textarea class="form-input" id="ap-goal-tech" rows="2" placeholder="What technical skill are they working towards?"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">💼 Professional Goal</label>
+        <select class="form-input" id="ap-goal-prof-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('prof')"></select>
+        <textarea class="form-input" id="ap-goal-prof" rows="2" placeholder="Workplace behaviour, communication, leadership..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">🌱 Personal Goal</label>
+        <select class="form-input" id="ap-goal-personal-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('personal')"></select>
+        <textarea class="form-input" id="ap-goal-personal" rows="2" placeholder="Something personal they want to achieve..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-input" id="ap-notes" rows="2" placeholder="Any extra context for supervisors"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">Cancel</button>
+      <button class="btn btn-primary" onclick="saveApprenticeProfile()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rotation modal -->
+<div class="modal-overlay" id="modal-apprentice-rotation">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h3 id="modal-rot-title">Add Rotation</h3>
+      <button class="modal-close" onclick="closeModal('modal-apprentice-rotation')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="rot-apprentice-id">
+      <div class="form-group">
+        <label class="form-label">Project / Site Name</label>
+        <div id="rot-site-wrap"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Project Type</label>
+        <select class="form-input" id="rot-type" style="background:var(--surface)">
+          <option>Commercial</option>
+          <option>Data Centre</option>
+          <option>Healthcare</option>
+          <option>Industrial</option>
+          <option>Residential</option>
+          <option>Infrastructure</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Date</label>
+          <input class="form-input" id="rot-start" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Date (optional)</label>
+          <input class="form-input" id="rot-end" type="date">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Supervising Tradesman</label>
+        <div id="rot-supervisor-wrap"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Main Work Performed</label>
+        <textarea class="form-input" id="rot-main-work" rows="2" placeholder="What did they mainly work on?"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-rotation')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRotation()">Save</button>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- TAFE holidays modal -->
+<div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addTafeHoliday()">Add range</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-tafe-holidays')">Done</button></div></div></div>
 </body>
 </html>

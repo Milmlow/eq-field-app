@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.5';
+const APP_VERSION = '3.4.8';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -17,6 +17,10 @@ const HOSTNAME_MAP = {
 
 // Per-tenant Supabase credentials (public anon keys — safe to embed)
 const TENANT_SUPABASE = {
+  eq: {
+    url: 'https://ktmjmdzqrogauaevbktn.supabase.co',
+    key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0bWptZHpxcm9nYXVhZXZia3RuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2MzA3MzUsImV4cCI6MjA5MTIwNjczNX0.QwXUvO1Wd1YV_UlCBkgJNjzCXd-2homD2sQ2bIrAgC4'
+  },
   sks: {
     url: 'https://nspbmirochztcjijmcrx.supabase.co',
     key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zcGJtaXJvY2h6dGNqaWptY3J4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2ODg2MjQsImV4cCI6MjA5MDI2NDYyNH0.cpwHUqWr7MKaJFP0K7RMt43CytJ_dnPAH3LJ3xEdEdg'
@@ -52,7 +56,8 @@ let MANAGER_PASSWORD = '';
 const ORG_TABLES = [
   'people', 'sites', 'schedule', 'managers', 'timesheets',
   'leave_requests', 'audit_log', 'job_numbers',
-  'leave_balances', 'checkins'
+  'apprentice_profiles', 'skills_ratings', 'feedback_entries',
+  'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log'
 ];
 
 // ── Group name normalisation ─────────────────────────────────
@@ -79,7 +84,7 @@ async function loadTenantConfig() {
   TENANT.ORG_SLUG = _detectTenantSlug();
 
   // Demo / EQ tenant — no Supabase needed
-  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
+  if (TENANT.ORG_SLUG === 'demo') {
     TENANT.ORG_NAME = 'EQ Solves — Field';
     TENANT.ORG_UUID = '00000000-0000-0000-0000-000000000001';
     SB_URL          = '';
@@ -182,6 +187,17 @@ const TENANT_BRANDING = {
     // no manager_password row for this org. Replace by inserting an
     // app_config row: { org_id: <sks-uuid>, key: 'manager_password', value: '<pw>' }
     fallbackManagerPassword: 'SKSNSW',
+  },
+  eq: {
+    orgName: 'EQ Solves — Field',
+    gateSub: 'Demo Environment',
+    hideDemoCodes: false,
+    clearDefaultName: false,
+    whiteGateCard: false,
+    rememberMeDays: 1,
+    staffCode: 'demo',
+    supervisorCode: 'demo1234',
+    fallbackManagerPassword: 'demo1234',
   }
 };
 
@@ -265,7 +281,7 @@ function applyTenantBranding() {
   }
 
   // Document title
-  if (brand.orgName) document.title = brand.orgName + ' — Field';
+  if (brand.orgName) document.title = brand.orgName;
 }
 
 // ── App state ─────────────────────────────────────────────────

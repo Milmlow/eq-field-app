@@ -32,6 +32,9 @@ async function saveTafeHolidays() {
     const res = await sbFetch('app_config?key=eq.tafe_holidays', 'PATCH', { value: payload });
     // If PATCH returns [] (no row), create it
     if (!res || (Array.isArray(res) && res.length === 0)) {
+      // NOTE: key stored as literal 'tafe_holidays' — 'eq.' is a Supabase
+      // filter operator used in the PATCH query string above, not part of
+      // the stored key value. (Fixed v3.4.5.)
       await sbFetch('app_config', 'POST', { key: 'tafe_holidays', value: payload });
     }
   } catch (e) {
@@ -59,37 +62,6 @@ function tafeIsHolidayForDay(monday, dayIdx /* 0=Mon..4=Fri */) {
   d.setDate(d.getDate() + dayIdx);
   const iso = d.toISOString().slice(0, 10);
   return tafeHolidays.some(h => iso >= h.start && iso <= h.end);
-}
-
-// Summarise TAFE holiday status for a given week (DD.MM.YY key).
-// Returns { anyHoliday, fullWeek, dayFlags, labels } where:
-//   anyHoliday — at least one Mon–Fri date is inside a holiday range
-//   fullWeek   — Mon–Fri all inside holiday range(s)
-//   dayFlags   — [bool,bool,bool,bool,bool] for Mon..Fri
-//   labels     — unique range labels that intersect the week
-function tafeWeekSummary(weekKey) {
-  const monday = tafeWeekKeyToMonday(weekKey);
-  if (!monday) return { anyHoliday: false, fullWeek: false, dayFlags: [false,false,false,false,false], labels: [] };
-  const dayFlags = [0,1,2,3,4].map(i => tafeIsHolidayForDay(monday, i));
-  const anyHoliday = dayFlags.some(Boolean);
-  const fullWeek   = dayFlags.every(Boolean);
-  const labels = [];
-  if (anyHoliday) {
-    const seen = new Set();
-    for (let i = 0; i < 5; i++) {
-      if (!dayFlags[i]) continue;
-      const d = new Date(monday);
-      d.setDate(d.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
-      tafeHolidays.forEach(h => {
-        if (iso >= h.start && iso <= h.end) {
-          const lab = (h.label || `${h.start} – ${h.end}`).trim();
-          if (!seen.has(lab)) { seen.add(lab); labels.push(lab); }
-        }
-      });
-    }
-  }
-  return { anyHoliday, fullWeek, dayFlags, labels };
 }
 
 // ── Apply TAFE day for current week ───────────────────────────
