@@ -455,19 +455,29 @@ async function loadApprenticeData() {
       sbFetch('skills_ratings?order=period.asc,rating_type.asc,competency_id.asc'),
       sbFetch('feedback_entries?order=feedback_date.desc'),
       sbFetch('rotations?order=date_start.desc'),
-      sbFetch('people?select=id,name,year_level,group&order=name.asc'),
+      sbFetch('people?select=id,name,year_level,licence,group&order=name.asc'),
       // v2.3: Tier 2 tables — absent on older tenants so swallow failure
       sbFetch('feedback_requests?order=created_at.desc').catch(() => []),
       sbFetch('apprentice_journal?order=entry_date.desc').catch(() => []),
     ]);
 
-    // Build UUID→name + UUID→year_level lookups
+    // Build UUID→name + UUID→year_level lookups.
+    // v3.4.10: if year_level isn't populated yet, fall back to parsing
+    // licence (which the Add Person modal writes as '2nd Year' etc.).
+    // This keeps legacy apprentice rows showing the right year until
+    // the EQ demo backfill migration reaches them.
     const uuidToName = {};
     const uuidToYear = {};
+    const parseLicenceYear = (s) => {
+      if (!s) return null;
+      const m = String(s).trim().match(/^([1-4])(?:st|nd|rd|th)\s+Year$/i);
+      return m ? parseInt(m[1], 10) : null;
+    };
     if (dbPeople && dbPeople.length) {
       dbPeople.forEach(p => {
         uuidToName[String(p.id)] = p.name;
-        if (p.year_level) uuidToYear[String(p.id)] = p.year_level;
+        const y = p.year_level || parseLicenceYear(p.licence);
+        if (y) uuidToYear[String(p.id)] = y;
       });
     }
     if (typeof STATE !== 'undefined' && STATE.people) {

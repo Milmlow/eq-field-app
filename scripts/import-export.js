@@ -73,10 +73,20 @@ function hidePreview(elId) {
 
 // ── People export / import ────────────────────────────────────
 
+// v3.4.10: resolve apprentice year for CSV export.
+// Reads people.year_level first, falls back to parsing the Licence
+// string for rows saved before year_level was wired up.
+function _resolveApprenticeYear(p) {
+  if (!p || p.group !== 'Apprentice') return '';
+  if (p.year_level) return p.year_level;
+  const m = String(p.licence || '').trim().match(/^([1-4])(?:st|nd|rd|th)\s+Year$/i);
+  return m ? parseInt(m[1], 10) : '';
+}
+
 function exportPeopleCSV() {
-  const header = 'Name,Group,Phone,Email,Licence,Agency';
+  const header = 'Name,Group,Year,Phone,Email,Licence,Agency';
   const rows   = STATE.people.map(p =>
-    [csvEscape(p.name), csvEscape(p.group), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
+    [csvEscape(p.name), csvEscape(p.group), csvEscape(_resolveApprenticeYear(p)), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
   );
   downloadCSV(header + '\n' + rows.join('\n'), 'EQ_People.csv');
   showToast('People exported — ' + STATE.people.length + ' contacts');
@@ -94,9 +104,9 @@ function exportContactsCSV() {
   if (group) people = people.filter(p => p.group === group);
   people = [...people].sort((a, b) => a.name.localeCompare(b.name));
 
-  const header = 'Name,Group,Phone,Email,Licence,Agency';
+  const header = 'Name,Group,Year,Phone,Email,Licence,Agency';
   const rows   = people.map(p =>
-    [csvEscape(p.name), csvEscape(p.group), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
+    [csvEscape(p.name), csvEscape(p.group), csvEscape(_resolveApprenticeYear(p)), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
   );
   const suffix = group ? '_' + group.replace(/\s/g, '') : '';
   downloadCSV(header + '\n' + rows.join('\n'), `EQ_Contacts${suffix}.csv`);

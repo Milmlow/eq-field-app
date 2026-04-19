@@ -4,6 +4,62 @@
 // Depends on: app-state.js, utils.js, supabase.js
 // ─────────────────────────────────────────────────────────────
 
+// ── Year helpers (v3.4.10) ────────────────────────────────────
+// Apprentice year is captured as a free-text-shaped string in
+// people.licence ('1st Year', '2nd Year', …) but the Apprentices
+// page reads people.year_level (int 1..4). yearFromLicence keeps
+// the two in sync — we derive the int on save so apprentices.js
+// can render the year badge without a second click into the
+// Apprentice Profile modal.
+function yearFromLicence(licence) {
+  if (!licence) return null;
+  const m = String(licence).trim().match(/^([1-4])(?:st|nd|rd|th)\s+Year$/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Compact year pill for the contacts table — matches the colour
+// scheme used by yearBadge() in apprentices.js so the visual
+// language stays consistent across pages.
+function contactsYearBadge(year) {
+  if (!year) return '';
+  const labels = { 1: '1st Yr', 2: '2nd Yr', 3: '3rd Yr', 4: '4th Yr' };
+  const palette = {
+    1: 'background:#EFF4FF;color:#2563EB',
+    2: 'background:#F0FDF4;color:#16A34A',
+    3: 'background:#FFFBEB;color:#D97706',
+    4: 'background:#EEEDF8;color:#7C77B9'
+  };
+  const style = palette[year] || 'background:#F8FAFC;color:#64748B';
+  const label = labels[year] || (year + 'th Yr');
+  return '<span title="Apprentice year" style="' + style + ';border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎓 ' + label + '</span>';
+}
+
+// ── Licence / Year field swap (v3.4.6) ────────────────────────
+// When group=Apprentice we show a year dropdown. Other groups get
+// a free-text input. Field id stays 'person-licence' in both cases
+// so save/read code is unchanged.
+function refreshPersonLicenceField(group, value) {
+  const slot = document.getElementById('person-licence-slot');
+  const label = document.getElementById('person-licence-label');
+  if (!slot) return;
+
+  if (group === 'Apprentice') {
+    if (label) label.textContent = 'Year';
+    const years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+    // If incoming value doesn't match a known year, default to 1st Year.
+    const sel = years.includes(value) ? value : '1st Year';
+    let html = '<select class="form-select" id="person-licence">';
+    years.forEach(y => {
+      html += '<option value="' + y + '"' + (y === sel ? ' selected' : '') + '>' + y + '</option>';
+    });
+    html += '</select>';
+    slot.innerHTML = html;
+  } else {
+    if (label) label.textContent = 'Licence';
+    slot.innerHTML = '<input class="form-input" id="person-licence" placeholder="e.g. Licensed" value="' + (value ? String(value).replace(/"/g, '&quot;') : '') + '">';
+  }
+}
+
 function openAddPerson() {
   if (!isManager) { showToast('Supervision access required'); return; }
   document.getElementById('modal-person-title').textContent = 'Add Person';
@@ -11,7 +67,7 @@ function openAddPerson() {
   document.getElementById('person-name').value    = '';
   document.getElementById('person-phone').value   = '';
   document.getElementById('person-group').value   = 'Direct';
-  document.getElementById('person-licence').value = '';
+  refreshPersonLicenceField('Direct', '');
   document.getElementById('person-agency').value  = '';
   document.getElementById('person-email').value   = '';
   const tafeEl = document.getElementById('person-tafe-day');
@@ -30,7 +86,7 @@ function editPerson(id) {
   document.getElementById('person-name').value    = p.name;
   document.getElementById('person-phone').value   = p.phone   || '';
   document.getElementById('person-group').value   = p.group;
-  document.getElementById('person-licence').value = p.licence || '';
+  refreshPersonLicenceField(p.group, p.licence || '');
   document.getElementById('person-agency').value  = p.agency  || '';
   document.getElementById('person-email').value   = p.email   || '';
   const tafeEl = document.getElementById('person-tafe-day');
@@ -38,6 +94,14 @@ function editPerson(id) {
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = ''; // never pre-fill PIN
   openModal('modal-person');
+}
+
+// Called when group select changes while the modal is open.
+function onPersonGroupChange() {
+  const group = document.getElementById('person-group').value;
+  // Carry over current value so typed text isn't lost when toggling back.
+  const current = (document.getElementById('person-licence') || {}).value || '';
+  refreshPersonLicenceField(group, current);
 }
 
 function savePerson() {
@@ -56,23 +120,30 @@ function savePerson() {
 
   if (!name) { showToast('Name is required'); return; }
 
+  // v3.4.10: derive year_level from licence so the Apprentices page
+  // (which keys on year_level) stays in sync with the Add Person form.
+  // Non-apprentices get year_level wiped to keep stale values from
+  // bleeding through if the group is changed later.
+  const yearLevel = group === 'Apprentice' ? yearFromLicence(licence) : null;
+
   let person;
   if (id) {
     person = STATE.people.find(x => x.id === parseInt(id));
     if (person) {
-      person.name     = name;
-      person.phone    = phone;
-      person.group    = group;
-      person.licence  = licence;
-      person.agency   = agency;
-      person.email    = email;
-      person.tafe_day = tafeDay;
+      person.name       = name;
+      person.phone      = phone;
+      person.group      = group;
+      person.licence    = licence;
+      person.year_level = yearLevel;
+      person.agency     = agency;
+      person.email      = email;
+      person.tafe_day   = tafeDay;
       if (newPin) person.pin = newPin;
     }
     showToast(`${name} updated`);
   } else {
     const newId = Math.max(0, ...STATE.people.map(p => p.id)) + 1;
-    person = { id: newId, name, phone, group, licence, agency, email, tafe_day: tafeDay, pin: newPin || null };
+    person = { id: newId, name, phone, group, licence, year_level: yearLevel, agency, email, tafe_day: tafeDay, pin: newPin || null };
     STATE.people.push(person);
     showToast(`${name} added`);
   }
@@ -170,6 +241,15 @@ function renderContacts() {
     ? `<span title="TAFE day" style="background:#EEEDF8;color:#7C77B9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎓 ${tafeDayLabel[p.tafe_day]}</span>`
     : '';
 
+  // v3.4.10: apprentice year badge. Prefer year_level (int);
+  // fall back to parsing licence so legacy rows render correctly
+  // before the backfill reaches them.
+  const apprenticeYear = (p) => {
+    if (p.group !== 'Apprentice') return null;
+    return p.year_level || yearFromLicence(p.licence);
+  };
+  const yearPill = (p) => contactsYearBadge(apprenticeYear(p));
+
   const isMobile = window.innerWidth <= 768;
 
   if (isMobile) {
@@ -186,7 +266,7 @@ function renderContacts() {
           : '<span style="color:#EF4444;font-size:12px">No phone</span>';
         html += `<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}</div>
+            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               ${phoneHtml}
               ${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(p.email)}</a>` : ''}
@@ -217,7 +297,7 @@ function renderContacts() {
     <tbody>${people.map(p => `
       <tr>
         <td class="name-col">${esc(p.name)}</td>
-        <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${tafeBadge(p)}</td>
+        <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}</td>
         <td class="phone-col">${p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : '<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
         <td class="meta-col">${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>` : '—'}</td>
         <td class="meta-col">${p.agency || '—'}</td>

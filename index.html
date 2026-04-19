@@ -165,8 +165,28 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.9
+  EQ Solves — Field  v3.4.10
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.10  (Apprentice year — contacts as source of truth)
+  ──────────────────────────────────────────────────────────
+  - Add Person form already swapped Licence → Year dropdown for apprentices
+    (v3.4.6), but the year was only written to people.licence as a string.
+    The Apprentices page keys on people.year_level (int), so the two
+    drifted whenever somebody set the year in one place but not the other.
+  - scripts/people.js — savePerson() now also writes year_level (int 1..4)
+    derived from licence. New yearFromLicence() helper handles the parse.
+  - scripts/people.js — contacts table (desktop + mobile) gains a small
+    year pill next to the group badge, matching the TAFE-day pill style.
+    Falls back to parsing licence if year_level isn't populated yet.
+  - scripts/apprentices.js — _resolvedYear uuid map now falls back to
+    parsing people.licence so legacy rows render before backfill lands.
+    Query now selects people.licence alongside year_level.
+  - DB: one-time backfill on EQ demo — people.year_level = parse(licence)
+    for all apprentices whose licence matched '[1-4](st|nd|rd|th) Year'.
+    Fixed two demo rows where year_level and licence disagreed.
+  - scripts/import-export.js — People + Contacts CSV exports gain a new
+    "Year" column between Group and Phone. Blank for non-apprentices.
 
   CHANGES IN v3.4.9  (Supervisor Digest — Friday 12:00 AEST)
   ──────────────────────────────────────────────────────────
@@ -535,7 +555,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.9</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.10</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
