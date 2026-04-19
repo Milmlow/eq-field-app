@@ -4,6 +4,32 @@
 // Depends on: app-state.js, utils.js, supabase.js
 // ─────────────────────────────────────────────────────────────
 
+// ── Licence / Year field swap (v3.4.6) ────────────────────────
+// When group=Apprentice we show a year dropdown. Other groups get
+// a free-text input. Field id stays 'person-licence' in both cases
+// so save/read code is unchanged.
+function refreshPersonLicenceField(group, value) {
+  const slot = document.getElementById('person-licence-slot');
+  const label = document.getElementById('person-licence-label');
+  if (!slot) return;
+
+  if (group === 'Apprentice') {
+    if (label) label.textContent = 'Year';
+    const years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+    // If incoming value doesn't match a known year, default to 1st Year.
+    const sel = years.includes(value) ? value : '1st Year';
+    let html = '<select class="form-select" id="person-licence">';
+    years.forEach(y => {
+      html += '<option value="' + y + '"' + (y === sel ? ' selected' : '') + '>' + y + '</option>';
+    });
+    html += '</select>';
+    slot.innerHTML = html;
+  } else {
+    if (label) label.textContent = 'Licence';
+    slot.innerHTML = '<input class="form-input" id="person-licence" placeholder="e.g. Licensed" value="' + (value ? String(value).replace(/"/g, '&quot;') : '') + '">';
+  }
+}
+
 function openAddPerson() {
   if (!isManager) { showToast('Supervision access required'); return; }
   document.getElementById('modal-person-title').textContent = 'Add Person';
@@ -11,13 +37,11 @@ function openAddPerson() {
   document.getElementById('person-name').value    = '';
   document.getElementById('person-phone').value   = '';
   document.getElementById('person-group').value   = 'Direct';
-  document.getElementById('person-licence').value = '';
+  refreshPersonLicenceField('Direct', '');
   document.getElementById('person-agency').value  = '';
   document.getElementById('person-email').value   = '';
   const tafeEl = document.getElementById('person-tafe-day');
   if (tafeEl) tafeEl.value = '';
-  const notifyEl = document.getElementById('person-notify-roster');
-  if (notifyEl) notifyEl.checked = false;
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = '';
   openModal('modal-person');
@@ -32,16 +56,22 @@ function editPerson(id) {
   document.getElementById('person-name').value    = p.name;
   document.getElementById('person-phone').value   = p.phone   || '';
   document.getElementById('person-group').value   = p.group;
-  document.getElementById('person-licence').value = p.licence || '';
+  refreshPersonLicenceField(p.group, p.licence || '');
   document.getElementById('person-agency').value  = p.agency  || '';
   document.getElementById('person-email').value   = p.email   || '';
   const tafeEl = document.getElementById('person-tafe-day');
   if (tafeEl) tafeEl.value = p.tafe_day || '';
-  const notifyEl = document.getElementById('person-notify-roster');
-  if (notifyEl) notifyEl.checked = !!p.notify_roster;
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = ''; // never pre-fill PIN
   openModal('modal-person');
+}
+
+// Called when group select changes while the modal is open.
+function onPersonGroupChange() {
+  const group = document.getElementById('person-group').value;
+  // Carry over current value so typed text isn't lost when toggling back.
+  const current = (document.getElementById('person-licence') || {}).value || '';
+  refreshPersonLicenceField(group, current);
 }
 
 function savePerson() {
@@ -55,8 +85,6 @@ function savePerson() {
   const email   = document.getElementById('person-email').value.trim().toLowerCase();
   const tafeEl  = document.getElementById('person-tafe-day');
   const tafeDay = tafeEl ? (tafeEl.value || null) : null;
-  const notifyEl = document.getElementById('person-notify-roster');
-  const notifyRoster = notifyEl ? notifyEl.checked : false;
   const pinRaw  = (document.getElementById('person-pin') || { value: '' }).value.trim();
   const newPin  = (isManager && /^\d{4}$/.test(pinRaw)) ? pinRaw : null;
 
@@ -73,13 +101,12 @@ function savePerson() {
       person.agency   = agency;
       person.email    = email;
       person.tafe_day = tafeDay;
-      person.notify_roster = notifyRoster;
       if (newPin) person.pin = newPin;
     }
     showToast(`${name} updated`);
   } else {
     const newId = Math.max(0, ...STATE.people.map(p => p.id)) + 1;
-    person = { id: newId, name, phone, group, licence, agency, email, tafe_day: tafeDay, notify_roster: notifyRoster, pin: newPin || null };
+    person = { id: newId, name, phone, group, licence, agency, email, tafe_day: tafeDay, pin: newPin || null };
     STATE.people.push(person);
     showToast(`${name} added`);
   }
