@@ -46,6 +46,7 @@
 <script src="scripts/apprentices.js"></script>
 <script src="scripts/journal.js"></script>
 <script src="scripts/tafe.js"></script>
+<script src="scripts/digest-settings.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -164,8 +165,65 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.7
+  EQ Solves — Field  v3.4.9
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.9  (Supervisor Digest — Friday 12:00 AEST)
+  ──────────────────────────────────────────────────────────
+  - New supabase/functions/supervisor-digest/ edge function. Fires weekly
+    via pg_cron (02:00 UTC Friday = 12:00 AEST). Per-supervisor email
+    covers leave next week, pending approvals awaiting that supervisor,
+    unrostered staff next week, and timesheet completion this week.
+  - migrations/2026-04-19_managers_digest_opt_in.sql — adds
+    managers.digest_opt_in (default true) + supporting indexes.
+  - migrations/2026-04-19_digest_cron_schedule.sql — pg_cron entry +
+    public.trigger_supervisor_digest() helper for manual runs.
+  - New scripts/digest-settings.js renders a compact per-supervisor
+    opt-in strip above the Supervision page so you can toggle without
+    touching SQL. Hydrates from managers.digest_opt_in, PATCHes via
+    the same sbFetch() used elsewhere.
+
+  CHANGES IN v3.4.8  (Leave Module — ported from SKS v3.4.5)
+  ──────────────────────────────────────────────────────────
+  - scripts/leave.js now shipped on EQ Field demo. Previously the leave
+    modals in index.html were a UI stub with no JS behind them. All leave
+    handlers (openLeaveRequest, submitLeaveRequest, respondLeave, CC
+    config, calendar, archive, withdraw, resend) are now live.
+  - Supervisor selection is required on submit. Empty approver →
+    red-highlight + scroll + focus + toast: "⚠ Choose your supervisor —
+    they need to approve this request". Approver dropdown excludes the
+    requester so people can't pick themselves.
+  - Rejection now requires a reason note. Empty response note on Reject →
+    red-highlight + toast: "⚠ Add a reason when rejecting — the
+    requester will see this".
+  - Backdated-leave guard. Submitting a request with a start date before
+    today triggers modal-confirm before insert — prevents stale
+    date-picker accidents.
+  - Withdraw pending request. New "Withdrawn" status. Button visible to
+    the requester (matched via sessionStorage eq_logged_in_name) or any
+    supervisor. Only available while status is Pending.
+  - Confirmation email to the requester on submit (new
+    submit_confirmation type on triggerLeaveEmail) — recipients have a
+    receipt in their inbox.
+  - CC supervisors on status emails. Approval/rejection emails now CC
+    leaveCCList so the whole supervisor chain sees outcomes, not just
+    the requester.
+  - Status-update emails fall through to STATE.managers when the
+    requester isn't in STATE.people — supervisors submitting their own
+    leave still receive the approved/rejected email.
+  - CC config modal: new "Quick-add from Supervisors" chip strip above
+    the manual CC list. Toggleable chips (✓/+) keep the CC list and the
+    chip state in sync.
+  - Approver field copy updated. Label is now "Your Supervisor *" with
+    helper text "📧 Your approval email will be sent to this supervisor
+    — the request is not flagged to anyone without a selection."
+    Placeholder changed to "Select your supervisor".
+  - Email CTA URLs now use ${window.location.origin} so preview/branch
+    deploys link back to themselves, not the hard-coded host.
+  - DB: new migration makes leave_requests.approver_name NOT NULL +
+    CHECK (approver_name <> ''). Pre-check query in the migration file.
+    Apply to EQ demo Supabase (ktmjmdzqrogauaevbktn) after confirming
+    the count is 0.
 
   CHANGES IN v3.4.7  (Apprentices v2.3 — Tier 2: Self-goals + Ask for Feedback + Journal)
   ──────────────────────────────────────────────────────────
@@ -477,7 +535,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.7</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.9</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
@@ -668,7 +726,8 @@
       <input type="text" id="leave-search" placeholder="Search name…" oninput="renderLeave()" class="filter-select" style="min-width:160px">
       <span style="flex:1"></span>
       <button class="btn btn-secondary btn-sm edit-only" onclick="openLeaveCCConfig()" style="font-size:11px">✉ Email CC List</button>
-      <button class="btn btn-secondary btn-sm edit-only" onclick="confirmClearLeave()" style="font-size:11px;color:var(--red)">🗑 Clear All</button>
+      <button class="btn btn-secondary btn-sm edit-only" onclick="confirmArchiveAllResolved()" style="font-size:11px">📦 Archive Resolved</button>
+      <button class="btn btn-secondary btn-sm edit-only" id="leave-archive-toggle" onclick="toggleShowArchived()" style="font-size:11px">📦 Show Archived</button>
       <button class="btn btn-secondary btn-sm" onclick="printLeaveRequests()" style="font-size:11px">🖨 Print</button>
       <button class="btn btn-primary btn-sm" onclick="openLeaveRequest()">＋ New Leave Request</button>
     </div>
@@ -979,10 +1038,10 @@
 <div class="modal-overlay" id="modal-cleanup"><div class="modal" style="max-width:580px"><div class="modal-header"><h3>🧹 Clean Up Codes</h3><button class="modal-close" onclick="closeModal('modal-cleanup')">✕</button></div><div class="modal-body"><p style="font-size:12.5px;color:var(--ink-2);margin-bottom:16px;line-height:1.6">These codes appear in your schedule history but don't match any site in your Sites list.</p><div id="cleanup-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px 0;margin-bottom:12px"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><button class="btn btn-secondary btn-sm" onclick="cleanupSelectAll()">Select All</button><button class="btn btn-secondary btn-sm" onclick="cleanupClearAll()">Clear</button><span id="cleanup-count" style="font-size:11px;color:var(--ink-3);margin-left:4px">0 selected</span></div></div><div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap;gap:8px"><div style="display:flex;gap:8px;align-items:center"><span style="font-size:11.5px;color:var(--ink-2);font-weight:600">Remove selected from:</span><button class="btn btn-secondary btn-sm" onclick="runCleanup('current')">Current week</button><button class="btn btn-secondary btn-sm" onclick="runCleanup('all')">All weeks</button></div><button class="btn btn-secondary" onclick="closeModal('modal-cleanup')">Cancel</button></div></div></div>
 
 <!-- Leave request modal -->
-<div class="modal-overlay" id="modal-leave-request"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="leave-modal-title">New Leave Request</h3><button class="modal-close" onclick="closeModal('modal-leave-request')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="leave-person" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Leave Type</label><select class="form-input" id="leave-type" style="background:var(--surface)"><option value="A/L">Annual Leave (A/L)</option><option value="U/L">Unpaid Leave (U/L)</option><option value="RDO">RDO</option></select></div><div class="form-group"><label class="form-label">Date Selection</label><div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-sm" id="leave-mode-range" onclick="setLeaveMode('range')" style="flex:1">Date Range</button><button class="btn btn-secondary btn-sm" id="leave-mode-pick" onclick="setLeaveMode('pick')" style="flex:1">Pick Days</button></div></div><div id="leave-range-fields"><div style="display:flex;gap:8px"><div class="form-group" style="flex:1"><label class="form-label">Start Date</label><input class="form-input" id="leave-start" type="date"></div><div class="form-group" style="flex:1"><label class="form-label">End Date</label><input class="form-input" id="leave-end" type="date"></div></div></div><div id="leave-pick-fields" style="display:none"><div class="form-group"><label class="form-label">Add a date</label><div style="display:flex;gap:6px"><input class="form-input" id="leave-pick-date" type="date" style="flex:1"><button class="btn btn-secondary btn-sm" onclick="addPickedDay()">Add</button></div></div><div id="leave-picked-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px"></div></div><div class="form-group"><label class="form-label">Approver</label><select class="form-input" id="leave-approver" style="background:var(--surface)"><option value="">— Select approver —</option></select></div><div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="leave-note" placeholder="e.g. Family holiday, pre-approved verbally"></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-leave-request')">Cancel</button><button class="btn btn-primary" onclick="submitLeaveRequest()">Submit Request</button></div></div></div>
+<div class="modal-overlay" id="modal-leave-request"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="leave-modal-title">New Leave Request</h3><button class="modal-close" onclick="closeModal('modal-leave-request')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="leave-person" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Leave Type</label><select class="form-input" id="leave-type" style="background:var(--surface)"><option value="A/L">Annual Leave (A/L)</option><option value="U/L">Unpaid Leave (U/L)</option><option value="RDO">RDO</option></select></div><div class="form-group"><label class="form-label">Date Selection</label><div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn btn-sm" id="leave-mode-range" onclick="setLeaveMode('range')" style="flex:1">Date Range</button><button class="btn btn-secondary btn-sm" id="leave-mode-pick" onclick="setLeaveMode('pick')" style="flex:1">Pick Days</button></div></div><div id="leave-range-fields"><div style="display:flex;gap:8px"><div class="form-group" style="flex:1"><label class="form-label">Start Date</label><input class="form-input" id="leave-start" type="date"></div><div class="form-group" style="flex:1"><label class="form-label">End Date</label><input class="form-input" id="leave-end" type="date"></div></div></div><div id="leave-pick-fields" style="display:none"><div class="form-group"><label class="form-label">Add a date</label><div style="display:flex;gap:6px"><input class="form-input" id="leave-pick-date" type="date" style="flex:1"><button class="btn btn-secondary btn-sm" onclick="addPickedDay()">Add</button></div></div><div id="leave-picked-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px"></div></div><div class="form-group"><label class="form-label">Your Supervisor <span style="color:var(--red)">*</span></label><select class="form-input" id="leave-approver" style="background:var(--surface)"><option value="">— Select your supervisor —</option></select><div style="font-size:11px;color:var(--ink-3);margin-top:6px">📧 Your approval email will be sent to this supervisor — the request is not flagged to anyone without a selection.</div></div><div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="leave-note" placeholder="e.g. Family holiday, pre-approved verbally"></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-leave-request')">Cancel</button><button class="btn btn-primary" onclick="submitLeaveRequest()">Submit Request</button></div></div></div>
 
 <!-- Leave CC config -->
-<div class="modal-overlay" id="modal-leave-cc"><div class="modal" style="max-width:440px"><div class="modal-header"><h3>✉ Email Notification CC List</h3><button class="modal-close" onclick="closeModal('modal-leave-cc')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">These people will be CC'd on every leave request email.</p><div id="leave-cc-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px"><input class="form-input" id="leave-cc-new" type="email" placeholder="email@example.com.au" style="flex:1" onkeydown="if(event.key==='Enter')addLeaveCC()"><button class="btn btn-primary btn-sm" onclick="addLeaveCC()">Add</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-leave-cc')">Done</button></div></div></div>
+<div class="modal-overlay" id="modal-leave-cc"><div class="modal" style="max-width:440px"><div class="modal-header"><h3>✉ Email Notification CC List</h3><button class="modal-close" onclick="closeModal('modal-leave-cc')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">These people will be CC'd on every leave request email.</p><div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Quick-add from Supervisors</div><div id="leave-cc-supervisors" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px"></div><div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Current CC List</div><div id="leave-cc-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px"><input class="form-input" id="leave-cc-new" type="email" placeholder="email@example.com.au" style="flex:1" onkeydown="if(event.key==='Enter')addLeaveCC()"><button class="btn btn-primary btn-sm" onclick="addLeaveCC()">Add</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-leave-cc')">Done</button></div></div></div>
 
 <!-- Leave respond modal -->
 <div class="modal-overlay" id="modal-leave-respond"><div class="modal" style="max-width:480px"><div class="modal-header"><h3>Review Leave Request</h3><button class="modal-close" onclick="closeModal('modal-leave-respond')">✕</button></div><div class="modal-body"><div id="leave-respond-detail" style="margin-bottom:14px"></div><div class="form-group"><label class="form-label">Response Note (optional)</label><input class="form-input" id="leave-response-note" placeholder="e.g. Approved, enjoy your break"></div><input type="hidden" id="leave-respond-id"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-leave-respond')">Cancel</button><button class="btn" onclick="respondLeave('Rejected')" style="background:var(--red);color:white">Reject</button><button class="btn btn-primary" onclick="respondLeave('Approved')" style="background:var(--green);color:white">Approve</button></div></div></div>
