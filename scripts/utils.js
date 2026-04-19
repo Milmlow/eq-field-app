@@ -4,6 +4,23 @@
 // Depends on: app-state.js
 // ─────────────────────────────────────────────────────────────
 
+// ── AbortController polyfill for iOS Safari < 16.4 ───────────
+// AbortSignal.timeout() is unsupported on iOS Safari < 16.4 and
+// throws TypeError when called. This helper returns an AbortSignal
+// that fires after `ms` milliseconds, using native timeout() when
+// available and a manual AbortController fallback otherwise.
+// Added v3.4.4 (T1).
+function _abortAfter(ms) {
+  try {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.timeout(ms);
+    }
+  } catch (e) { /* fall through to manual path */ }
+  const ctrl = new AbortController();
+  setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, ms);
+  return ctrl.signal;
+}
+
 // ── XSS prevention ────────────────────────────────────────────
 function esc(str) {
   if (str == null) return '';

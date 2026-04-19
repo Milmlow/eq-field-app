@@ -263,7 +263,7 @@ async function checkSupabaseHealth() {
         'Range-Unit':    'items',
         'Range':         '0-0'
       },
-      signal: AbortSignal.timeout(10000),
+      signal: _abortAfter(10000),   // v3.4.4 (T1): iOS Safari <16.4 polyfill
       cache: 'no-store',
       credentials: 'omit'        // reduces Brave-shield cross-origin heuristics
     });

@@ -19,9 +19,25 @@ let leaveCalYear  = new Date().getFullYear();
 async function loadLeaveCCList() {
   try {
     const rows = await sbFetch('app_config?key=eq.leave_cc_list&select=value');
-    if (rows && rows[0] && rows[0].value) leaveCCList = JSON.parse(rows[0].value);
+    if (rows && rows[0] && rows[0].value) {
+      try {
+        const parsed = JSON.parse(rows[0].value);
+        leaveCCList = Array.isArray(parsed) ? parsed : [];
+      } catch (pe) {
+        console.warn('leave_cc_list in Supabase is malformed JSON — falling back');
+        leaveCCList = [];
+      }
+    }
   } catch (e) {
-    leaveCCList = JSON.parse(localStorage.getItem('eq_leave_cc') || '[]');
+    // v3.4.4 (L4): guard the localStorage fallback parse — malformed cache
+    // used to crash the page. Now degrades to an empty list.
+    try {
+      const parsed = JSON.parse(localStorage.getItem('eq_leave_cc') || '[]');
+      leaveCCList = Array.isArray(parsed) ? parsed : [];
+    } catch (pe) {
+      console.warn('eq_leave_cc localStorage malformed — resetting to empty list');
+      leaveCCList = [];
+    }
   }
 }
 
@@ -165,20 +181,38 @@ function openLeaveRequest() {
       return `<option value="${esc(p.name)}">${esc(p.name)}${suffix}</option>`;
     }).join('');
 
-  const aSel = document.getElementById('leave-approver');
-  const mgrs = [...(STATE.managers || [])].sort((a, b) => a.name.localeCompare(b.name));
-  aSel.innerHTML = '<option value="">— Select approver —</option>' +
-    mgrs.map(m => `<option value="${esc(m.name)}">${esc(m.name)}${m.role ? ' — ' + m.role : ''}</option>`).join('');
+  // v3.4.5 (L8): supervisor picker is rebuilt via _populateLeaveApprovers so
+  // we can re-filter when the requester picks themselves (you can't approve
+  // your own request, so don't list yourself as an option).
+  _populateLeaveApprovers('');
+  pSel.onchange = function () { _populateLeaveApprovers(this.value); };
 
   document.getElementById('leave-type').value  = 'A/L';
   document.getElementById('leave-start').value = '';
   document.getElementById('leave-end').value   = '';
   document.getElementById('leave-note').value  = '';
+  // Clear any leftover red highlight from a prior failed submit
+  const aSelClear = document.getElementById('leave-approver');
+  if (aSelClear) aSelClear.style.borderColor = '';
   pickedDays = [];
   setLeaveMode('range');
   renderPickedDays();
   document.getElementById('leave-modal-title').textContent = 'New Leave Request';
   openModal('modal-leave-request');
+}
+
+// v3.4.5 (L8): rebuild the supervisor dropdown with optional self-exclusion.
+// Preserves the current selection if it's still a valid manager.
+function _populateLeaveApprovers(excludeName) {
+  const aSel = document.getElementById('leave-approver');
+  if (!aSel) return;
+  const current = aSel.value;
+  const mgrs = [...(STATE.managers || [])]
+    .filter(m => m.name !== excludeName)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  aSel.innerHTML = '<option value="">— Select your supervisor —</option>' +
+    mgrs.map(m => `<option value="${esc(m.name)}">${esc(m.name)}${m.role ? ' — ' + m.role : ''}</option>`).join('');
+  if (current && mgrs.some(m => m.name === current)) aSel.value = current;
 }
 
 async function submitLeaveRequest() {
@@ -187,8 +221,22 @@ async function submitLeaveRequest() {
   const approver = document.getElementById('leave-approver').value;
   const note     = document.getElementById('leave-note').value.trim();
 
-  if (!name)     { showToast('Select your name');    return; }
-  if (!approver) { showToast('Select an approver');  return; }
+  if (!name) { showToast('Select your name'); return; }
+  // v3.4.5 (L8): hard-stop with a visible red highlight when no supervisor is
+  // chosen. The plain toast was being missed and people were submitting with
+  // an unset approver — meaning the request reached no one for approval.
+  if (!approver) {
+    const aSel = document.getElementById('leave-approver');
+    if (aSel) {
+      aSel.style.borderColor = 'var(--red)';
+      aSel.style.boxShadow   = '0 0 0 3px rgba(220,38,38,.15)';
+      try { aSel.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      try { aSel.focus(); } catch (e) {}
+      setTimeout(() => { aSel.style.borderColor = ''; aSel.style.boxShadow = ''; }, 4000);
+    }
+    showToast('⚠ Choose your supervisor — they need to approve this request');
+    return;
+  }
 
   let dateStart, dateEnd, individualDays = null;
   if (leaveMode === 'range') {
@@ -234,7 +282,12 @@ async function submitLeaveRequest() {
     closeModal('modal-leave-request');
     showToast('Leave request submitted');
     auditLog(`Leave request: ${name} ${type} ${dateStart} to ${dateEnd}`, 'Leave', approver, null);
-    triggerLeaveEmail('new_request', res[0] || row).catch(() => {});
+    // v3.4.4 (L2): no longer swallow email failures — approver needs to know
+    // notification didn't reach them.
+    triggerLeaveEmail('new_request', res[0] || row).catch(e => {
+      console.error('Leave email trigger failed:', e);
+      showToast('⚠ Request saved but approver email failed — tap 📧 Resend');
+    });
     await loadLeaveRequests();
     renderLeave();
   } catch (e) {
@@ -334,7 +387,11 @@ async function respondLeave(status) {
     showToast(`Leave ${status.toLowerCase()} for ${req.requester_name}`);
     auditLog(`Leave ${status}: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
     const updatedReq = { ...req, status, response_note: note || null, responded_by: currentManagerName };
-    triggerLeaveEmail('status_update', updatedReq).catch(() => {});
+    // v3.4.4 (L2): surface email failure so staff notification gaps are visible.
+    triggerLeaveEmail('status_update', updatedReq).catch(e => {
+      console.error('Leave status email failed:', e);
+      showToast(`⚠ ${status} recorded but requester email failed`);
+    });
     await loadLeaveRequests();
     renderLeave();
   } catch (e) {
@@ -430,18 +487,29 @@ function confirmArchiveAllResolved() {
     `Archive ${resolved.length} resolved request${resolved.length !== 1 ? 's' : ''} (Approved + Rejected)? They'll be hidden from this view but preserved for records. The roster is not affected.`;
   document.getElementById('confirm-action').textContent = 'Archive';
   document.getElementById('confirm-action').onclick = async () => {
-    try {
-      const ids = resolved.map(r => r.id);
-      for (const id of ids) {
-        await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: true });
+    // v3.4.4 (L5): track per-row success/failure so a single network blip
+    // doesn't silently strand the rest of the batch.
+    let ok = 0, failed = 0;
+    for (const r of resolved) {
+      try {
+        await sbFetch(`leave_requests?id=eq.${r.id}`, 'PATCH', { archived: true });
+        ok++;
+      } catch (e) {
+        failed++;
+        console.error('Archive failed for id', r.id, e);
       }
-      closeModal('modal-confirm');
-      await loadLeaveRequests();
-      renderLeave();
-      showToast(`${resolved.length} request${resolved.length !== 1 ? 's' : ''} archived`);
-      auditLog('Archived all resolved leave requests', 'Leave', `${resolved.length} archived`, null);
-    } catch (e) {
+    }
+    closeModal('modal-confirm');
+    await loadLeaveRequests();
+    renderLeave();
+    if (failed === 0) {
+      showToast(`${ok} request${ok !== 1 ? 's' : ''} archived`);
+      auditLog('Archived all resolved leave requests', 'Leave', `${ok} archived`, null);
+    } else if (ok === 0) {
       showToast('Archive failed — check connection');
+    } else {
+      showToast(`⚠ ${ok} archived · ${failed} failed — check connection and retry`);
+      auditLog('Archived resolved leave (partial)', 'Leave', `${ok} archived, ${failed} failed`, null);
     }
   };
   openModal('modal-confirm');
@@ -497,12 +565,16 @@ async function triggerLeaveEmail(type, record) {
             ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
           </table>
           <div style="margin-top:20px">
-            <a href="https://eq-solves-field.netlify.app" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review in App →</a>
+            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review in App →</a>
           </div>
         </div>
       </div>`;
     } else if (type === 'status_update') {
-      const person = (STATE.people || []).find(p => p.name === record.requester_name);
+      // v3.4.5 (L9): supervisors can submit leave too — when the requester is
+      // a supervisor they're in STATE.managers, not STATE.people. Fall back
+      // to the managers list so approval emails actually land.
+      const person = (STATE.people   || []).find(p => p.name === record.requester_name)
+                  || (STATE.managers || []).find(m => m.name === record.requester_name);
       if (!person || !person.email) {
         showToast(`⚠ No email on file for ${record.requester_name} — notification not sent`);
         return;
@@ -523,7 +595,7 @@ async function triggerLeaveEmail(type, record) {
             ${record.response_note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.response_note)}</td></tr>` : ''}
           </table>
           <div style="margin-top:20px">
-            <a href="https://eq-solves-field.netlify.app" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
+            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
           </div>
         </div>
       </div>`;
@@ -700,7 +772,10 @@ function renderLeaveCalendar() {
   const months   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('leave-cal-month').textContent = `${months[leaveCalMonth]} ${leaveCalYear}`;
 
-  const approved = leaveRequests.filter(r => r.status === 'Approved' || r.status === 'Pending');
+  // v3.4.4 (L6): calendar shows Approved only — Pending hasn't committed to
+  // the roster yet and was causing ghost entries after rejection until the
+  // page was refreshed. Pending requests remain visible in the list view.
+  const approved = leaveRequests.filter(r => r.status === 'Approved');
   const dayMap   = {};
 
   approved.forEach(r => {

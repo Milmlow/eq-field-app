@@ -158,8 +158,10 @@ function tsTotalHrs(entry) {
         return sum + (parseFloat(part.split(':')[1]) || 0);
       }, 0);
     }
-    const h = parseFloat(entry[d + '_hrs']) || 0;
-    return s + (jobStr && h ? h : 0);
+    // v3.4.4 (T3): count hours whenever they're recorded, even if the job
+    // column is blank — the old "jobStr && h" guard hid legitimate hours and
+    // distorted the weekly total.
+    return s + (parseFloat(entry[d + '_hrs']) || 0);
   }, 0);
 }
 
@@ -204,8 +206,47 @@ async function saveTsCell(name, grp, week, day, job, hrs) {
       row[d + '_hrs'] = parseFloat(hVal) || null;
     }
   });
-  sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal')
-    .catch(() => showToast('Timesheet save failed — check connection'));
+
+  // v3.4.4 (T2): compare-and-swap on updated_at to detect concurrent edits.
+  // When entry.id + entry.updated_at are known (i.e. loaded from server), do
+  // a CAS PATCH. Zero affected rows means another supervisor wrote first —
+  // refresh from server and tell the user before they clobber unknowingly.
+  // When we don't have an id yet (first insert), fall back to the existing
+  // upsert path.
+  try {
+    if (entry.id && entry.updated_at) {
+      const enc = encodeURIComponent(entry.updated_at);
+      const res = await sbFetch(
+        `timesheets?id=eq.${entry.id}&updated_at=eq.${enc}`,
+        'PATCH', row, 'return=representation'
+      );
+      if (Array.isArray(res) && res.length === 0) {
+        try {
+          const fresh = await sbFetch(`timesheets?id=eq.${entry.id}&select=*`);
+          if (fresh && fresh[0]) Object.assign(entry, fresh[0]);
+        } catch (re) { console.warn('EQ[ts] refresh after CAS miss failed:', re); }
+        renderTimesheets();
+        showToast('⚠ Another supervisor edited this row — your change was NOT saved. Review and retry.');
+        return;
+      }
+      if (Array.isArray(res) && res[0]) {
+        entry.id = res[0].id;
+        entry.updated_at = res[0].updated_at;
+      }
+    } else {
+      const res = await sbFetch(
+        'timesheets?on_conflict=name,week,org_id',
+        'POST', row, 'resolution=merge-duplicates,return=representation'
+      );
+      if (Array.isArray(res) && res[0]) {
+        entry.id = res[0].id;
+        entry.updated_at = res[0].updated_at;
+      }
+    }
+  } catch (e) {
+    showToast('Timesheet save failed — check connection');
+    console.error('EQ[ts] save error:', e);
+  }
 }
 
 // ── Cell change handler ───────────────────────────────────────
@@ -276,12 +317,24 @@ async function fillTsWeekFromMon(name, grp) {
   const monHrs = entry.mon_hrs;
   const days   = ['tue', 'wed', 'thu', 'fri'];
 
-  // Warn before clobbering existing Tue–Fri data
+  // v3.4.4 (T6): itemise what will be overwritten so supervisors don't
+  // unknowingly erase earlier entries.
   const hasExisting = days.some(d => entry[d + '_job'] || entry[d + '_hrs']);
   if (hasExisting) {
+    const dayLbl = { tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri' };
+    const lines = days.map(d => {
+      const j = entry[d + '_job'] || '';
+      const h = entry[d + '_hrs'];
+      if (!j && (h == null || h === '')) return `  ${dayLbl[d]}: (empty)`;
+      const jLabel = String(j).includes('|') ? String(j) : (j || '—');
+      return `  ${dayLbl[d]}: ${jLabel} / ${h || 0}h`;
+    }).join('\n');
+    const monLabel = String(monJob).includes('|') ? String(monJob) : String(monJob).split(':')[0];
     const ok = window.confirm(
-      `${name} already has Tue–Fri data for this week.\n\n` +
-      `Overwrite Tue–Fri with Monday's job (${String(monJob).split(':')[0]}) / ${monHrs || 0}h?`
+      `${name} — overwrite Tue–Fri with Monday's values?\n\n` +
+      `Current data:\n${lines}\n\n` +
+      `New values for each day:\n  ${monLabel} / ${monHrs || 0}h\n\n` +
+      `This cannot be undone.`
     );
     if (!ok) return;
   }
@@ -375,8 +428,13 @@ function renderTimesheets() {
         const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
         let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
         if (rawJob.includes('|')) {
+          // v3.4.4 (T4): validate split-day format — warn when extra pipe
+          // segments are present so the malformed data doesn't silently
+          // lose information. Render the first two parts either way.
           const parts = rawJob.split('|');
-          const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
+          if (parts.length !== 2) console.warn('EQ[ts] malformed split-day value for', p.name, d, '— expected 2 segments, got', parts.length, ':', rawJob);
+          const p0 = (parts[0] || '').split(':');
+          const p1 = (parts[1] || '').split(':');
           job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
         } else {
           job1 = rawJob; hrs1 = rawHrs;
@@ -678,7 +736,7 @@ async function importTsCSV(evt) {
   const peopleByName = {};
   STATE.people.forEach(p => { peopleByName[p.name] = p; });
 
-  let updated = 0, unknown = 0, cells = 0;
+  let updated = 0, unknown = 0, cells = 0, clamped = 0;
   for (const r of rows) {
     const name = (r[iName] || '').trim();
     const week = (r[iWeek] || '').trim();
@@ -692,7 +750,17 @@ async function importTsCSV(evt) {
       const jobRaw = dc.job >= 0 ? (r[dc.job] || '').trim() : '';
       const hrsRaw = dc.hrs >= 0 ? (r[dc.hrs] || '').trim() : '';
       if (!jobRaw && !hrsRaw) continue;
-      const hrs = parseFloat(hrsRaw) || null;
+      // v3.4.4 (T7): clamp imported hours to [0, 24] so CSV can't introduce
+      // values the UI would otherwise refuse. Count adjustments for the toast.
+      let hrs = parseFloat(hrsRaw);
+      if (isNaN(hrs)) {
+        hrs = null;
+      } else if (hrs < 0 || hrs > 24) {
+        const orig = hrs;
+        hrs = Math.max(0, Math.min(24, hrs));
+        clamped++;
+        console.warn(`CSV import: ${name} ${dc.label} ${orig}h → clamped to ${hrs}h`);
+      }
       await saveTsCell(name, group, week, dc.day, jobRaw || null, hrs);
       cells++;
       rowTouched = true;
@@ -703,6 +771,7 @@ async function importTsCSV(evt) {
   renderTimesheets();
   const bits = [updated + ' staff updated', cells + ' cells'];
   if (unknown) bits.push(unknown + ' unknown names skipped');
+  if (clamped) bits.push(clamped + ' hours clamped to 0–24');
   showToast('✓ Imported — ' + bits.join(', '));
   auditLog('Imported timesheet CSV — ' + bits.join(', '), 'Timesheet', '', STATE.currentWeek);
 
@@ -736,8 +805,11 @@ function renderStaffTs() {
     const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
     let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
     if (rawJob.includes('|')) {
+      // v3.4.4 (T4): same defensive parse as supervisor view.
       const parts = rawJob.split('|');
-      const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
+      if (parts.length !== 2) console.warn('EQ[ts] malformed split-day value (staff view) for', name, d, '—', parts.length, 'segments:', rawJob);
+      const p0 = (parts[0] || '').split(':');
+      const p1 = (parts[1] || '').split(':');
       job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
     } else { job1 = rawJob; hrs1 = rawHrs; }
 
@@ -823,9 +895,14 @@ async function onStaffTsCellChange(el) {
   const hrs1El = root.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="1"]`);
 
   const job0 = job0El ? job0El.value.trim() : '';
-  const hrs0 = hrs0El ? parseFloat(hrs0El.value) || 0 : 0;
+  // v3.4.4 (T5): staff self-entry now clamps to [0, 24] silently. Negative
+  // values were being accepted and distorting totals.
+  const _clamp = v => Math.max(0, Math.min(24, v));
+  let hrs0 = hrs0El ? _clamp(parseFloat(hrs0El.value) || 0) : 0;
+  if (hrs0El && parseFloat(hrs0El.value) !== hrs0 && hrs0El.value !== '') hrs0El.value = hrs0;
   const job1 = job1El ? job1El.value.trim() : '';
-  const hrs1 = hrs1El ? parseFloat(hrs1El.value) || 0 : 0;
+  let hrs1 = hrs1El ? _clamp(parseFloat(hrs1El.value) || 0) : 0;
+  if (hrs1El && parseFloat(hrs1El.value) !== hrs1 && hrs1El.value !== '') hrs1El.value = hrs1;
 
   let combinedJob, combinedHrs;
   if (job1) { combinedJob = `${job0}:${hrs0}|${job1}:${hrs1}`; combinedHrs = hrs0 + hrs1; }
