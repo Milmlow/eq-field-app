@@ -23,14 +23,14 @@ const _ANALYTICS_CONFIG = {
   eq: {
     posthogKey:  'phc_zXpRxm6QUbLBZKLcSXd5CvtPJCipQkuMELRZzyDgxFB7',
     posthogHost: 'https://eu.i.posthog.com',
-    clarityId:   'REPLACE_ME_CLARITY_DEMO',
+    clarityId:   'wek7yeida5',
     appEnv:      'demo',
   },
   // SKS prod — posthog project `eq-production`, clarity `eq-field-sks`
   sks: {
     posthogKey:  'phc_vM4Hrh7QhjsUqHRb2xC7LbqSqMsB5tLQqwSApkpEVPnU',
     posthogHost: 'https://eu.i.posthog.com',
-    clarityId:   'REPLACE_ME_CLARITY_SKS',
+    clarityId:   'wek8dmtbuu',
     appEnv:      'production',
   },
 };
