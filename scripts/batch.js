@@ -153,7 +153,7 @@ async function applyBatch(people, days, code, week, skipExisting) {
   const saves = people.map(async p => {
     const entry = STATE.schedule.find(r => r.name === p.name && r.week === week);
     if (!entry) return;
-    if (entry.id && !String(entry.id).startsWith('temp')) {
+    if (_isRealDbId(entry.id)) {
       const patch = {};
       days.forEach(d => { patch[d] = entry[d] || null; });
       await sbFetch(`schedule?id=eq.${entry.id}`, 'PATCH', patch);
@@ -266,7 +266,7 @@ async function copyLastWeek() {
 
   // \u2500\u2500 Phase 2: Save to Supabase in parallel \u2500\u2500
   const savePromises = saveTasks.map(async ({ entry, cellsChanged }) => {
-    if (entry.id && !String(entry.id).startsWith('temp')) {
+    if (_isRealDbId(entry.id)) {
       // Existing row \u2014 PATCH only changed days in a single request
       const patch = {};
       cellsChanged.forEach(d => { patch[d] = entry[d] || null; });

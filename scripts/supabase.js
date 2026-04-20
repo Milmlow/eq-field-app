@@ -31,6 +31,22 @@ function _isDemoTenant() {
   return (typeof TENANT !== 'undefined') && (TENANT.ORG_SLUG === 'demo');
 }
 
+// ── DB ID validator ───────────────────────────────────────────
+// Returns true ONLY for real Postgres-issued UUIDs. Rejects:
+//   - null / undefined
+//   - temp IDs minted locally for offline writes (e.g. 'temp_abc123')
+//   - integer IDs from SEED demo data (e.g. 101, 306 ...)
+// All our primary keys (schedule/people/sites/managers) are uuid, so any
+// PATCH/DELETE using a non-UUID id 400s with
+// `invalid input syntax for type uuid: "306"`. Call sites should use
+// _isRealDbId(entity.id) to branch between PATCH (real row) and POST
+// (insert — no server row exists yet).
+const _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function _isRealDbId(id) {
+  if (id === null || id === undefined) return false;
+  return _UUID_RE.test(String(id));
+}
+
 function _sbLog(level, stage, details) {
   // Central logger so errors can be surfaced consistently.
   // level: 'warn' | 'error' | 'info'
@@ -302,7 +318,7 @@ setInterval(() => refreshData(true), 5 * 60 * 1000);
 // otherwise POST a new row and write the generated id back onto `entity`.
 // `temp*` ids (client-side placeholders) always POST.
 async function _upsertById(table, entity, row) {
-  const isTempId = !entity.id || String(entity.id).startsWith('temp');
+  const isTempId = !_isRealDbId(entity.id);
   try {
     if (!isTempId) {
       const existing = await sbFetch(`${table}?id=eq.${entity.id}&select=id`);
@@ -357,7 +373,7 @@ async function deleteSiteFromSB(id) {
 async function saveCellToSB(name, week, day, val) {
   const existing = STATE.schedule.find(r => r.name === name && r.week === week);
 
-  if (existing && existing.id && !String(existing.id).startsWith('temp')) {
+  if (existing && _isRealDbId(existing.id)) {
     // ── TRUE COMPARE-AND-SWAP ──────────────────────────────────
     // PATCH with both id=eq.<id> AND updated_at=eq.<stamp>. PostgREST
     // returns the updated rows only if the WHERE clause matched — so an
@@ -464,7 +480,7 @@ async function saveRowToSB(name, week, dayVals) {
   const patch = {};
   Object.entries(dayVals).forEach(([d, v]) => { patch[d] = v || null; });
 
-  if (existing.id && !String(existing.id).startsWith('temp')) {
+  if (_isRealDbId(existing.id)) {
     let res;
     try {
       if (existing.updated_at) {

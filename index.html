@@ -166,8 +166,25 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.12
+  EQ Solves — Field  v3.4.13
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.13  (Schedule PATCH fix — integer SEED IDs)
+  ──────────────────────────────────────────────────────────
+  - scripts/supabase.js — new _isRealDbId() helper. Rejects null,
+    undefined, temp_* IDs AND integer IDs from SEED demo data. Real
+    Postgres primary keys are uuid; anything else 400s on PATCH with
+    `invalid input syntax for type uuid: "306"`.
+  - scripts/supabase.js + scripts/batch.js — replaced all 5 call sites
+    that previously used `!String(id).startsWith('temp')`. That guard
+    let integer SEED IDs (schedule 101–318) through as if they were
+    real DB rows, causing 18 console 400s on any page that touched
+    the demo schedule. Now those rows INSERT on first edit (POST) and
+    PATCH thereafter against the uuid the server returns.
+  - No schema or RLS changes. Non-demo tenants (SKS) are unaffected —
+    they never had integer IDs in the first place.
+  - sw.js — cache bumped to v3.4.13 so existing clients pick up the
+    patched supabase.js / batch.js.
 
   CHANGES IN v3.4.12  (Clarity IDs — Field demo + SKS prod)
   ──────────────────────────────────────────────────────────
@@ -596,7 +613,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.12</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.13</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
