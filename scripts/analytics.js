@@ -14,10 +14,20 @@
 // ── Per-hostname config ───────────────────────────────────────
 // PostHog + Clarity keys are public (safe to embed in frontend).
 // Kept as real-file config here to mirror TENANT_SUPABASE in
-// app-state.js — demo vs prod switches automatically by hostname.
+// app-state.js.
 //
-// REPLACE the phc_... and 10-char Clarity IDs once the accounts
-// are created (see eq-analytics-v2/README.md).
+// Scope: analytics runs on the EQ Solves DEMO site only. SKS prod
+// (sks-nsw-labour.netlify.app) is deliberately NOT wired — decision
+// recorded 2026-04-20, driven by APP 1/5/8 privacy obligations, NSW
+// labour-hire disclosure requirements, and the fact that the SKS
+// prod tenant is stable and doesn't need ongoing UX research.
+//
+// If a hostname isn't in this map the loader falls back to the `eq`
+// demo profile, so SKS prod effectively no-ops (init runs but events
+// are captured against the demo project, not a prod one). The `sks`
+// block is intentionally absent; the Clarity project `wek8dmtbuu` and
+// PostHog key `phc_vM4Hrh7Q…` are parked in KEYS_INVENTORY.md, not
+// here, so they can't be revived by accident.
 const _ANALYTICS_CONFIG = {
   // EQ demo — posthog project `eq-development`, clarity `eq-field-demo`
   eq: {
@@ -25,13 +35,6 @@ const _ANALYTICS_CONFIG = {
     posthogHost: 'https://eu.i.posthog.com',
     clarityId:   'wek7yeida5',
     appEnv:      'demo',
-  },
-  // SKS prod — posthog project `eq-production`, clarity `eq-field-sks`
-  sks: {
-    posthogKey:  'phc_vM4Hrh7QhjsUqHRb2xC7LbqSqMsB5tLQqwSApkpEVPnU',
-    posthogHost: 'https://eu.i.posthog.com',
-    clarityId:   'wek8dmtbuu',
-    appEnv:      'production',
   },
 };
 
@@ -45,12 +48,21 @@ function _initAnalytics() {
   if (_initialised) return;
 
   // Resolve tenant slug using the same detection helper as Supabase.
-  // Falls back to 'eq' (demo) if the helper isn't available.
+  // Falls back to 'eq' (demo) if the helper isn't available — but
+  // ONLY the `eq` demo slug has a real config entry. Any other slug
+  // (sks, future tenants) intentionally no-ops here.
   const slug = (typeof _detectTenantSlug === 'function')
     ? _detectTenantSlug()
     : 'eq';
 
-  _config = _ANALYTICS_CONFIG[slug] || _ANALYTICS_CONFIG.eq;
+  _config = _ANALYTICS_CONFIG[slug] || null;
+
+  // Guard: no config for this tenant → skip init. Keeps SKS prod and
+  // any other non-demo tenant analytics-silent by default.
+  if (!_config) {
+    console.info('[analytics] no config for tenant "' + slug + '" — skipping init (demo-only by design)');
+    return;
+  }
 
   // Guard: skip init if keys are still placeholders. Avoids posting
   // junk to a nonexistent PostHog project before keys are filled in.
