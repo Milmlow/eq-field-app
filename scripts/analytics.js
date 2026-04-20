@@ -114,11 +114,17 @@ function _initAnalytics() {
   });
 
   // ── Microsoft Clarity loader ───────────────────────────────
-  (function (c, l, a, r, i) {
-    c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
-    var t = l.createElement(r); t.async = 1; t.src = 'https://www.clarity.ms/tag/' + i;
-    var y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
-  })(window, document, 'clarity', 'script', _config.clarityId);
+  // Skip if Clarity ID is still a placeholder (accounts not created yet).
+  // PostHog stays active — Clarity is optional.
+  if (String(_config.clarityId).indexOf('REPLACE_ME') === -1) {
+    (function (c, l, a, r, i) {
+      c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
+      var t = l.createElement(r); t.async = 1; t.src = 'https://www.clarity.ms/tag/' + i;
+      var y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
+    })(window, document, 'clarity', 'script', _config.clarityId);
+  } else {
+    console.info('[analytics] Clarity ID is a placeholder — skipping Clarity init (PostHog active)');
+  }
 
   // ── Global error hooks — covers render errors AND async failures ──
   // Safe to register here since analytics.js loads early. Only fires
