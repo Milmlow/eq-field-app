@@ -75,6 +75,11 @@ function openAddPerson() {
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = '';
   openModal('modal-person');
+  try {
+    if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+      window.EQ_ANALYTICS.events.peopleModalOpened({ mode: 'add' });
+    }
+  } catch (e) {}
 }
 
 function editPerson(id) {
@@ -94,6 +99,11 @@ function editPerson(id) {
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = ''; // never pre-fill PIN
   openModal('modal-person');
+  try {
+    if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+      window.EQ_ANALYTICS.events.peopleModalOpened({ mode: 'edit' });
+    }
+  } catch (e) {}
 }
 
 // Called when group select changes while the modal is open.
@@ -155,6 +165,15 @@ function savePerson() {
   renderCurrentPage();
   auditLog(id ? `Updated: ${name}` : `Added: ${name}`, 'People', `Group: ${group}`, null);
   savePersonToSB(person).catch(() => showToast('Save failed — check connection'));
+
+  try {
+    if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+      window.EQ_ANALYTICS.events.peopleModalSaved({
+        mode: id ? 'edit' : 'add',
+        has_apprentice_year: yearLevel != null,
+      });
+    }
+  } catch (e) {}
 }
 
 function confirmRemove(id, name) {

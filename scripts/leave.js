@@ -19,9 +19,25 @@ let leaveCalYear  = new Date().getFullYear();
 async function loadLeaveCCList() {
   try {
     const rows = await sbFetch('app_config?key=eq.leave_cc_list&select=value');
-    if (rows && rows[0] && rows[0].value) leaveCCList = JSON.parse(rows[0].value);
+    if (rows && rows[0] && rows[0].value) {
+      try {
+        const parsed = JSON.parse(rows[0].value);
+        leaveCCList = Array.isArray(parsed) ? parsed : [];
+      } catch (pe) {
+        console.warn('leave_cc_list in Supabase is malformed JSON — falling back');
+        leaveCCList = [];
+      }
+    }
   } catch (e) {
-    leaveCCList = JSON.parse(localStorage.getItem('eq_leave_cc') || '[]');
+    // v3.4.4 (L4): guard the localStorage fallback parse — malformed cache
+    // used to crash the page. Now degrades to an empty list.
+    try {
+      const parsed = JSON.parse(localStorage.getItem('eq_leave_cc') || '[]');
+      leaveCCList = Array.isArray(parsed) ? parsed : [];
+    } catch (pe) {
+      console.warn('eq_leave_cc localStorage malformed — resetting to empty list');
+      leaveCCList = [];
+    }
   }
 }
 
@@ -36,7 +52,50 @@ async function saveLeaveCCList() {
 function openLeaveCCConfig() {
   if (!isManager) { showToast('Supervision access required'); return; }
   renderLeaveCCList();
+  renderLeaveCCSupervisors();
   openModal('modal-leave-cc');
+}
+
+// v3.4.5 (L10): quick-pick supervisors from the managers list — saves typing
+// emails for the common case of CC'ing other supervisors on leave threads.
+// Chips toggle in/out of the CC list; 'in' chips show a ✓ and highlight.
+function renderLeaveCCSupervisors() {
+  const el = document.getElementById('leave-cc-supervisors');
+  if (!el) return;
+  const mgrs = (STATE.managers || [])
+    .filter(m => m && m.email)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!mgrs.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--ink-4);padding:4px 0">No supervisors with emails on file yet — add an email on the Supervisors tab.</div>';
+    return;
+  }
+  el.innerHTML = mgrs.map(m => {
+    const email  = m.email.toLowerCase();
+    const inList = leaveCCList.includes(email);
+    const bg     = inList ? 'var(--purple)'  : 'var(--surface-2)';
+    const col    = inList ? '#fff'           : 'var(--ink-2)';
+    const border = inList ? 'var(--purple)'  : 'var(--border)';
+    const icon   = inList ? '✓' : '+';
+    const safeEmail = email.replace(/'/g, '&#39;');
+    const tip = `${m.name}${m.role ? ' — ' + m.role : ''} · ${m.email}`;
+    return `<button onclick="toggleLeaveCCSupervisor('${safeEmail}')" title="${esc(tip)}" style="background:${bg};color:${col};border:1px solid ${border};padding:4px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><span style="font-weight:800">${icon}</span>${esc(m.name)}</button>`;
+  }).join('');
+}
+
+function toggleLeaveCCSupervisor(email) {
+  if (!email) return;
+  const lower = String(email).toLowerCase();
+  const idx   = leaveCCList.indexOf(lower);
+  if (idx >= 0) {
+    leaveCCList.splice(idx, 1);
+    showToast(`${lower} removed from CC`);
+  } else {
+    leaveCCList.push(lower);
+    showToast(`${lower} added to CC`);
+  }
+  saveLeaveCCList();
+  renderLeaveCCList();
+  renderLeaveCCSupervisors();
 }
 
 function renderLeaveCCList() {
@@ -62,6 +121,7 @@ function addLeaveCC() {
   saveLeaveCCList();
   input.value = '';
   renderLeaveCCList();
+  renderLeaveCCSupervisors();
   showToast(`${email} added to CC list`);
 }
 
@@ -69,14 +129,18 @@ function removeLeaveCC(idx) {
   const removed = leaveCCList.splice(idx, 1);
   saveLeaveCCList();
   renderLeaveCCList();
+  renderLeaveCCSupervisors();
   showToast(`${removed} removed`);
 }
 
 // ── Load from Supabase ────────────────────────────────────────
 
+let showArchivedLeave = false;
+
 async function loadLeaveRequests() {
   try {
-    leaveRequests = await sbFetch('leave_requests?select=*&order=created_at.desc');
+    const archiveFilter = showArchivedLeave ? '' : '&archived=eq.false';
+    leaveRequests = await sbFetch('leave_requests?select=*&order=created_at.desc' + archiveFilter);
   } catch (e) {
     leaveRequests = [];
   }
@@ -162,20 +226,38 @@ function openLeaveRequest() {
       return `<option value="${esc(p.name)}">${esc(p.name)}${suffix}</option>`;
     }).join('');
 
-  const aSel = document.getElementById('leave-approver');
-  const mgrs = [...(STATE.managers || [])].sort((a, b) => a.name.localeCompare(b.name));
-  aSel.innerHTML = '<option value="">— Select approver —</option>' +
-    mgrs.map(m => `<option value="${esc(m.name)}">${esc(m.name)}${m.role ? ' — ' + m.role : ''}</option>`).join('');
+  // v3.4.5 (L8): supervisor picker is rebuilt via _populateLeaveApprovers so
+  // we can re-filter when the requester picks themselves (you can't approve
+  // your own request, so don't list yourself as an option).
+  _populateLeaveApprovers('');
+  pSel.onchange = function () { _populateLeaveApprovers(this.value); };
 
   document.getElementById('leave-type').value  = 'A/L';
   document.getElementById('leave-start').value = '';
   document.getElementById('leave-end').value   = '';
   document.getElementById('leave-note').value  = '';
+  // Clear any leftover red highlight from a prior failed submit
+  const aSelClear = document.getElementById('leave-approver');
+  if (aSelClear) aSelClear.style.borderColor = '';
   pickedDays = [];
   setLeaveMode('range');
   renderPickedDays();
   document.getElementById('leave-modal-title').textContent = 'New Leave Request';
   openModal('modal-leave-request');
+}
+
+// v3.4.5 (L8): rebuild the supervisor dropdown with optional self-exclusion.
+// Preserves the current selection if it's still a valid manager.
+function _populateLeaveApprovers(excludeName) {
+  const aSel = document.getElementById('leave-approver');
+  if (!aSel) return;
+  const current = aSel.value;
+  const mgrs = [...(STATE.managers || [])]
+    .filter(m => m.name !== excludeName)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  aSel.innerHTML = '<option value="">— Select your supervisor —</option>' +
+    mgrs.map(m => `<option value="${esc(m.name)}">${esc(m.name)}${m.role ? ' — ' + m.role : ''}</option>`).join('');
+  if (current && mgrs.some(m => m.name === current)) aSel.value = current;
 }
 
 async function submitLeaveRequest() {
@@ -184,8 +266,22 @@ async function submitLeaveRequest() {
   const approver = document.getElementById('leave-approver').value;
   const note     = document.getElementById('leave-note').value.trim();
 
-  if (!name)     { showToast('Select your name');    return; }
-  if (!approver) { showToast('Select an approver');  return; }
+  if (!name) { showToast('Select your name'); return; }
+  // v3.4.5 (L8): hard-stop with a visible red highlight when no supervisor is
+  // chosen. The plain toast was being missed and people were submitting with
+  // an unset approver — meaning the request reached no one for approval.
+  if (!approver) {
+    const aSel = document.getElementById('leave-approver');
+    if (aSel) {
+      aSel.style.borderColor = 'var(--red)';
+      aSel.style.boxShadow   = '0 0 0 3px rgba(220,38,38,.15)';
+      try { aSel.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      try { aSel.focus(); } catch (e) {}
+      setTimeout(() => { aSel.style.borderColor = ''; aSel.style.boxShadow = ''; }, 4000);
+    }
+    showToast('⚠ Choose your supervisor — they need to approve this request');
+    return;
+  }
 
   let dateStart, dateEnd, individualDays = null;
   if (leaveMode === 'range') {
@@ -226,14 +322,67 @@ async function submitLeaveRequest() {
     status:          'Pending'
   };
 
+  // v3.4.5 (L13): Backdated-leave guard — if the start date is earlier than
+  // today, ask for confirmation before inserting. Prevents accidental submits
+  // when the date picker was left on a stale value.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  if (dateStart < todayIso) {
+    document.getElementById('confirm-title').textContent = 'Backdated Leave Request';
+    document.getElementById('confirm-msg').textContent =
+      `This leave starts on ${dateStart}, which is in the past. Continue submitting a backdated request?`;
+    document.getElementById('confirm-action').textContent = 'Submit Anyway';
+    document.getElementById('confirm-action').onclick = async () => {
+      closeModal('modal-confirm');
+      await _performLeaveSubmit(row);
+    };
+    openModal('modal-confirm');
+    return;
+  }
+
+  await _performLeaveSubmit(row);
+}
+
+// v3.4.5 (L13): extracted so the backdated-leave confirm path and the normal
+// path share a single submit implementation.
+async function _performLeaveSubmit(row) {
   try {
     const res = await sbFetch('leave_requests', 'POST', row, 'return=representation');
     closeModal('modal-leave-request');
     showToast('Leave request submitted');
-    auditLog(`Leave request: ${name} ${type} ${dateStart} to ${dateEnd}`, 'Leave', approver, null);
-    triggerLeaveEmail('new_request', res[0] || row).catch(() => {});
+    auditLog(`Leave request: ${row.requester_name} ${row.leave_type} ${row.date_start} to ${row.date_end}`, 'Leave', row.approver_name, null);
+    const saved = res[0] || row;
+    // v3.4.4 (L2): no longer swallow email failures — approver needs to know
+    // notification didn't reach them.
+    triggerLeaveEmail('new_request', saved).catch(e => {
+      console.error('Leave email trigger failed:', e);
+      showToast('⚠ Request saved but approver email failed — tap 📧 Resend');
+    });
+    // v3.4.5 (L15): confirmation email to requester so they have a receipt.
+    triggerLeaveEmail('submit_confirmation', saved).catch(e => {
+      console.error('Leave confirmation email failed:', e);
+    });
     await loadLeaveRequests();
     renderLeave();
+
+    // Analytics — fire after successful submit so failed submits don't
+    // pollute the funnel. days_requested covers both the range path
+    // (inclusive day count) and the picked-days path (array length).
+    try {
+      if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+        var daysRequested;
+        if (Array.isArray(row.individual_days)) {
+          daysRequested = row.individual_days.length;
+        } else {
+          var _s = new Date(row.date_start + 'T00:00:00');
+          var _e = new Date(row.date_end   + 'T00:00:00');
+          daysRequested = Math.floor((_e - _s) / 86400000) + 1;
+        }
+        window.EQ_ANALYTICS.events.leaveRequestSubmitted({
+          leave_type:     row.leave_type,
+          days_requested: daysRequested,
+        });
+      }
+    } catch (e) { /* never break app */ }
   } catch (e) {
     showToast('Failed to submit — check connection');
   }
@@ -301,6 +450,20 @@ async function respondLeave(status) {
   }
   if (!req) return;
 
+  // v3.4.5 (L12): Require a reason when rejecting so the requester gets context.
+  if (status === 'Rejected' && !note) {
+    const noteEl = document.getElementById('leave-response-note');
+    if (noteEl) {
+      noteEl.style.borderColor = 'var(--red)';
+      noteEl.style.boxShadow   = '0 0 0 3px rgba(220,38,38,.15)';
+      try { noteEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      try { noteEl.focus(); } catch (e) {}
+      setTimeout(() => { noteEl.style.borderColor = ''; noteEl.style.boxShadow = ''; }, 4000);
+    }
+    showToast('⚠ Add a reason when rejecting — the requester will see this');
+    return;
+  }
+
   try {
     await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', {
       status:         status,
@@ -331,7 +494,11 @@ async function respondLeave(status) {
     showToast(`Leave ${status.toLowerCase()} for ${req.requester_name}`);
     auditLog(`Leave ${status}: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
     const updatedReq = { ...req, status, response_note: note || null, responded_by: currentManagerName };
-    triggerLeaveEmail('status_update', updatedReq).catch(() => {});
+    // v3.4.4 (L2): surface email failure so staff notification gaps are visible.
+    triggerLeaveEmail('status_update', updatedReq).catch(e => {
+      console.error('Leave status email failed:', e);
+      showToast(`⚠ ${status} recorded but requester email failed`);
+    });
     await loadLeaveRequests();
     renderLeave();
   } catch (e) {
@@ -382,44 +549,127 @@ async function writeLeaveToSchedule(req) {
   }
 }
 
-// ── Clear all ─────────────────────────────────────────────────
+// ── Archive ──────────────────────────────────────────────────
+// Archiving hides leave requests from the default view but does
+// NOT touch the roster/schedule — approved leave stays on the grid.
 
-function confirmClearLeave() {
+async function archiveLeaveRequest(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const count = leaveRequests.length;
-  if (!count) { showToast('No leave requests to clear'); return; }
-  document.getElementById('confirm-title').textContent = 'Clear All Leave Requests';
-  document.getElementById('confirm-msg').textContent   =
-    `This will permanently delete all ${count} leave requests. This cannot be undone. Continue?`;
-  document.getElementById('confirm-action').textContent = 'Clear All';
+  const req = leaveRequests.find(r => r.id === id);
+  if (!req) return;
+  try {
+    await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: true });
+    req.archived = true;
+    if (!showArchivedLeave) leaveRequests = leaveRequests.filter(r => r.id !== id);
+    updateLeaveBadge();
+    renderLeave();
+    showToast(`${req.requester_name} leave archived`);
+    auditLog(`Archived leave: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
+  } catch (e) {
+    showToast('Archive failed — check connection');
+  }
+}
+
+async function unarchiveLeaveRequest(id) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const req = leaveRequests.find(r => r.id === id);
+  if (!req) return;
+  try {
+    await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: false });
+    req.archived = false;
+    updateLeaveBadge();
+    renderLeave();
+    showToast(`${req.requester_name} leave restored`);
+  } catch (e) {
+    showToast('Restore failed — check connection');
+  }
+}
+
+// v3.4.5 (L14): Withdraw a pending request. Available to the requester
+// themselves (matched via the auth-set sessionStorage name) or any supervisor.
+// Uses modal-confirm so people can't tap past it by accident on a small screen.
+async function withdrawLeaveRequest(id) {
+  const req = leaveRequests.find(r => r.id === id);
+  if (!req) return;
+  if (req.status !== 'Pending') { showToast('Only pending requests can be withdrawn'); return; }
+  const loggedInName = sessionStorage.getItem('eq_logged_in_name') || '';
+  if (!(isManager || loggedInName === req.requester_name)) {
+    showToast('Only the requester or a supervisor can withdraw this request');
+    return;
+  }
+
+  document.getElementById('confirm-title').textContent = 'Withdraw Leave Request';
+  document.getElementById('confirm-msg').textContent =
+    `Withdraw ${req.requester_name}'s leave request for ${req.date_start} to ${req.date_end}? The approver will no longer see it as pending.`;
+  document.getElementById('confirm-action').textContent = 'Withdraw';
   document.getElementById('confirm-action').onclick = async () => {
+    closeModal('modal-confirm');
     try {
-      // LEV-005: Remove leave codes from schedule for approved requests
-      const approvedReqs = leaveRequests.filter(r => r.status === 'Approved');
-      for (const req of approvedReqs) {
-        const leaveDates = _getLeaveDates(req);
-        for (const ds of leaveDates) {
-          const weekStr = getWeekForDate(new Date(ds + 'T00:00:00'));
-          const dayName = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][new Date(ds + 'T00:00:00').getDay()];
-          const sched   = STATE.schedule.find(r => r.name === req.requester_name && r.week === weekStr);
-          if (sched && sched[dayName] && isLeave(sched[dayName])) {
-            sched[dayName] = '';
-            try { await saveCellToSB(req.requester_name, weekStr, dayName, ''); } catch (e) {}
-          }
-        }
-      }
-      await sbFetch(`leave_requests?org_id=eq.${TENANT.ORG_UUID}`, 'DELETE');
-      leaveRequests = [];
-      closeModal('modal-confirm');
-      updateLeaveBadge();
+      await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', {
+        status:        'Withdrawn',
+        responded_by:  loggedInName || currentManagerName || req.requester_name,
+        responded_at:  new Date().toISOString()
+      });
+      showToast(`Leave withdrawn for ${req.requester_name}`);
+      auditLog(`Leave withdrawn: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
+      await loadLeaveRequests();
       renderLeave();
-      showToast(`${count} leave requests cleared`);
-      auditLog('Cleared all leave requests', 'Leave', `${count} deleted`, null);
     } catch (e) {
-      showToast('Failed to clear: ' + e.message);
+      showToast('Withdraw failed — check connection');
     }
   };
   openModal('modal-confirm');
+}
+
+function confirmArchiveAllResolved() {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.5 (L14): Withdrawn joins Approved/Rejected as a "resolved" state for
+  // the bulk-archive sweep — otherwise withdrawn requests linger in the list.
+  const resolved = leaveRequests.filter(r => (r.status === 'Approved' || r.status === 'Rejected' || r.status === 'Withdrawn') && !r.archived);
+  if (!resolved.length) { showToast('No resolved requests to archive'); return; }
+  document.getElementById('confirm-title').textContent = 'Archive Resolved Requests';
+  document.getElementById('confirm-msg').textContent =
+    `Archive ${resolved.length} resolved request${resolved.length !== 1 ? 's' : ''} (Approved + Rejected + Withdrawn)? They'll be hidden from this view but preserved for records. The roster is not affected.`;
+  document.getElementById('confirm-action').textContent = 'Archive';
+  document.getElementById('confirm-action').onclick = async () => {
+    // v3.4.4 (L5): track per-row success/failure so a single network blip
+    // doesn't silently strand the rest of the batch.
+    let ok = 0, failed = 0;
+    for (const r of resolved) {
+      try {
+        await sbFetch(`leave_requests?id=eq.${r.id}`, 'PATCH', { archived: true });
+        ok++;
+      } catch (e) {
+        failed++;
+        console.error('Archive failed for id', r.id, e);
+      }
+    }
+    closeModal('modal-confirm');
+    await loadLeaveRequests();
+    renderLeave();
+    if (failed === 0) {
+      showToast(`${ok} request${ok !== 1 ? 's' : ''} archived`);
+      auditLog('Archived all resolved leave requests', 'Leave', `${ok} archived`, null);
+    } else if (ok === 0) {
+      showToast('Archive failed — check connection');
+    } else {
+      showToast(`⚠ ${ok} archived · ${failed} failed — check connection and retry`);
+      auditLog('Archived resolved leave (partial)', 'Leave', `${ok} archived, ${failed} failed`, null);
+    }
+  };
+  openModal('modal-confirm');
+}
+
+async function toggleShowArchived() {
+  showArchivedLeave = !showArchivedLeave;
+  const btn = document.getElementById('leave-archive-toggle');
+  if (btn) {
+    btn.textContent = showArchivedLeave ? '📦 Hide Archived' : '📦 Show Archived';
+    btn.style.background = showArchivedLeave ? 'var(--purple-lt)' : '';
+    btn.style.color = showArchivedLeave ? 'var(--purple)' : '';
+  }
+  await loadLeaveRequests();
+  renderLeave();
 }
 
 // ── Resend email ──────────────────────────────────────────────
@@ -460,17 +710,24 @@ async function triggerLeaveEmail(type, record) {
             ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
           </table>
           <div style="margin-top:20px">
-            <a href="https://eq-solves-field.netlify.app" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review in App →</a>
+            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">Review in App →</a>
           </div>
         </div>
       </div>`;
     } else if (type === 'status_update') {
-      const person = (STATE.people || []).find(p => p.name === record.requester_name);
+      // v3.4.5 (L9): supervisors can submit leave too — when the requester is
+      // a supervisor they're in STATE.managers, not STATE.people. Fall back
+      // to the managers list so approval emails actually land.
+      const person = (STATE.people   || []).find(p => p.name === record.requester_name)
+                  || (STATE.managers || []).find(m => m.name === record.requester_name);
       if (!person || !person.email) {
         showToast(`⚠ No email on file for ${record.requester_name} — notification not sent`);
         return;
       }
       to      = person.email;
+      // v3.4.5 (L11): CC the same supervisor group on status updates so the
+      // whole chain sees approvals/rejections, not just the requester.
+      cc      = leaveCCList.filter(e => e && e !== to);
       const statusColor = record.status === 'Approved' ? '#16A34A' : '#DC2626';
       subject = `Leave ${record.status}: ${typeLabels[record.leave_type] || record.leave_type} (${record.date_start} to ${record.date_end})`;
       html    = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto">
@@ -486,7 +743,33 @@ async function triggerLeaveEmail(type, record) {
             ${record.response_note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.response_note)}</td></tr>` : ''}
           </table>
           <div style="margin-top:20px">
-            <a href="https://eq-solves-field.netlify.app" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
+            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
+          </div>
+        </div>
+      </div>`;
+    } else if (type === 'submit_confirmation') {
+      // v3.4.5 (L15): receipt to the requester so they have proof of submission.
+      const person = (STATE.people   || []).find(p => p.name === record.requester_name)
+                  || (STATE.managers || []).find(m => m.name === record.requester_name);
+      if (!person || !person.email) return; // silent — confirmation is nice-to-have, not critical
+      to      = person.email;
+      subject = `Leave Request Submitted: ${typeLabels[record.leave_type] || record.leave_type} (${record.date_start} to ${record.date_end})`;
+      html    = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto">
+        <div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">
+          <h2 style="color:white;margin:0;font-size:18px">Leave Request Submitted</h2>
+          <p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">EQ Solves — Field</p>
+        </div>
+        <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
+          <p style="margin:0 0 16px;font-size:14px;color:#374151">Hi ${escHtml(record.requester_name)} — your leave request has been submitted and is awaiting approval from <strong>${escHtml(record.approver_name)}</strong>.</p>
+          <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">
+            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || record.leave_type}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280">Dates</td><td style="padding:8px 0;font-weight:600">${record.date_start} to ${record.date_end}</td></tr>
+            ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
+            <tr><td style="padding:8px 0;color:#6B7280">Status</td><td style="padding:8px 0;font-weight:600;color:#D97706">Pending</td></tr>
+          </table>
+          <p style="margin:16px 0 0;font-size:12px;color:#6B7280">You'll receive another email once your request is approved or rejected. You can also withdraw this request from the app while it's still pending.</p>
+          <div style="margin-top:20px">
+            <a href="${window.location.origin}" style="display:inline-block;background:#1F335C;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">View in App →</a>
           </div>
         </div>
       </div>`;
@@ -540,9 +823,12 @@ function renderLeave() {
   }
 
   const statusStyle = {
-    Pending:  'background:#FFFBEB;color:#D97706;border:1px solid #FCD34D',
-    Approved: 'background:#F0FDF4;color:#16A34A;border:1px solid #86EFAC',
-    Rejected: 'background:#FEF2F2;color:#DC2626;border:1px solid #FCA5A5'
+    Pending:   'background:#FFFBEB;color:#D97706;border:1px solid #FCD34D',
+    Approved:  'background:#F0FDF4;color:#16A34A;border:1px solid #86EFAC',
+    Rejected:  'background:#FEF2F2;color:#DC2626;border:1px solid #FCA5A5',
+    // v3.4.5 (L14): Withdrawn — neutral grey so it reads as "inactive" rather
+    // than "denied".
+    Withdrawn: 'background:#F3F4F6;color:#6B7280;border:1px solid #D1D5DB'
   };
   const typeLabels = { 'A/L': 'Annual Leave', 'U/L': 'Unpaid Leave', 'RDO': 'RDO' };
 
@@ -565,12 +851,19 @@ function renderLeave() {
       while (d <= de) { if (d.getDay() !== 0 && d.getDay() !== 6) bizDays++; d.setDate(d.getDate() + 1); }
     }
     const canRespond = isManager && r.status === 'Pending';
-    html += `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);${r.status === 'Pending' ? 'background:#FFFDF5' : ''}">
+    const isResolved = r.status === 'Approved' || r.status === 'Rejected' || r.status === 'Withdrawn';
+    const isArchived = !!r.archived;
+    // v3.4.5 (L14): requester (or a supervisor) can withdraw while pending.
+    const loggedInName = sessionStorage.getItem('eq_logged_in_name') || '';
+    const canWithdraw  = r.status === 'Pending' && (isManager || loggedInName === r.requester_name);
+    const rowBg = isArchived ? 'background:var(--surface-2);opacity:.7' : (r.status === 'Pending' ? 'background:#FFFDF5' : '');
+    html += `<div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid var(--border);${rowBg}">
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
           <span style="font-weight:700;color:var(--navy);font-size:14px">${esc(r.requester_name)}</span>
           <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;${statusStyle[r.status] || ''}">${r.status}</span>
           <span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:var(--purple-lt);color:var(--purple)">${typeLabels[r.leave_type] || r.leave_type}</span>
+          ${isArchived ? '<span style="padding:2px 8px;border-radius:5px;font-size:10px;font-weight:600;background:var(--surface-2);color:var(--ink-4);border:1px solid var(--border)">📦 Archived</span>' : ''}
         </div>
         <div style="font-size:12px;color:var(--ink-2);margin-bottom:2px">${datesStr} — <strong>${bizDays} day${bizDays !== 1 ? 's' : ''}</strong></div>
         <div style="font-size:11px;color:var(--ink-3)">Approver: ${esc(r.approver_name)}</div>
@@ -581,6 +874,9 @@ function renderLeave() {
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
         ${canRespond ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond(${r.id})">Review</button>` : ''}
         ${r.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="resendLeaveEmail(${r.id})" style="font-size:10px">📧 Resend</button>` : ''}
+        ${canWithdraw ? `<button class="btn btn-secondary btn-sm" onclick="withdrawLeaveRequest(${r.id})" style="font-size:10px;color:var(--red);border-color:var(--red)">✕ Withdraw</button>` : ''}
+        ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest(${r.id})" style="font-size:10px">📦 Archive</button>` : ''}
+        ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest(${r.id})" style="font-size:10px">↩ Restore</button>` : ''}
       </div>
     </div>`;
   });
@@ -657,7 +953,10 @@ function renderLeaveCalendar() {
   const months   = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('leave-cal-month').textContent = `${months[leaveCalMonth]} ${leaveCalYear}`;
 
-  const approved = leaveRequests.filter(r => r.status === 'Approved' || r.status === 'Pending');
+  // v3.4.4 (L6): calendar shows Approved only — Pending hasn't committed to
+  // the roster yet and was causing ghost entries after rejection until the
+  // page was refreshed. Pending requests remain visible in the list view.
+  const approved = leaveRequests.filter(r => r.status === 'Approved');
   const dayMap   = {};
 
   approved.forEach(r => {

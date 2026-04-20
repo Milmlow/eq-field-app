@@ -26,6 +26,7 @@
 
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
+<script src="scripts/analytics.js"></script>
 <script src="scripts/utils.js"></script>
 <script src="scripts/supabase.js"></script>
 <script src="scripts/roster.js"></script>
@@ -165,8 +166,33 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.10
+  EQ Solves — Field  v3.4.11
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.11  (Analytics wire-up — PostHog EU + Clarity)
+  ──────────────────────────────────────────────────────────
+  - scripts/analytics.js — new. Plain-JS IIFE loader for PostHog (EU
+    cloud, eu.i.posthog.com) + Microsoft Clarity. Hostname-keyed config:
+    eq-solves-field.* uses dev project, sks-nsw-labour.* uses prod.
+    Clarity IDs still placeholders — Clarity init guarded, no-ops until
+    filled in. PostHog keys are live.
+  - index.html — loads scripts/analytics.js after app-state.js. initApp()
+    fires session_started with { app_env, tenant_slug, app_version } once
+    the app is identified. Six PII-ish inputs masked from replays via
+    data-ph-no-capture + data-clarity-mask="true": gate PIN, staff TS PIN,
+    person PIN, bulk PIN, site address, journal reflection.
+  - scripts/leave.js — fires leave_request_submitted on successful submit.
+  - scripts/people.js — fires people_modal_opened (add/edit) and
+    people_modal_saved (incl. has_apprentice_year flag).
+  - scripts/import-export.js — fires csv_exported for people and contacts
+    (with group-suffix for targeted exports).
+  - Five more events pending — checkPin(), timesheets, roster — their
+    host scripts are referenced in index.html but don't exist on disk
+    yet. Snippets staged in scripts/analytics-TODO-hooks.md.
+  - sw.js — cache bumped to v3.4.11 + /scripts/analytics.js added to
+    PRECACHE so offline clients get analytics too.
+  - Privacy/disclosure: this deploy is to the DEMO site only. SKS prod
+    push gated on Royce sending the internal disclosure note.
 
   CHANGES IN v3.4.10  (Apprentice year — contacts as source of truth)
   ──────────────────────────────────────────────────────────
@@ -428,7 +454,7 @@
     </div>
     <div id="gate-pin-wrap" style="width:100%;margin-bottom:4px">
       <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
-      <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
+      <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" data-ph-no-capture data-clarity-mask="true" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
     </div>
     <div class="gate-error" id="gate-err"></div>
     <div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:14px">
@@ -449,6 +475,10 @@
         </div>
       </div>
     </div>
+    <!-- ANALYTICS-TODO: when scripts/auth.js is created, checkPin() must call:
+         success: window.EQ_ANALYTICS.events.pinLoginSucceeded({ role: 'tradie'|'supervisor'|'admin' });
+         failure: window.EQ_ANALYTICS.events.pinLoginFailed({ attempt_count: N });
+         See scripts/analytics-TODO-hooks.md -->
     <button class="gate-btn" onclick="checkPin()">Enter</button>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(61,168,216,.12);display:flex;flex-direction:column;gap:8px;width:100%">
       <button onclick="openStaffTsGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">⏱ My Timesheet →</button>
@@ -496,7 +526,7 @@
     </div>
     <div style="margin-bottom:6px">
       <label style="font-size:11px;font-weight:600;color:var(--ink-2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">4-Digit PIN</label>
-      <input id="staff-ts-pin" type="password" maxlength="4" placeholder="· · · ·" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:24px;text-align:center;letter-spacing:8px;font-weight:700;color:var(--navy);outline:none;transition:border-color .15s" onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'" oninput="document.getElementById('staff-ts-err').textContent=''" onkeydown="if(event.key==='Enter')checkStaffTsLogin()">
+      <input id="staff-ts-pin" type="password" maxlength="4" placeholder="· · · ·" data-ph-no-capture data-clarity-mask="true" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:24px;text-align:center;letter-spacing:8px;font-weight:700;color:var(--navy);outline:none;transition:border-color .15s" onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'" oninput="document.getElementById('staff-ts-err').textContent=''" onkeydown="if(event.key==='Enter')checkStaffTsLogin()">
       <div id="staff-ts-err" style="color:var(--red);font-size:12px;min-height:18px;margin-top:5px;text-align:center"></div>
     </div>
     <button onclick="checkStaffTsLogin()" style="width:100%;padding:12px;background:var(--purple);color:white;border:none;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;transition:background .15s">View My Timesheet →</button>
@@ -1008,10 +1038,10 @@
 
 <!-- Person modal -->
 <div class="modal-overlay" id="modal-person"><div class="modal"><div class="modal-header"><h3 id="modal-person-title">Add Person</h3><button class="modal-close" onclick="closeModal('modal-person')">✕</button></div><div class="modal-body"><input type="hidden" id="person-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="person-name" placeholder="e.g. Alex Mitchell"></div><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="person-phone" placeholder="04XX XXX XXX"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Group</label><select class="form-select" id="person-group" onchange="onPersonGroupChange()"><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select></div><div class="form-group"><label class="form-label" id="person-licence-label">Licence</label><div id="person-licence-slot"><input class="form-input" id="person-licence" placeholder="e.g. Licensed"></div></div></div><div class="form-group"><label class="form-label">Agency (Labour Hire only)</label><input class="form-input" id="person-agency" placeholder="e.g. Core, Atom"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="person-email" type="email" placeholder="name@example.com"></div><div class="form-group"><label class="form-label">TAFE Day <span style="font-size:10px;color:var(--ink-3);font-weight:400">(apprentices)</span></label><select class="form-select" id="person-tafe-day"><option value="">— None —</option><option value="mon">Monday</option><option value="tue">Tuesday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option><option value="fri">Friday</option></select><div class="form-hint">Used by the "Apply TAFE Day" button on the roster editor.</div></div>
-<div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
+<div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" data-ph-no-capture data-clarity-mask="true" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
 
 <!-- Site modal -->
-<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
+<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address" data-ph-no-capture data-clarity-mask="true"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
 
 <!-- Confirm modal -->
 <div class="modal-overlay" id="modal-confirm" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="confirm-title">Confirm</h3><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div><div class="modal-body"><p id="confirm-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6"></p></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancel</button><button class="btn btn-danger" id="confirm-action">Confirm</button></div></div></div>
@@ -1088,7 +1118,7 @@
   <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
     <div style="font-size:11px;font-weight:700;color:var(--ink-2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Bulk action for selected staff</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <input type="number" id="pin-bulk-value" placeholder="New PIN (4 digits)" min="1000" max="9999" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;width:160px;text-align:center;letter-spacing:4px">
+      <input type="number" id="pin-bulk-value" placeholder="New PIN (4 digits)" min="1000" max="9999" data-ph-no-capture data-clarity-mask="true" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;width:160px;text-align:center;letter-spacing:4px">
       <button class="btn btn-primary btn-sm" onclick="applyBulkPin()">Apply to Selected</button>
       <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="clearBulkPin()">Clear PINs</button>
     </div>
@@ -1488,6 +1518,30 @@ async function initApp() {
 
   // Start Supabase Realtime (live multi-user updates on schedule table).
   if (typeof startRealtime === 'function') startRealtime();
+
+  // ── Analytics: identify + session_started ────────────────────
+  // Fires once per cold boot after the app is ready. Identity is
+  // best-effort — falls back to anonymous if the user's login
+  // state isn't yet resolved (e.g. agency mode or pre-gate).
+  if (window.EQ_ANALYTICS) {
+    try {
+      const slug = (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) ? TENANT.ORG_SLUG : 'eq';
+      const tenantId = (typeof TENANT !== 'undefined' && TENANT.ORG_UUID) ? TENANT.ORG_UUID : slug;
+      const handle =
+        (typeof currentManagerName !== 'undefined' && currentManagerName) ? currentManagerName :
+        (typeof agencyName !== 'undefined' && agencyName) ? ('agency:' + agencyName) :
+        'anonymous';
+      const role = (typeof isManager !== 'undefined' && isManager) ? 'supervisor' :
+                   (typeof agencyMode !== 'undefined' && agencyMode) ? 'admin' : 'tradie';
+      window.EQ_ANALYTICS.identify({
+        userId:     slug + ':' + String(handle).toLowerCase().replace(/\s+/g, '.'),
+        tenantId:   tenantId,
+        role:       role,
+        appVersion: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : null),
+      });
+      window.EQ_ANALYTICS.events.sessionStarted({});
+    } catch (e) { /* never break boot on analytics */ }
+  }
 }
 
 window.onload = async function() {
@@ -1835,7 +1889,7 @@ const eqAgent = (function() {
       <div id="jn-prompt-display" style="margin-bottom:14px"></div>
       <div class="form-group">
         <label class="form-label">Your reflection</label>
-        <textarea class="form-input" id="jn-reflection" rows="7" placeholder="Write whatever you want — nobody else sees this unless you tick the share box below."></textarea>
+        <textarea class="form-input" id="jn-reflection" rows="7" data-ph-no-capture data-clarity-mask="true" placeholder="Write whatever you want — nobody else sees this unless you tick the share box below."></textarea>
       </div>
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--ink-2);line-height:1.5">

@@ -90,6 +90,11 @@ function exportPeopleCSV() {
   );
   downloadCSV(header + '\n' + rows.join('\n'), 'EQ_People.csv');
   showToast('People exported — ' + STATE.people.length + ' contacts');
+  try {
+    if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+      window.EQ_ANALYTICS.events.csvExported({ export_type: 'people' });
+    }
+  } catch (e) {}
 }
 
 function exportContactsCSV() {
@@ -111,6 +116,11 @@ function exportContactsCSV() {
   const suffix = group ? '_' + group.replace(/\s/g, '') : '';
   downloadCSV(header + '\n' + rows.join('\n'), `EQ_Contacts${suffix}.csv`);
   showToast(`Contacts exported — ${people.length} records`);
+  try {
+    if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+      window.EQ_ANALYTICS.events.csvExported({ export_type: group ? ('contacts_' + group) : 'contacts' });
+    }
+  } catch (e) {}
 }
 
 function importPeopleCSV(input) {
