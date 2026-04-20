@@ -325,7 +325,8 @@ async function submitLeaveRequest() {
   // v3.4.5 (L13): Backdated-leave guard — if the start date is earlier than
   // today, ask for confirmation before inserting. Prevents accidental submits
   // when the date picker was left on a stale value.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // v3.4.15 (L16): local date, not UTC — see _toLocalIso note.
+  const todayIso = _toLocalIso(new Date());
   if (dateStart < todayIso) {
     document.getElementById('confirm-title').textContent = 'Backdated Leave Request';
     document.getElementById('confirm-msg').textContent =
@@ -506,13 +507,25 @@ async function respondLeave(status) {
   }
 }
 
+// v3.4.15 (L16, ported from SKS main v3.4.9): format as LOCAL YYYY-MM-DD,
+// not UTC. The old `d.toISOString().slice(0,10)` shifted dates back one day
+// in AEST/AEDT because midnight-local is still the previous calendar day in
+// UTC. Symptom on SKS prod: an approved RDO for Friday 24/04 landed on
+// Thursday 23/04 in the roster.
+function _toLocalIso(d) {
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function _getLeaveDates(req) {
   if (req.individual_days && req.individual_days.length) return req.individual_days;
   const dates = [];
   const d     = new Date(req.date_start + 'T00:00:00');
   const end   = new Date(req.date_end   + 'T00:00:00');
   while (d <= end) {
-    if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(d.toISOString().slice(0, 10));
+    if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(_toLocalIso(d));
     d.setDate(d.getDate() + 1);
   }
   return dates;
@@ -973,7 +986,7 @@ function renderLeaveCalendar() {
   const lastDay   = new Date(leaveCalYear, leaveCalMonth + 1, 0);
   const startDow  = (firstDay.getDay() + 6) % 7;
   const totalDays = lastDay.getDate();
-  const todayStr  = new Date().toISOString().slice(0, 10);
+  const todayStr  = _toLocalIso(new Date()); // v3.4.15 (L16): local, not UTC
 
   const typeColors = { 'A/L': 'var(--blue)', 'U/L': 'var(--amber)', 'RDO': 'var(--green)' };
   const typeBg     = { 'A/L': 'var(--blue-lt)', 'U/L': 'var(--amber-lt)', 'RDO': 'var(--green-lt)' };
