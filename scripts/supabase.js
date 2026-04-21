@@ -348,6 +348,10 @@ async function savePersonToSB(person) {
     agency:   person.agency  || null,
     email:    person.email   || null,
     tafe_day: person.tafe_day || null,
+    // v3.4.16: birthdays + start date
+    dob_day:    person.dob_day    || null,
+    dob_month:  person.dob_month  || null,
+    start_date: person.start_date || null,
     pin:      person.pin     || null
   });
 }
@@ -571,7 +575,11 @@ async function importPeopleToSB(people) {
     email:    p.email   || null,
     licence:  p.licence || null,
     agency:   p.agency  || null,
-    tafe_day: p.tafe_day || null
+    tafe_day: p.tafe_day || null,
+    // v3.4.16: birthdays + start date (pass through when present)
+    dob_day:    p.dob_day    || null,
+    dob_month:  p.dob_month  || null,
+    start_date: p.start_date || null
   }));
   await sbFetch('people', 'POST', rows);
 }

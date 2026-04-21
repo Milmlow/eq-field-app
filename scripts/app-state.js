@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.15';
+const APP_VERSION = '3.4.18';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -355,21 +355,23 @@ const SEED = {
   ],
 
   people: [
-    { id:1,  name:'Alex Mitchell',   group:'Direct',      phone:'0411000001', licence:'Licensed',  agency:'', email:'alex@example.com' },
-    { id:2,  name:'Jordan Lee',      group:'Direct',      phone:'0411000002', licence:'Licensed',  agency:'', email:'jordan@example.com' },
-    { id:3,  name:'Sam Taylor',      group:'Direct',      phone:'0411000003', licence:'Licensed',  agency:'', email:'sam@example.com' },
-    { id:4,  name:'Casey Williams',  group:'Direct',      phone:'0411000004', licence:'Licensed',  agency:'', email:'casey@example.com' },
-    { id:5,  name:'Morgan Davis',    group:'Direct',      phone:'0411000005', licence:'Licensed',  agency:'', email:'morgan@example.com' },
-    { id:6,  name:'Riley Thompson',  group:'Direct',      phone:'0411000006', licence:'Licensed',  agency:'', email:'riley@example.com' },
-    { id:7,  name:'Avery Johnson',   group:'Direct',      phone:'0411000007', licence:'Licensed',  agency:'', email:'avery@example.com' },
-    { id:8,  name:'Blake Anderson',  group:'Direct',      phone:'0411000008', licence:'Licensed',  agency:'', email:'blake@example.com' },
+    // v3.4.16: DOB (day + month only) + start_date added to seed rows so
+    // the demo anniversaries widget always has something to render.
+    { id:1,  name:'Alex Mitchell',   group:'Direct',      phone:'0411000001', licence:'Licensed',  agency:'', email:'alex@example.com',   dob_day:28, dob_month:4, start_date:'2019-05-12' },
+    { id:2,  name:'Jordan Lee',      group:'Direct',      phone:'0411000002', licence:'Licensed',  agency:'', email:'jordan@example.com', dob_day:12, dob_month:5, start_date:'2021-04-26' },
+    { id:3,  name:'Sam Taylor',      group:'Direct',      phone:'0411000003', licence:'Licensed',  agency:'', email:'sam@example.com',    dob_day:4,  dob_month:5, start_date:'2020-03-02' },
+    { id:4,  name:'Casey Williams',  group:'Direct',      phone:'0411000004', licence:'Licensed',  agency:'', email:'casey@example.com',  dob_day:17, dob_month:7, start_date:'2022-08-15' },
+    { id:5,  name:'Morgan Davis',    group:'Direct',      phone:'0411000005', licence:'Licensed',  agency:'', email:'morgan@example.com', dob_day:3,  dob_month:1, start_date:'2018-09-10' },
+    { id:6,  name:'Riley Thompson',  group:'Direct',      phone:'0411000006', licence:'Licensed',  agency:'', email:'riley@example.com',  dob_day:21, dob_month:4, start_date:'2023-02-01' },
+    { id:7,  name:'Avery Johnson',   group:'Direct',      phone:'0411000007', licence:'Licensed',  agency:'', email:'avery@example.com',  dob_day:8,  dob_month:11 },
+    { id:8,  name:'Blake Anderson',  group:'Direct',      phone:'0411000008', licence:'Licensed',  agency:'', email:'blake@example.com',  start_date:'2017-05-03' },
     { id:9,  name:'Drew Wilson',     group:'Direct',      phone:'0411000009', licence:'Licensed',  agency:'', email:'drew@example.com' },
     { id:10, name:'Elliot Brown',    group:'Direct',      phone:'0411000010', licence:'Licensed',  agency:'', email:'elliot@example.com' },
     { id:11, name:'Finn Clarke',     group:'Direct',      phone:'0411000011', licence:'Licensed',  agency:'', email:'finn@example.com' },
     { id:12, name:'Harper Moore',    group:'Direct',      phone:'0411000012', licence:'Licensed',  agency:'', email:'harper@example.com' },
-    { id:13, name:'Indigo White',    group:'Apprentice',  phone:'0411000013', licence:'1st Year',  agency:'', email:'indigo@example.com', tafe_day:'wed' },
-    { id:14, name:'Jamie Harris',    group:'Apprentice',  phone:'0411000014', licence:'2nd Year',  agency:'', email:'jamie@example.com', tafe_day:'thu' },
-    { id:15, name:'Kai Martin',      group:'Apprentice',  phone:'0411000015', licence:'3rd Year',  agency:'', email:'kai@example.com', tafe_day:'tue' },
+    { id:13, name:'Indigo White',    group:'Apprentice',  phone:'0411000013', licence:'1st Year',  agency:'', email:'indigo@example.com', tafe_day:'wed', dob_day:14, dob_month:5, start_date:'2025-01-20' },
+    { id:14, name:'Jamie Harris',    group:'Apprentice',  phone:'0411000014', licence:'2nd Year',  agency:'', email:'jamie@example.com',  tafe_day:'thu', dob_day:29, dob_month:4, start_date:'2024-02-12' },
+    { id:15, name:'Kai Martin',      group:'Apprentice',  phone:'0411000015', licence:'3rd Year',  agency:'', email:'kai@example.com',    tafe_day:'tue' },
     { id:16, name:'Lane Robinson',   group:'Labour Hire', phone:'0411000016', licence:'Licensed',  agency:'Core Labour', email:'lane@example.com' },
     { id:17, name:'Maxine Scott',    group:'Labour Hire', phone:'0411000017', licence:'Licensed',  agency:'Core Labour', email:'maxine@example.com' },
     { id:18, name:'Noah King',       group:'Labour Hire', phone:'0411000018', licence:'Licensed',  agency:'Atom Staff',  email:'noah@example.com' },

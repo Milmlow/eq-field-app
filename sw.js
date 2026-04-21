@@ -1,5 +1,5 @@
-// EQ Solves — Field  ·  Service Worker  v3.4.15
-const CACHE = 'eq-field-v3.4.15';
+// EQ Solves — Field  ·  Service Worker  v3.4.18
+const CACHE = 'eq-field-v3.4.18';
 
 const PRECACHE = [
   '/',

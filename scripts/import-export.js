@@ -83,10 +83,39 @@ function _resolveApprenticeYear(p) {
   return m ? parseInt(m[1], 10) : '';
 }
 
+// v3.4.16: DOB + start date helpers for CSV round-trip.
+// Birthday column format is "DD-MMM" (e.g. "05-Mar"); empty if unset.
+// Start Date column is ISO YYYY-MM-DD; empty if unset.
+function _fmtCsvBirthday(p) {
+  if (!p || !p.dob_day || !p.dob_month) return '';
+  const months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dd = String(p.dob_day).padStart(2, '0');
+  return dd + '-' + months[p.dob_month];
+}
+function _parseCsvBirthday(raw) {
+  if (!raw) return { dob_day: null, dob_month: null };
+  const s = String(raw).trim();
+  if (!s) return { dob_day: null, dob_month: null };
+  // Accept "DD-MMM", "DD/MM", "D Mon", "5-Mar", "5 March"
+  const months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12,
+                   january:1, february:2, march:3, april:4, june:6, july:7, august:8, september:9, october:10, november:11, december:12 };
+  let m = s.match(/^(\d{1,2})[\s\-\/](\d{1,2})$/);
+  if (m) {
+    const d = parseInt(m[1],10), mo = parseInt(m[2],10);
+    if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) return { dob_day: d, dob_month: mo };
+  }
+  m = s.match(/^(\d{1,2})[\s\-\/]([A-Za-z]+)$/);
+  if (m) {
+    const d = parseInt(m[1],10); const mo = months[m[2].toLowerCase()];
+    if (d >= 1 && d <= 31 && mo) return { dob_day: d, dob_month: mo };
+  }
+  return { dob_day: null, dob_month: null };
+}
+
 function exportPeopleCSV() {
-  const header = 'Name,Group,Year,Phone,Email,Licence,Agency';
+  const header = 'Name,Group,Year,Phone,Email,Licence,Agency,Birthday,StartDate';
   const rows   = STATE.people.map(p =>
-    [csvEscape(p.name), csvEscape(p.group), csvEscape(_resolveApprenticeYear(p)), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
+    [csvEscape(p.name), csvEscape(p.group), csvEscape(_resolveApprenticeYear(p)), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency), csvEscape(_fmtCsvBirthday(p)), csvEscape(p.start_date || '')].join(',')
   );
   downloadCSV(header + '\n' + rows.join('\n'), 'EQ_People.csv');
   showToast('People exported — ' + STATE.people.length + ' contacts');
@@ -109,9 +138,9 @@ function exportContactsCSV() {
   if (group) people = people.filter(p => p.group === group);
   people = [...people].sort((a, b) => a.name.localeCompare(b.name));
 
-  const header = 'Name,Group,Year,Phone,Email,Licence,Agency';
+  const header = 'Name,Group,Year,Phone,Email,Licence,Agency,Birthday,StartDate';
   const rows   = people.map(p =>
-    [csvEscape(p.name), csvEscape(p.group), csvEscape(_resolveApprenticeYear(p)), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency)].join(',')
+    [csvEscape(p.name), csvEscape(p.group), csvEscape(_resolveApprenticeYear(p)), csvPhone(p.phone), csvEscape(p.email), csvEscape(p.licence), csvEscape(p.agency), csvEscape(_fmtCsvBirthday(p)), csvEscape(p.start_date || '')].join(',')
   );
   const suffix = group ? '_' + group.replace(/\s/g, '') : '';
   downloadCSV(header + '\n' + rows.join('\n'), `EQ_Contacts${suffix}.csv`);
@@ -138,6 +167,9 @@ function importPeopleCSV(input) {
       const iEmail = header.indexOf('email');
       const iLic   = header.indexOf('licence');
       const iAgency = header.indexOf('agency');
+      // v3.4.16: optional Birthday and StartDate columns (round-trip of export)
+      const iBday   = header.indexOf('birthday');
+      const iStart  = (header.indexOf('startdate') >= 0) ? header.indexOf('startdate') : header.indexOf('start date');
       if (iName < 0 || iGroup < 0) { showPreviewError('import-people-preview', 'Missing required columns: Name, Group'); return; }
 
       const valid   = ['Direct', 'Apprentice', 'Labour Hire'];
@@ -148,12 +180,18 @@ function importPeopleCSV(input) {
         const group = (r[iGroup] || '').trim();
         if (!name) return;
         if (!valid.includes(group)) { errors.push(`Row ${i + 2}: unknown group "${group}" for ${name}`); return; }
+        const bday = iBday >= 0 ? _parseCsvBirthday(r[iBday]) : { dob_day: null, dob_month: null };
+        const startRaw = iStart >= 0 ? (r[iStart] || '').trim() : '';
+        const startDate = /^\d{4}-\d{2}-\d{2}$/.test(startRaw) ? startRaw : null;
         people.push({
           id:     i + 1, name, group,
           phone:  iPhone  >= 0 ? cleanPhone(r[iPhone])                    : '',
           email:  iEmail  >= 0 ? (r[iEmail]  || '').trim().toLowerCase()  : '',
           licence: iLic   >= 0 ? (r[iLic]    || '').trim()                : '',
-          agency: iAgency >= 0 ? (r[iAgency] || '').trim()                : ''
+          agency: iAgency >= 0 ? (r[iAgency] || '').trim()                : '',
+          dob_day:    bday.dob_day,
+          dob_month:  bday.dob_month,
+          start_date: startDate
         });
       });
       if (errors.length) { showPreviewError('import-people-preview', errors.join('<br>')); input.value = ''; return; }

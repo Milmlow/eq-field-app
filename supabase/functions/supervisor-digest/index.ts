@@ -170,7 +170,10 @@ function buildDigestHtml(params: {
   leaveThisWeek: LeaveReq[]; // approved + overlapping next week
   pendingForMe: LeaveReq[];  // pending where approver_name matches me
   unrostered: string[];      // names
-  tsCompletion: { submitted: number; expected: number; missing: string[] };
+  // v3.4.17: missing list gained per-name day counts so the digest
+  // row can render "Alex Mitchell — 3 days". Legacy `missing: string[]`
+  // is still accepted and is treated as day-count unknown.
+  tsCompletion: { submitted: number; expected: number; missing: Array<string | { name: string; days: number }> };
   appOrigin: string;
 }): string {
   const { orgName, supervisorName, weekKeyNext, leaveThisWeek, pendingForMe, unrostered, tsCompletion, appOrigin } = params;
@@ -211,9 +214,15 @@ function buildDigestHtml(params: {
     <div style="margin-top:8px;background:#E5E7EB;border-radius:4px;height:8px;overflow:hidden">
       <div style="width:${completionPct}%;background:${completionPct >= 90 ? "#10B981" : completionPct >= 70 ? "#F59E0B" : "#EF4444"};height:8px"></div>
     </div>`;
+  // v3.4.17: richer row — "Name · 3 days missing" when count is available.
   const missingListHtml = tsCompletion.missing.length
     ? `<p style="margin:10px 0 0;font-size:12px;color:#6B7280">Still to submit:</p>
-       <ul style="margin:4px 0 0;padding-left:20px;color:#374151;font-size:13px">${tsCompletion.missing.map((n) => `<li style="padding:2px 0">${escHtml(n)}</li>`).join("")}</ul>`
+       <ul style="margin:4px 0 0;padding-left:20px;color:#374151;font-size:13px">${tsCompletion.missing.map((m) => {
+         const name = typeof m === "string" ? m : m.name;
+         const days = typeof m === "string" ? null : m.days;
+         const suffix = days ? ` <span style="color:#B45309;font-weight:600">· ${days} day${days !== 1 ? "s" : ""} missing</span>` : "";
+         return `<li style="padding:2px 0">${escHtml(name)}${suffix}</li>`;
+       }).join("")}</ul>`
     : "";
 
   return `
@@ -343,7 +352,11 @@ async function runForOrg(sb: SupabaseClient, orgId: string, orgName: string, opt
       }
     }
   }
-  const missing = Array.from(missingByName.keys()).sort();
+  // v3.4.17: preserve per-name missing-day counts so the digest email
+  // can render "Alex Mitchell · 3 days missing" instead of just the name.
+  const missing = Array.from(missingByName.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, days]) => ({ name, days }));
 
   // Per-supervisor dispatch.
   let sent = 0;

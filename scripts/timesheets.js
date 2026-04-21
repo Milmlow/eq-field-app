@@ -361,7 +361,17 @@ function renderTimesheets() {
     const entry      = getTsEntry(p.name, week);
     const total      = tsTotalHrs(entry);
     const totalClass = total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-amber' : 'ts-total-empty';
-    const rowBg      = !entry ? 'background:#FFF1F2' : total > 0 && total < 40 ? 'background:#FFFBEB' : '';
+    // v3.4.17: tint + left border aligned to the day-based completion
+    // definition used by updateTsStats (hasAny / hasFull on Mon–Fri
+    // `_job` cells). Prior versions tinted by hours which disagreed
+    // with the stat-card counts.
+    const _jobs      = ['mon','tue','wed','thu','fri'].map(d => entry && entry[d + '_job'] ? entry[d + '_job'] : '');
+    const _hasAny    = _jobs.some(j => j);
+    const _hasFull   = _jobs.every(j => j);
+    let rowBg;
+    if (!_hasAny)       rowBg = 'background:#FFF1F2;border-left:4px solid var(--red);';      // empty
+    else if (!_hasFull) rowBg = 'background:#FFFBEB;border-left:4px solid var(--amber);';    // partial
+    else                rowBg = 'border-left:4px solid var(--green);';                        // complete
     const pid        = p.name.replace(/\W/g, '_');
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
@@ -427,20 +437,95 @@ function renderTimesheets() {
 // Legacy tab function — kept for backward compat, now a no-op
 function setTsTab(tab) { renderTimesheets(); }
 
+// v3.4.17: toggle the "N pending" popover above the timesheet grid.
+function _togglePendingPopover() {
+  const pop = document.getElementById('ts-pending-popover');
+  const btn = document.getElementById('ts-pending-toggle');
+  if (!pop) return;
+  const open = pop.style.display !== 'none';
+  pop.style.display = open ? 'none' : 'block';
+  if (btn) btn.setAttribute('aria-expanded', String(!open));
+}
+
+// v3.4.18: per-row "Send reminder" button on the pending popover. Calls
+// the ts-reminder edge function, which handles email transport + cooldown
+// rate-limit (default 12h per person+week). Demo tenant is rejected
+// before the call so we don't get a confusing edge-function error.
+async function sendTsReminder(personName, week, btn) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  if (!personName || !week) return;
+
+  // Demo tenant has no Supabase backend — surface this clearly.
+  if (typeof TENANT === 'undefined' || !TENANT.ORG_SLUG || TENANT.ORG_SLUG === 'demo' || !SB_URL || !SB_KEY) {
+    showToast('Reminder emails need a live tenant — demo mode is local-only');
+    return;
+  }
+
+  const person = (STATE.people || []).find(p => p.name === personName);
+  if (!person) { showToast('Person not found'); return; }
+  if (!person.email) { showToast(`${personName} has no email on file`); return; }
+
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    const url  = SB_URL.replace(/\/$/, '') + '/functions/v1/ts-reminder';
+    const sentBy = (typeof currentManagerName === 'string' && currentManagerName) ? currentManagerName : 'Supervisor';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + SB_KEY,
+        'apikey':        SB_KEY,
+      },
+      body: JSON.stringify({
+        orgSlug:    TENANT.ORG_SLUG,
+        personName: personName,
+        week:       week,
+        sentBy:     sentBy,
+      }),
+    });
+    let body = {};
+    try { body = await resp.json(); } catch (_) { /* non-JSON */ }
+
+    if (resp.ok && body && body.ok) {
+      if (body.rateLimited) {
+        const when = body.lastSentAt ? new Date(body.lastSentAt).toLocaleString() : 'recently';
+        showToast(`Already reminded · last sent ${when}`);
+        if (btn) { btn.disabled = true; btn.textContent = '✓ Reminded'; }
+        auditLog(`Reminder skipped (cooldown ${body.cooldownHours || 12}h) — ${personName}`, 'Timesheet', personName, week);
+        return;
+      }
+      showToast(`✓ Reminder sent to ${person.email}`);
+      if (btn) { btn.disabled = true; btn.textContent = '✓ Sent'; }
+      auditLog(`Sent timesheet reminder → ${person.email}`, 'Timesheet', personName, week);
+      return;
+    }
+    const errMsg = (body && (body.error || body.detail)) || ('HTTP ' + resp.status);
+    showToast('Reminder failed — ' + String(errMsg).slice(0, 120));
+    if (btn) { btn.disabled = false; btn.textContent = original || 'Retry'; }
+  } catch (e) {
+    showToast('Reminder failed — check connection');
+    if (btn) { btn.disabled = false; btn.textContent = original || 'Retry'; }
+    console.warn('ts-reminder error:', e);
+  }
+}
+
 // ── Stats ─────────────────────────────────────────────────────
 
 function updateTsStats() {
   const allTs = [...STATE.people].filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire');
   const week  = STATE.currentWeek;
   let complete = 0, partial = 0, empty = 0;
+  const pending = []; // v3.4.17: names of staff whose timesheets aren't complete for this week
 
   allTs.forEach(p => {
     const entry   = getTsEntry(p.name, week);
     const hasAny  = entry && TS_DAYS.some(d => entry[d + '_job']);
     const hasFull = entry && ['mon','tue','wed','thu','fri'].every(d => entry[d + '_job']);
-    if (!hasAny)        empty++;
-    else if (hasFull)   complete++;
-    else                partial++;
+    if (!hasAny)        { empty++;   pending.push({ name: p.name, status: 'empty'   }); }
+    else if (hasFull)   { complete++; }
+    else                { partial++; pending.push({ name: p.name, status: 'partial' }); }
   });
 
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -448,6 +533,55 @@ function updateTsStats() {
   setEl('ts-stat-complete', complete);
   setEl('ts-stat-partial',  partial);
   setEl('ts-stat-empty',    empty);
+
+  // v3.4.17: sticky-ish progress bar above the grid
+  const pb = document.getElementById('ts-progress-bar');
+  if (pb) {
+    const total = allTs.length;
+    const pct   = total ? Math.round((complete / total) * 100) : 0;
+    const barColor = pct === 100 ? 'var(--green)' : pct >= 60 ? '#F59E0B' : 'var(--red)';
+    // v3.4.18: each pending row gets a "Send reminder" button. The button
+    // is disabled if the person has no email on file — surfaces the gap
+    // before the supervisor clicks, instead of after the edge function
+    // 422s. Safe in demo mode — sendTsReminder() short-circuits.
+    const _peopleByName = (STATE.people || []).reduce((m, p) => { m[p.name] = p; return m; }, {});
+    const _btnStyle = (enabled) => `padding:3px 9px;border:1px solid ${enabled ? 'var(--navy)' : 'var(--ink-4)'};background:${enabled ? 'var(--navy)' : 'var(--surface-2)'};color:${enabled ? '#fff' : 'var(--ink-4)'};border-radius:6px;font-size:10px;font-weight:700;cursor:${enabled ? 'pointer' : 'not-allowed'};font-family:inherit;letter-spacing:.2px`;
+
+    const pendingChip = pending.length
+      ? `<button type="button" onclick="_togglePendingPopover()" aria-expanded="false" id="ts-pending-toggle"
+            style="margin-left:10px;padding:4px 10px;border:1px solid #FECACA;background:#FEF2F2;color:var(--red);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">
+            ${pending.length} pending ▾
+         </button>
+         <div id="ts-pending-popover" style="display:none;margin-top:8px;padding:10px 12px;background:white;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow:auto">
+           <div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Timesheets pending this week</div>
+           ${pending.map(x => {
+             const _pp      = _peopleByName[x.name];
+             const _hasMail = !!(_pp && _pp.email);
+             const _btn     = _hasMail
+               ? `<button type="button" onclick="sendTsReminder('${esc(x.name)}','${esc(week)}',this)" title="Email ${esc(_pp.email)}" style="${_btnStyle(true)}">Send reminder</button>`
+               : `<button type="button" disabled title="No email on file" style="${_btnStyle(false)}">No email</button>`;
+             return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px">
+               <span style="color:var(--ink);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</span>
+               <span style="font-size:10px;font-weight:700;color:${x.status === 'empty' ? 'var(--red)' : 'var(--amber)'}">${x.status === 'empty' ? 'No data' : 'Partial'}</span>
+               ${_btn}
+             </div>`;
+           }).join('')}
+         </div>`
+      : '';
+    pb.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px">This week — ${esc(week || '—')}</span>
+            <span style="font-size:13px;font-weight:800;color:${barColor}">${complete} of ${total} complete (${pct}%)</span>
+          </div>
+          <div style="height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border)">
+            <div style="height:100%;width:${pct}%;background:${barColor};transition:width .25s ease"></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center">${pendingChip}</div>
+      </div>`;
+  }
 
   // Completion tracker — last 6 weeks
   const tracker = document.getElementById('ts-completion-tracker');

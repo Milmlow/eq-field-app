@@ -4,6 +4,57 @@
 // Depends on: app-state.js, utils.js, supabase.js
 // ─────────────────────────────────────────────────────────────
 
+// ── DOB / start-date helpers (v3.4.16) ────────────────────────
+// DOB is stored as day + month only (no year) to avoid age-based
+// signals. Anniversaries come from start_date (ISO). All helpers
+// are null-safe so legacy rows missing these columns just return
+// empty strings / false.
+const MONTH_SHORT = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function personHasDob(p) {
+  return !!(p && p.dob_day && p.dob_month);
+}
+
+// Today's month/day in local (Australian) time.
+function _todayMD() {
+  const d = new Date();
+  return { m: d.getMonth() + 1, d: d.getDate() };
+}
+
+// Days until the next occurrence of month/day starting from today.
+// 0 = today, 1 = tomorrow, …, never > 365.
+function _daysUntilMD(month, day) {
+  if (!month || !day) return null;
+  const now   = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let target  = new Date(now.getFullYear(), month - 1, day);
+  if (target < today) target = new Date(now.getFullYear() + 1, month - 1, day);
+  return Math.round((target - today) / 86400000);
+}
+
+function personBirthdayLabel(p) {
+  if (!personHasDob(p)) return '';
+  return p.dob_day + ' ' + MONTH_SHORT[p.dob_month];
+}
+
+function personIsBirthdayToday(p) {
+  if (!personHasDob(p)) return false;
+  const t = _todayMD();
+  return t.m === p.dob_month && t.d === p.dob_day;
+}
+
+// Returns anniversary-year number on matching date (1, 2, 3 …) or 0.
+// Only fires on the exact day; returns 0 on year-0 (start day).
+function personAnniversaryYearsToday(p) {
+  if (!p || !p.start_date) return 0;
+  const s = new Date(p.start_date + 'T00:00:00');
+  if (isNaN(s.getTime())) return 0;
+  const now = new Date();
+  if (s.getMonth() !== now.getMonth() || s.getDate() !== now.getDate()) return 0;
+  const years = now.getFullYear() - s.getFullYear();
+  return years > 0 ? years : 0;
+}
+
 // ── Year helpers (v3.4.10) ────────────────────────────────────
 // Apprentice year is captured as a free-text-shaped string in
 // people.licence ('1st Year', '2nd Year', …) but the Apprentices
@@ -74,6 +125,13 @@ function openAddPerson() {
   if (tafeEl) tafeEl.value = '';
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = '';
+  // v3.4.16: DOB (day + month) and start date
+  const dobDayEl   = document.getElementById('person-dob-day');
+  const dobMonthEl = document.getElementById('person-dob-month');
+  const startEl    = document.getElementById('person-start-date');
+  if (dobDayEl)   dobDayEl.value   = '';
+  if (dobMonthEl) dobMonthEl.value = '';
+  if (startEl)    startEl.value    = '';
   openModal('modal-person');
   try {
     if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
@@ -98,6 +156,13 @@ function editPerson(id) {
   if (tafeEl) tafeEl.value = p.tafe_day || '';
   const pinEl = document.getElementById('person-pin');
   if (pinEl) pinEl.value = ''; // never pre-fill PIN
+  // v3.4.16: DOB (day + month) and start date
+  const dobDayEl   = document.getElementById('person-dob-day');
+  const dobMonthEl = document.getElementById('person-dob-month');
+  const startEl    = document.getElementById('person-start-date');
+  if (dobDayEl)   dobDayEl.value   = p.dob_day   || '';
+  if (dobMonthEl) dobMonthEl.value = p.dob_month || '';
+  if (startEl)    startEl.value    = p.start_date || '';
   openModal('modal-person');
   try {
     if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
@@ -128,6 +193,19 @@ function savePerson() {
   const pinRaw  = (document.getElementById('person-pin') || { value: '' }).value.trim();
   const newPin  = (isManager && /^\d{4}$/.test(pinRaw)) ? pinRaw : null;
 
+  // v3.4.16: DOB + start date. Empty fields store as null; partial
+  // DOB (day without month or vice versa) is cleared so the dashboard
+  // widget never tries to render a half-entered birthday.
+  const dobDayRaw   = (document.getElementById('person-dob-day')   || { value: '' }).value.trim();
+  const dobMonthRaw = (document.getElementById('person-dob-month') || { value: '' }).value.trim();
+  const startRaw    = (document.getElementById('person-start-date') || { value: '' }).value.trim();
+  let   dobDay     = dobDayRaw   ? parseInt(dobDayRaw,   10) : null;
+  let   dobMonth   = dobMonthRaw ? parseInt(dobMonthRaw, 10) : null;
+  if (!dobDay || !dobMonth || dobDay < 1 || dobDay > 31 || dobMonth < 1 || dobMonth > 12) {
+    dobDay = null; dobMonth = null;
+  }
+  const startDate  = (startRaw && /^\d{4}-\d{2}-\d{2}$/.test(startRaw)) ? startRaw : null;
+
   if (!name) { showToast('Name is required'); return; }
 
   // v3.4.10: derive year_level from licence so the Apprentices page
@@ -148,12 +226,21 @@ function savePerson() {
       person.agency     = agency;
       person.email      = email;
       person.tafe_day   = tafeDay;
+      // v3.4.16
+      person.dob_day    = dobDay;
+      person.dob_month  = dobMonth;
+      person.start_date = startDate;
       if (newPin) person.pin = newPin;
     }
     showToast(`${name} updated`);
   } else {
     const newId = Math.max(0, ...STATE.people.map(p => p.id)) + 1;
-    person = { id: newId, name, phone, group, licence, year_level: yearLevel, agency, email, tafe_day: tafeDay, pin: newPin || null };
+    person = {
+      id: newId, name, phone, group, licence, year_level: yearLevel,
+      agency, email, tafe_day: tafeDay,
+      dob_day: dobDay, dob_month: dobMonth, start_date: startDate,
+      pin: newPin || null
+    };
     STATE.people.push(person);
     showToast(`${name} added`);
   }
@@ -260,6 +347,19 @@ function renderContacts() {
     ? `<span title="TAFE day" style="background:#EEEDF8;color:#7C77B9;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎓 ${tafeDayLabel[p.tafe_day]}</span>`
     : '';
 
+  // v3.4.16: today-only chips — birthday cake + anniversary
+  const todayBadges = (p) => {
+    let out = '';
+    if (personIsBirthdayToday(p)) {
+      out += '<span title="Birthday today" style="background:#FFF1F2;color:#E11D48;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎂 Today</span>';
+    }
+    const years = personAnniversaryYearsToday(p);
+    if (years > 0) {
+      out += '<span title="Work anniversary today" style="background:#FEF3C7;color:#B45309;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">🎉 ' + years + ' yr' + (years !== 1 ? 's' : '') + '</span>';
+    }
+    return out;
+  };
+
   // v3.4.10: apprentice year badge. Prefer year_level (int);
   // fall back to parsing licence so legacy rows render correctly
   // before the backfill reaches them.
@@ -285,7 +385,7 @@ function renderContacts() {
           : '<span style="color:#EF4444;font-size:12px">No phone</span>';
         html += `<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}</div>
+            <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}${todayBadges(p)}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               ${phoneHtml}
               ${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(p.email)}</a>` : ''}
@@ -316,7 +416,7 @@ function renderContacts() {
     <tbody>${people.map(p => `
       <tr>
         <td class="name-col">${esc(p.name)}</td>
-        <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}</td>
+        <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}${todayBadges(p)}</td>
         <td class="phone-col">${p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : '<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
         <td class="meta-col">${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>` : '—'}</td>
         <td class="meta-col">${p.agency || '—'}</td>
