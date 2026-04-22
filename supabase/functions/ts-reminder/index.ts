@@ -198,6 +198,9 @@ Deno.serve(async (req) => {
     if (!orgSlug || !personName || !week) {
       return new Response(JSON.stringify({ ok: false, error: "orgSlug, personName and week are required" }), { status: 400, headers: cors });
     }
+    if (!sentBy) {
+      return new Response(JSON.stringify({ ok: false, error: "sentBy is required — only managers may send reminders" }), { status: 400, headers: cors });
+    }
 
     // Resolve org
     const orgRes = await sb.from("organisations").select("id,slug,name").eq("slug", orgSlug).maybeSingle();
@@ -205,6 +208,18 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: `org not found: ${orgSlug}` }), { status: 404, headers: cors });
     }
     const org = orgRes.data as Org;
+
+    // Authorise caller — must be a named manager of the target org.
+    // (Apps use a shared anon JWT, so the DB has no per-user identity.
+    //  The sentBy name is the app's trust anchor. We reject unknown names.)
+    const mgrRes = await sb.from("managers").select("id,name")
+      .eq("org_id", org.id).eq("name", sentBy).limit(1);
+    if (mgrRes.error) {
+      return new Response(JSON.stringify({ ok: false, error: mgrRes.error.message }), { status: 500, headers: cors });
+    }
+    if (!mgrRes.data || !mgrRes.data.length) {
+      return new Response(JSON.stringify({ ok: false, error: `caller '${sentBy}' is not a manager of ${orgSlug}` }), { status: 403, headers: cors });
+    }
 
     // Resolve person + email
     const personRes = await sb.from("people").select("id,org_id,name,email,group")
@@ -220,24 +235,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, error: `no email on file for ${personName}` }), { status: 422, headers: cors });
     }
 
-    // Cooldown check
-    const cooldownHours = parseFloat(Deno.env.get("REMIND_COOLDOWN_HOURS") || "") || DEFAULT_COOLDOWN_HOURS;
-    const cutoff = new Date(Date.now() - cooldownHours * 3600 * 1000).toISOString();
-    const recentRes = await sb.from("ts_reminders_sent")
-      .select("id,sent_at,sent_by,ok")
-      .eq("org_id", org.id).eq("person_name", personName).eq("week", week).eq("ok", true)
-      .gte("sent_at", cutoff)
-      .order("sent_at", { ascending: false }).limit(1);
-    if (recentRes.error) {
-      return new Response(JSON.stringify({ ok: false, error: recentRes.error.message }), { status: 500, headers: cors });
-    }
-    if (recentRes.data && recentRes.data.length) {
-      return new Response(JSON.stringify({
-        ok: true, rateLimited: true, lastSentAt: recentRes.data[0].sent_at, cooldownHours,
-      }), { status: 200, headers: cors });
-    }
-
-    // Pull current timesheet row for the email body summary
+    // Pull current timesheet row for the email body summary. We do this
+    // before the claim so that a dry-run can short-circuit without
+    // reserving a slot, but a real send still lands the claim atomically.
     const tsRes = await sb.from("timesheets")
       .select("org_id,name,week,mon_job,tue_job,wed_job,thu_job,fri_job,mon_hrs,tue_hrs,wed_hrs,thu_hrs,fri_hrs")
       .eq("org_id", org.id).eq("name", personName).eq("week", week).maybeSingle();
@@ -257,20 +257,50 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
+    // Atomic claim (TOCTOU-safe): ts_reminder_claim acquires a
+    // pg_advisory_xact_lock on hash(org|person|week), checks both the
+    // cooldown window and any in-flight "pending" row, and if clear,
+    // INSERTs a pending row and returns its id. Concurrent callers
+    // block on the lock and then observe the committed pending row,
+    // so only one sender proceeds per cooldown window.
+    const cooldownHours = parseFloat(Deno.env.get("REMIND_COOLDOWN_HOURS") || "") || DEFAULT_COOLDOWN_HOURS;
+    const claimRes = await sb.rpc("ts_reminder_claim", {
+      _org_id: org.id,
+      _person_name: personName,
+      _person_email: person.email,
+      _week: week,
+      _sent_by: sentBy,
+      _cooldown_hours: cooldownHours,
+    });
+    if (claimRes.error) {
+      return new Response(JSON.stringify({ ok: false, error: claimRes.error.message }), { status: 500, headers: cors });
+    }
+    const claim = Array.isArray(claimRes.data) ? claimRes.data[0] : claimRes.data;
+    if (!claim) {
+      return new Response(JSON.stringify({ ok: false, error: "claim rpc returned no rows" }), { status: 500, headers: cors });
+    }
+    if (claim.rate_limited) {
+      return new Response(JSON.stringify({
+        ok: true, rateLimited: true, lastSentAt: claim.last_sent_at, cooldownHours,
+      }), { status: 200, headers: cors });
+    }
+    const claimId: string = claim.claim_id;
+
+    // Send. Keep going on failure — we still need to update the pending row.
     const send = await sendEmail({ to: person.email, subject, html });
 
-    // Record regardless of success — failures are logged with ok:false so
-    // a second attempt is allowed immediately (the cooldown filter uses ok=true).
-    await sb.from("ts_reminders_sent").insert({
-      org_id: org.id,
-      person_name: personName,
-      person_email: person.email,
-      week,
-      sent_by: sentBy,
+    // Flip the pending row to its final state. The cooldown filter checks
+    // ok=true, so a failed send leaves the row as ok=false/transport=resend
+    // (not 'pending') and another attempt is allowed immediately.
+    const updRes = await sb.from("ts_reminders_sent").update({
       transport: send.transport,
       ok: send.ok,
       detail: send.detail.slice(0, 500),
-    });
+    }).eq("id", claimId);
+    if (updRes.error) {
+      // Log-only; don't mask the send result to the caller.
+      console.error("ts-reminder: failed to update claim row", claimId, updRes.error.message);
+    }
 
     if (!send.ok) {
       return new Response(JSON.stringify({ ok: false, error: "send failed", detail: send.detail, transport: send.transport }),
