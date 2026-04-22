@@ -166,8 +166,26 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.19
+  EQ Solves — Field  v3.4.20
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.20  (Leave process hardening — L17 + L18)
+  ──────────────────────────────────────────────────────────
+  - L17: Supervisor lock button + mobile drawer now display the
+    currently-unlocked supervisor's name. Was "Editing unlocked",
+    now "Royce Milmlow — unlocked" (desktop) / "Unlocked as
+    Royce Milmlow — tap to lock" (mobile). Prevents shared-device
+    mis-attribution: symptom on SKS prod was Royce approving
+    Tara's leave but audit + email showing Ben Ritchie because
+    the session was still unlocked in Ben's name.
+  - L18: writeLeaveToSchedule no longer silently drops days 2..N
+    of a multi-day leave when the requester has no existing
+    schedule row for that week. Pre-pushes the local STATE.schedule
+    entry before calling saveCellToSB per-day, so day 1's POST
+    stamps id/updated_at onto the entry and days 2..N find it
+    and PATCH correctly. Symptom on SKS prod was Ross requesting
+    3 weekdays and only day 1 landing in the roster.
+  - sw.js — cache bumped to v3.4.20.
 
   CHANGES IN v3.4.19  (Nav shuffle — timesheets graduates)
   ──────────────────────────────────────────────────────────
@@ -704,7 +722,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.19</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.20</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>

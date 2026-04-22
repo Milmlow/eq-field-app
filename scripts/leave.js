@@ -549,14 +549,25 @@ async function writeLeaveToSchedule(req) {
   });
 
   for (const [week, dayKeys] of Object.entries(byWeek)) {
-    for (const day of dayKeys) {
-      await saveCellToSB(req.requester_name, week, day, req.leave_type);
-    }
+    // v3.4.20 (L18): pre-push a local schedule entry BEFORE the per-day save loop.
+    // If the push is left until afterward, the first saveCellToSB call finds no
+    // STATE.schedule row → takes the POST path and stamps id/updated_at onto a
+    // local `existing` var that never makes it into STATE.schedule. Subsequent
+    // day calls then look up STATE.schedule.find, get undefined, fall through
+    // the `_sbPendingRows` await branch and silently return without patching.
+    // Symptom on SKS prod: Ross requested 3 weekdays of leave on a week where
+    // his schedule row didn't exist yet; only day 1 landed in the roster.
     let entry = STATE.schedule.find(r => r.name === req.requester_name && r.week === week);
     if (!entry) {
       entry = { name: req.requester_name, week, mon: '', tue: '', wed: '', thu: '', fri: '', sat: '', sun: '' };
       STATE.schedule.push(entry);
+      if (STATE.scheduleIndex) STATE.scheduleIndex[`${req.requester_name}||${week}`] = entry;
     }
+
+    for (const day of dayKeys) {
+      await saveCellToSB(req.requester_name, week, day, req.leave_type);
+    }
+
     dayKeys.forEach(d => { entry[d] = req.leave_type; });
     if (STATE.scheduleIndex) STATE.scheduleIndex[`${req.requester_name}||${week}`] = entry;
   }
