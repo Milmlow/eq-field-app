@@ -200,7 +200,7 @@ function renderDashboard() {
         <div style="font-size:11px;color:var(--ink-2);margin-top:2px">${datesStr} — ${bizDays} day${bizDays !== 1 ? 's' : ''}</div>
         <div style="font-size:10px;color:var(--ink-3);margin-top:1px">Approver: ${esc(r.approver_name)}</div>
       </div>
-      ${isManager ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond(${r.id})" style="font-size:11px;flex-shrink:0">Review</button>` : ''}
+      ${isManager ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond('${r.id}')" style="font-size:11px;flex-shrink:0">Review</button>` : ''}
     </div>`;
   });
   lrHtml += '</div>';

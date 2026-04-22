@@ -440,7 +440,8 @@ function openLeaveRespond(id) {
 async function respondLeave(status) {
   if (!isManager) { showToast('Supervision access required'); return; }
   // BUG-014 FIX: read id exactly once
-  const id   = parseInt(document.getElementById('leave-respond-id').value);
+  // v3.4.21: id is a uuid string — do NOT parseInt (was producing NaN on uuid, silent fail)
+  const id   = document.getElementById('leave-respond-id').value;
   const note = document.getElementById('leave-response-note').value.trim();
   const req  = leaveRequests.find(r => r.id === id);
 
@@ -896,11 +897,11 @@ function renderLeave() {
         <div style="font-size:10px;color:var(--ink-4);margin-top:4px">${new Date(r.created_at).toLocaleString('en-AU')}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-        ${canRespond ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond(${r.id})">Review</button>` : ''}
-        ${r.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="resendLeaveEmail(${r.id})" style="font-size:10px">📧 Resend</button>` : ''}
-        ${canWithdraw ? `<button class="btn btn-secondary btn-sm" onclick="withdrawLeaveRequest(${r.id})" style="font-size:10px;color:var(--red);border-color:var(--red)">✕ Withdraw</button>` : ''}
-        ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest(${r.id})" style="font-size:10px">📦 Archive</button>` : ''}
-        ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest(${r.id})" style="font-size:10px">↩ Restore</button>` : ''}
+        ${canRespond ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond('${r.id}')">Review</button>` : ''}
+        ${r.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="resendLeaveEmail('${r.id}')" style="font-size:10px">📧 Resend</button>` : ''}
+        ${canWithdraw ? `<button class="btn btn-secondary btn-sm" onclick="withdrawLeaveRequest('${r.id}')" style="font-size:10px;color:var(--red);border-color:var(--red)">✕ Withdraw</button>` : ''}
+        ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest('${r.id}')" style="font-size:10px">📦 Archive</button>` : ''}
+        ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest('${r.id}')" style="font-size:10px">↩ Restore</button>` : ''}
       </div>
     </div>`;
   });
