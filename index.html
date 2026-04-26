@@ -10,27 +10,29 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
 <link rel="manifest" href="/manifest.json">
-<!-- SKS Labour — Favicon & Home Screen Icons -->
-<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
-<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
-<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/favicon-192x192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icons/favicon-512x512.png">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+<!-- v3.4.30: tenant-aware favicon — injected by JS so there's no race
+     where browsers cache the wrong fetch from a static <link> tag. -->
 <script>
-// v3.4.28: tenant-aware favicon swap. EQ demo + any non-SKS host → /icons-eq/*.
 (function(){
   try {
     var h = (location.hostname || '').toLowerCase();
-    var isSks = h.indexOf('sks') !== -1;
-    if (isSks) return; // keep default SKS icons
-    var links = document.querySelectorAll('link[rel*="icon"], link[rel="apple-touch-icon"]');
-    for (var i = 0; i < links.length; i++) {
-      var href = links[i].getAttribute('href') || '';
-      if (href.indexOf('icons/') === 0) {
-        links[i].setAttribute('href', href.replace('icons/', 'icons-eq/'));
-      }
+    var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
+    var v = '3.4.30'; // cache-buster — bump on icon changes
+    var head = document.head || document.getElementsByTagName('head')[0];
+    function add(rel, type, sizes, href) {
+      var l = document.createElement('link');
+      l.setAttribute('rel', rel);
+      if (type) l.setAttribute('type', type);
+      if (sizes) l.setAttribute('sizes', sizes);
+      l.setAttribute('href', href + '?v=' + v);
+      head.appendChild(l);
     }
+    add('icon', 'image/x-icon', null, dir + '/favicon.ico');
+    add('icon', 'image/png', '16x16', dir + '/favicon-16x16.png');
+    add('icon', 'image/png', '32x32', dir + '/favicon-32x32.png');
+    add('icon', 'image/png', '192x192', dir + '/favicon-192x192.png');
+    add('icon', 'image/png', '512x512', dir + '/favicon-512x512.png');
+    add('apple-touch-icon', null, '180x180', dir + '/apple-touch-icon.png');
   } catch (e) { /* fail-quiet */ }
 })();
 </script>
@@ -187,8 +189,17 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.29
+  EQ Solves — Field  v3.4.30
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.30  (favicon injection)
+  ───────────────────────────────────────
+  • Favicon link tags now injected via inline JS instead of being in
+    static HTML. Browser cached the initial 'icons/favicon.ico' fetch
+    on EQ demo before the v3.4.28 post-load swap script ran, leaving
+    the demo tab with no visible favicon. Injection runs before any
+    fetch starts, so the right icons load first time. Includes a
+    cache-buster query string so old SW caches don't serve stale.
 
   CHANGES IN v3.4.29  (digest panel bulletproofing + tenant 404 silencing)
   ────────────────────────────────────────────────────────────────────────
@@ -883,7 +894,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.29</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.30</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
