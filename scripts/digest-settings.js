@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
-// scripts/digest-settings.js  —  EQ Solves Field  v3.4.26
+// scripts/digest-settings.js  —  EQ Solves Field  v3.4.28
 // Per-supervisor opt-in toggle for the weekly digest email.
 // Renders a compact strip above #managers-content on the Supervision
 // page. Reads/writes managers.digest_opt_in via the existing sbFetch()
@@ -116,7 +116,15 @@
     const orig = window.renderManagers;
     window.renderManagers = function () {
       const r = orig.apply(this, arguments);
-      renderDigestPanel();
+      // v3.4.28: if any manager row lacks digest_opt_in (because the bulk
+      // managers fetch didn't include the column), re-hydrate before
+      // rendering so we never paint stale "all ticked" defaults.
+      const needsHydrate = (STATE.managers || []).some(m => m.digest_opt_in === undefined);
+      if (needsHydrate) {
+        hydrateDigestOptIns().then(() => renderDigestPanel());
+      } else {
+        renderDigestPanel();
+      }
       return r;
     };
     window.__EQ_RENDER_MANAGERS_WRAPPED__ = true;
