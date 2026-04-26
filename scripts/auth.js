@@ -426,24 +426,66 @@ async function submitManagerPassword() {
   const pw   = (document.getElementById('manager-pw-input').value || '').trim();
   const name = (document.getElementById('manager-name-select').value || '').trim();
   const isDemo = (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo');
+  const errEl = document.getElementById('manager-pw-error');
+  const showErr = (msg) => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
+  const clearErr = () => { if (errEl) errEl.style.display = 'none'; };
+
+  // v3.4.31: surface specific failure reasons instead of one catch-all error.
+  // Empty-field guards run before the network call so we don't waste an
+  // attempt against the rate-limit budget on obvious typos.
+  if (!name) {
+    showErr('Please select your name from the dropdown.');
+    document.getElementById('manager-name-select').focus();
+    return;
+  }
+  if (!pw) {
+    showErr('Please enter your supervision password.');
+    document.getElementById('manager-pw-input').focus();
+    return;
+  }
+  clearErr();
 
   let validPw = false;
+  let serverErr = null;
   if (isDemo) {
     validPw = pw === 'demo1234'; // DEMO_FLAG
   } else {
-    // SEC-002 FIX: server-side validation for production tenants
     try {
       const r = await fetch('/.netlify/functions/verify-pin', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ code: pw, name, role: 'supervisor' })
       });
-      if (r.ok) { const d = await r.json(); validPw = !!(d.valid && d.role === 'supervisor'); }
-      else if (r.status === 404) { console.warn('SEC-002: verify-pin not deployed, fallback'); validPw = pw === MANAGER_PASSWORD; }
-    } catch (e) { console.warn('SEC-002: verify-pin unreachable:', e.message); validPw = pw === MANAGER_PASSWORD; }
+      if (r.ok) {
+        const d = await r.json();
+        validPw = !!(d.valid && d.role === 'supervisor');
+        if (!validPw && d.attemptsRemaining != null) {
+          serverErr = `Incorrect password — ${d.attemptsRemaining} attempt${d.attemptsRemaining === 1 ? '' : 's'} remaining.`;
+        } else if (!validPw) {
+          serverErr = 'Incorrect password.';
+        }
+      } else if (r.status === 429) {
+        try {
+          const d = await r.json();
+          serverErr = d.message || 'Too many failed attempts — try again in 15 minutes.';
+        } catch (_) {
+          serverErr = 'Too many failed attempts — try again in 15 minutes.';
+        }
+      } else if (r.status === 404) {
+        console.warn('SEC-002: verify-pin not deployed, fallback');
+        validPw = pw === MANAGER_PASSWORD;
+        if (!validPw) serverErr = 'Incorrect password.';
+      } else {
+        serverErr = `Server error (${r.status}). Please try again.`;
+      }
+    } catch (e) {
+      console.warn('SEC-002: verify-pin unreachable:', e.message);
+      validPw = pw === MANAGER_PASSWORD;
+      if (!validPw) serverErr = 'Couldn\'t reach the server — check your connection and try again.';
+    }
   }
 
-  if (validPw && name) {
+  if (validPw) {
     isManager          = true;
     currentManagerName = name;
     applyManagerMode();
@@ -451,7 +493,7 @@ async function submitManagerPassword() {
     showToast('Supervision mode unlocked — ' + name);
     auditLog('Unlocked manager mode', 'Access', null, null);
   } else {
-    document.getElementById('manager-pw-error').style.display = 'block';
+    showErr(serverErr || 'Incorrect password.');
     document.getElementById('manager-pw-input').value = '';
     document.getElementById('manager-pw-input').focus();
   }
