@@ -32,19 +32,33 @@ function _isDemoTenant() {
 }
 
 // ── DB ID validator ───────────────────────────────────────────
-// Returns true ONLY for real Postgres-issued UUIDs. Rejects:
+// Returns true for ids that came from Postgres (PATCH/DELETE-safe).
+// Rejects:
 //   - null / undefined
 //   - temp IDs minted locally for offline writes (e.g. 'temp_abc123')
-//   - integer IDs from SEED demo data (e.g. 101, 306 ...)
-// All our primary keys (schedule/people/sites/managers) are uuid, so any
-// PATCH/DELETE using a non-UUID id 400s with
-// `invalid input syntax for type uuid: "306"`. Call sites should use
-// _isRealDbId(entity.id) to branch between PATCH (real row) and POST
-// (insert — no server row exists yet).
-const _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+//   - integer IDs from SEED demo data on the 'eq' tenant (e.g. 101, 306 ...)
+//
+// EQ tenants use uuid PKs everywhere (schedule/people/sites/managers).
+// SKS tenant uses bigint PKs on the same tables. The validator must accept
+// the right shape per tenant — otherwise on SKS every PATCH falls through to
+// POST and we duplicate rows on every edit.
+//
+// v3.4.22: tenant-gated. Pre-v3.4.22 was uuid-only and would have broken
+// SKS prod the moment this code landed there.
+const _UUID_RE   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const _BIGINT_RE = /^[1-9][0-9]{0,18}$/;
 function _isRealDbId(id) {
   if (id === null || id === undefined) return false;
-  return _UUID_RE.test(String(id));
+  const s = String(id);
+  // SKS (and any future bigint tenant) — accept positive integer strings.
+  // Important: the 'eq' demo tenant must NOT take this branch, or SEED ids
+  // (101..318) would be treated as real and PATCH calls would 400 with
+  // `invalid input syntax for type uuid: "306"`.
+  if (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG === 'sks') {
+    return _BIGINT_RE.test(s);
+  }
+  // EQ + other uuid tenants — accept only uuids
+  return _UUID_RE.test(s);
 }
 
 function _sbLog(level, stage, details) {

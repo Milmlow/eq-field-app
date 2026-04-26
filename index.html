@@ -166,8 +166,32 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.21
+  EQ Solves — Field  v3.4.22
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.22  (SKS-promotion blockers — id handling)
+  ──────────────────────────────────────────────────────────
+  Closes the gap between EQ Field demo and SKS Labour prod so the
+  demo→main promotion is safe to ship. Two id-handling problems:
+
+  1. _isRealDbId (scripts/supabase.js) was uuid-only since v3.4.13.
+     SKS uses bigint PKs — running this code there would have
+     rejected every real id and forced every save through POST,
+     duplicating rows on every edit. Now tenant-gated: bigint for
+     'sks', uuid for everything else (the 'eq' demo SEED ids 101..318
+     are still rejected on EQ, so v3.4.13's original fix is preserved).
+
+  2. The latent uuid-in-onclick sweep promised in v3.4.21:
+     - people.js: editPerson + confirmRemove (2 sites each)
+     - managers.js: openEditManager + confirmRemoveManager (2 sites each)
+     - sites.js: openEditSite + confirmDeleteSite (1 site each)
+     - roster.js: editPerson (1 site)
+     All quoted; parseInt() removed where it would NaN on uuid.
+     find() comparisons coerced to String(x.id) === String(id) so
+     they survive both uuid (eq) and bigint (sks) id types.
+
+  Also bumps APP_VERSION (was lagging at 3.4.20 since v3.4.21 didn't
+  touch app-state.js).
 
   CHANGES IN v3.4.21  (Hotfix — uuid id breaking inline handlers)
   ──────────────────────────────────────────────────────────
@@ -743,7 +767,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.21</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.22</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>

@@ -461,7 +461,7 @@ function renderEditor() {
         </div>
         <div class="editor-actions">
           <button class="btn-icon" title="Fill Mon\u2013Fri" onclick="fillWeek('${p.name.replace(/'/g,"\\'")}','${week}')" style="font-size:10px;color:var(--navy-3)">\u21D2wk</button>
-          <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
+          <button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
           <button class="btn-icon" style="color:var(--red)" title="Clear week"
             data-pname="${esc(p.name)}" data-week="${week}"
             onclick="confirmClearWeek(this.dataset.pname, this.dataset.week)">⌫</button>

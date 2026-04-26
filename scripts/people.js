@@ -142,7 +142,8 @@ function openAddPerson() {
 
 function editPerson(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const p = STATE.people.find(x => x.id === id);
+  // v3.4.22: coerce both sides to string so uuid (eq) AND bigint (sks) match
+  const p = STATE.people.find(x => String(x.id) === String(id));
   if (!p) return;
   document.getElementById('modal-person-title').textContent = 'Edit Person';
   document.getElementById('person-edit-id').value = id;
@@ -216,7 +217,8 @@ function savePerson() {
 
   let person;
   if (id) {
-    person = STATE.people.find(x => x.id === parseInt(id));
+    // v3.4.22: id is uuid (eq) or bigint-as-string (sks); coerce both sides
+    person = STATE.people.find(x => String(x.id) === String(id));
     if (person) {
       person.name       = name;
       person.phone      = phone;
@@ -393,10 +395,10 @@ function renderContacts() {
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
+            <button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
             <button class="btn-icon" style="color:var(--red)" title="Remove"
               data-pid="${p.id}" data-pname="${esc(p.name)}"
-              onclick="confirmRemove(parseInt(this.dataset.pid), this.dataset.pname)">✕</button>
+              onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>
           </div>
         </div>`;
       });
@@ -421,10 +423,10 @@ function renderContacts() {
         <td class="meta-col">${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>` : '—'}</td>
         <td class="meta-col">${p.agency || '—'}</td>
         <td class="center" style="white-space:nowrap">
-          <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
+          <button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
           <button class="btn-icon" style="color:var(--red)" title="Remove"
             data-pid="${p.id}" data-pname="${esc(p.name)}"
-            onclick="confirmRemove(parseInt(this.dataset.pid), this.dataset.pname)">✕</button>
+            onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>
         </td>
       </tr>`).join('')}
     </tbody>
@@ -511,7 +513,7 @@ async function saveIndividualPin(id, pinVal, name) {
 
   try {
     await sbFetch(`people?id=eq.${id}`, 'PATCH', { pin: String(pin) });
-    const p = STATE.people.find(x => x.id === id);
+    const p = STATE.people.find(x => String(x.id) === String(id));
     if (p) p.pin = String(pin);
     showToast(`✓ PIN set for ${name}`);
     auditLog(`PIN set for ${name}`, 'People', null, null);
