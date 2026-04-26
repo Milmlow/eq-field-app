@@ -247,6 +247,29 @@ async function checkPin() {
       sessionStorage.setItem(ACCESS_KEY, '1');
       sessionStorage.setItem('eq_logged_in_name', name);
       if (role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+      // Mint a server-side session token so demo can call protected
+      // endpoints (send-email etc). Demo only — eq tenant has no backend.
+      if (TENANT.ORG_SLUG === 'demo') {
+        (async () => {
+          try {
+            const resp = await fetch('/.netlify/functions/verify-pin', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ code: val, name, remember: false })
+            });
+            const data = await resp.json();
+            if (data && data.valid && data.sessionToken) {
+              localStorage.setItem('eq_agent_token', data.sessionToken);
+              sessionStorage.setItem('eq_session_token', data.sessionToken);
+              console.info('EQ[auth] demo agent token minted');
+            } else {
+              console.warn('EQ[auth] demo agent token NOT minted — verify-pin returned', data);
+            }
+          } catch (e) {
+            console.warn('EQ[auth] demo agent token mint failed:', e && e.message || e);
+          }
+        })();
+      }
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
