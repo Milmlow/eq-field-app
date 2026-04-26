@@ -259,7 +259,7 @@ function renderRoster() {
       <div class="roster-card"><div class="table-scroll"><table>
         <thead><tr>
           <th class="name-col sortable${rosterSort.col==='name'?' sort-'+rosterSort.dir:''}" onclick="setSortCol('name')">Name</th>
-          ${days.map((d, i) => `<th class="center sortable${rosterSort.col===d?' sort-'+rosterSort.dir:''}" onclick="setSortCol('${d}')">${dayLabels[i]}<br><span style="font-size:9px;font-weight:400;color:var(--ink-3)">${weekDates[i]}</span></th>`).join('')}
+          ${days.map((d, i) => `<th class="center sortable${rosterSort.col===d?' sort-'+rosterSort.dir:''}" onclick="setSortCol('${d}')">${dayLabels[i]}<br><span style="font-size:11px;font-weight:600;color:#fff">${weekDates[i]}</span></th>`).join('')}
         </tr></thead>
         <tbody>`;
 
@@ -380,63 +380,6 @@ function updateCell(el) {
   auditLog(`${day.toUpperCase()} → ${val || 'cleared'}`, 'Roster', name, STATE.currentWeek);
   updateLastUpdated();
   saveCellToSB(name, week, day, val).catch(() => showToast('Save failed — check connection'));
-  // Debounced roster notification — fires 10s after last edit for this person
-  _queueRosterNotification(name, week);
-}
-
-// ── Roster change notification (debounced) ───────────────────
-const _rosterNotifyTimers = {};
-
-function _queueRosterNotification(personName, week) {
-  if (_rosterNotifyTimers[personName]) clearTimeout(_rosterNotifyTimers[personName]);
-  _rosterNotifyTimers[personName] = setTimeout(() => {
-    delete _rosterNotifyTimers[personName];
-    if (typeof sendRosterChangeEmail === 'function') sendRosterChangeEmail(personName, week);
-  }, 10000); // 10 seconds after last edit
-}
-
-async function sendRosterChangeEmail(personName, week) {
-  const person = (STATE.people || []).find(p => p.name === personName);
-  if (!person || !person.notify_roster || !person.email) return;
-
-  const sched = getPersonSchedule(personName, week);
-  const days = ['mon','tue','wed','thu','fri'];
-  const dayLabels = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
-  const weekLabel = formatWeekLabel(week);
-
-  const rows = days.map((d, i) => {
-    const val = sched[d] || '';
-    const site = STATE.sites.find(s => s.abbr === val);
-    const display = site ? `${val} — ${site.name}` : (val || '—');
-    return `<tr><td style="padding:8px 12px;color:#6B7280;border-bottom:1px solid #F3F4F6">${dayLabels[i]}</td><td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #F3F4F6">${esc(display)}</td></tr>`;
-  }).join('');
-
-  const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto">
-    <div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">
-      <h2 style="color:white;margin:0;font-size:18px">Roster Update</h2>
-      <p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">EQ Solves — Field</p>
-    </div>
-    <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
-      <p style="margin:0 0 16px;font-size:14px;color:#374151">Hi <strong>${esc(personName)}</strong>, your roster for <strong>${esc(weekLabel)}</strong> has been updated:</p>
-      <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">${rows}</table>
-      <p style="margin:16px 0 0;font-size:11px;color:#9CA3AF">This is an automated notification. If you have questions, contact your supervisor.</p>
-    </div>
-  </div>`;
-
-  const token = localStorage.getItem('eq_agent_token') || sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_remember_token');
-  if (!token) return;
-
-  try {
-    await fetch('/.netlify/functions/send-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-eq-token': token },
-      body: JSON.stringify({
-        to: [person.email],
-        subject: `Roster Update — ${weekLabel}`,
-        html
-      })
-    });
-  } catch (e) { /* non-blocking */ }
 }
 
 function toggleEditorSort() {
@@ -478,32 +421,7 @@ function renderEditor() {
     + '<div style="width:80px;flex-shrink:0"></div>'
     + '</div>';
 
-  // TAFE holiday banner — only if (a) the week intersects a holiday range
-  // AND (b) there's at least one apprentice with a TAFE day set.
-  let tafeBannerHtml = '';
-  if (typeof tafeWeekSummary === 'function') {
-    const apprenticesWithTafe = (STATE.people || []).filter(p =>
-      p.group === 'Apprentice' && p.tafe_day && ['mon','tue','wed','thu','fri'].includes(p.tafe_day)
-    );
-    if (apprenticesWithTafe.length) {
-      const s = tafeWeekSummary(week);
-      if (s.anyHoliday) {
-        const labelText = s.labels.join(', ');
-        const headline  = s.fullWeek
-          ? `TAFE break this week — apprentices stay on-site`
-          : `TAFE break intersects this week — apprentices stay on-site on affected days`;
-        tafeBannerHtml = `<div style="display:flex;align-items:center;gap:10px;background:#EEEDF8;border:1px solid #D5D1EC;color:#4A4680;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">
-          <span style="font-size:16px;line-height:1">📆</span>
-          <div style="flex:1;line-height:1.4">
-            <strong>${headline}</strong>
-            ${labelText ? `<div style="font-size:11px;color:#6B68A0;margin-top:2px">${esc(labelText)}</div>` : ''}
-          </div>
-        </div>`;
-      }
-    }
-  }
-
-  let html = tafeBannerHtml + dayHeaderHtml;
+  let html = dayHeaderHtml;
   groups.forEach(g => {
     let people = STATE.people.filter(p => p.group === g);
     if (!people.length) return;
@@ -543,7 +461,7 @@ function renderEditor() {
         </div>
         <div class="editor-actions">
           <button class="btn-icon" title="Fill Mon\u2013Fri" onclick="fillWeek('${p.name.replace(/'/g,"\\'")}','${week}')" style="font-size:10px;color:var(--navy-3)">\u21D2wk</button>
-          <button class="btn-icon" title="Edit" onclick="editPerson(${p.id})">✎</button>
+          <button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
           <button class="btn-icon" style="color:var(--red)" title="Clear week"
             data-pname="${esc(p.name)}" data-week="${week}"
             onclick="confirmClearWeek(this.dataset.pname, this.dataset.week)">⌫</button>
@@ -816,77 +734,4 @@ function _preloadAdjacentWeeks(opts, currIdx) {
   // Just ensures schedule entries for adjacent weeks are in STATE.schedule
   // For demo tenant this is a no-op. For live tenants, data is already loaded globally.
   // Future: could lazy-load specific weeks here.
-}
-
-// ── Weekly roster email to site leads ────────────────────────
-// Sends one email per site that has a site_lead_email configured
-// and has people rostered for the current week.
-
-async function sendWeeklyRosterEmails() {
-  if (!isManager) { showToast('Supervision access required'); return; }
-
-  const token = localStorage.getItem('eq_agent_token') || sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_remember_token');
-  if (!token) { showToast('Session expired — log in again'); return; }
-
-  const week = STATE.currentWeek;
-  const weekLabel = formatWeekLabel(week);
-  const sched = getWeekSchedule(week);
-  const days = ['mon','tue','wed','thu','fri'];
-  const dayLabels = ['Mon','Tue','Wed','Thu','Fri'];
-  const weekDates = getWeekDates(week);
-
-  // Group people by site for each day
-  const sitesWithEmail = STATE.sites.filter(s => s.site_lead_email && s.site_lead_email.includes('@'));
-  if (!sitesWithEmail.length) {
-    showToast('No sites have a lead email configured — edit a site to add one');
-    return;
-  }
-
-  let sent = 0, skipped = 0;
-
-  for (const site of sitesWithEmail) {
-    // Build roster for this site
-    const rosterByDay = days.map((d, i) => {
-      const people = sched.filter(r => r[d] && r[d].toUpperCase() === site.abbr.toUpperCase())
-        .map(r => r.name).sort();
-      return { day: dayLabels[i], date: weekDates[i], people };
-    });
-
-    const totalPeople = new Set(rosterByDay.flatMap(d => d.people));
-    if (!totalPeople.size) { skipped++; continue; }
-
-    const rows = rosterByDay.map(d =>
-      `<tr><td style="padding:8px 12px;font-weight:600;color:#1F335C;border-bottom:1px solid #F3F4F6;width:100px">${d.day}<br><span style="font-weight:400;font-size:11px;color:#9CA3AF">${d.date}</span></td><td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${d.people.length ? d.people.map(n => esc(n)).join('<br>') : '<span style="color:#D1D5DB">—</span>'}</td></tr>`
-    ).join('');
-
-    const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:520px;margin:0 auto">
-      <div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">
-        <h2 style="color:white;margin:0;font-size:18px">${esc(site.name)} — Weekly Roster</h2>
-        <p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">${esc(weekLabel)}</p>
-      </div>
-      <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
-        ${site.site_lead ? `<p style="margin:0 0 16px;font-size:14px;color:#374151">Hi <strong>${esc(site.site_lead)}</strong>, here's your team for this week:</p>` : ''}
-        <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">${rows}</table>
-        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #F3F4F6;font-size:12px;color:#9CA3AF">
-          <strong>${totalPeople.size}</strong> people rostered this week · Sent from EQ Solves — Field
-        </div>
-      </div>
-    </div>`;
-
-    try {
-      await fetch('/.netlify/functions/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-eq-token': token },
-        body: JSON.stringify({
-          to: [site.site_lead_email],
-          subject: `Weekly Roster: ${site.name} — ${weekLabel}`,
-          html
-        })
-      });
-      sent++;
-    } catch (e) { skipped++; }
-  }
-
-  showToast(`📧 ${sent} roster email${sent !== 1 ? 's' : ''} sent${skipped ? ` · ${skipped} skipped (no staff)` : ''}`);
-  auditLog(`Sent weekly roster emails: ${sent} sent, ${skipped} skipped`, 'Roster', weekLabel, week);
 }

@@ -174,8 +174,11 @@ function renderDashboard() {
   // Pending leave request cards
   const pending = (typeof leaveRequests !== 'undefined' ? leaveRequests : []).filter(r => r.status === 'Pending');
   const lrEl    = document.getElementById('dashboard-leave-requests');
-  if (!lrEl) return;
-  if (!pending.length) { lrEl.innerHTML = ''; return; }
+  // v3.4.16: always render the anniversaries widget, even if there is
+  // no pending leave. Previously the function early-returned on empty
+  // pending, which silently skipped the new birthdays card.
+  if (!lrEl) { renderAnniversariesWidget(); return; }
+  if (!pending.length) { lrEl.innerHTML = ''; renderAnniversariesWidget(); return; }
 
   const typeLabels = { 'A/L': 'Annual Leave', 'U/L': 'Unpaid Leave', 'RDO': 'RDO' };
   let lrHtml = `<div class="section-header"><div class="section-title" style="color:var(--amber)">⏳ Pending Leave — ${pending.length}</div></div>`;
@@ -197,9 +200,90 @@ function renderDashboard() {
         <div style="font-size:11px;color:var(--ink-2);margin-top:2px">${datesStr} — ${bizDays} day${bizDays !== 1 ? 's' : ''}</div>
         <div style="font-size:10px;color:var(--ink-3);margin-top:1px">Approver: ${esc(r.approver_name)}</div>
       </div>
-      ${isManager ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond(${r.id})" style="font-size:11px;flex-shrink:0">Review</button>` : ''}
+      ${isManager ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond('${r.id}')" style="font-size:11px;flex-shrink:0">Review</button>` : ''}
     </div>`;
   });
   lrHtml += '</div>';
   lrEl.innerHTML = lrHtml;
+
+  // v3.4.16: always render the anniversaries widget after the dashboard rebuilds.
+  renderAnniversariesWidget();
+}
+
+// ── Birthdays + anniversaries widget (v3.4.16) ────────────────
+// Shows everyone with a birthday or work anniversary in the next
+// 30 days, sorted by days-until. Uses personHasDob / _daysUntilMD
+// from people.js. Staff without a DOB or start_date are skipped.
+function renderAnniversariesWidget() {
+  const el = document.getElementById('dashboard-anniversaries');
+  if (!el) return;
+
+  const WINDOW_DAYS = 30;
+  const today = new Date();
+  const events = [];
+
+  (STATE.people || []).forEach(p => {
+    // Birthdays (day + month only)
+    if (personHasDob && personHasDob(p)) {
+      const days = _daysUntilMD(p.dob_month, p.dob_day);
+      if (days != null && days <= WINDOW_DAYS) {
+        events.push({
+          type: 'birthday', name: p.name, group: p.group,
+          days, dateLabel: personBirthdayLabel(p), note: ''
+        });
+      }
+    }
+    // Work anniversaries (start_date required)
+    if (p.start_date) {
+      const s = new Date(p.start_date + 'T00:00:00');
+      if (!isNaN(s.getTime())) {
+        const days = _daysUntilMD(s.getMonth() + 1, s.getDate());
+        if (days != null && days <= WINDOW_DAYS) {
+          // Years coming up = diff between (target year) and start year
+          let targetYear = today.getFullYear();
+          const target   = new Date(targetYear, s.getMonth(), s.getDate());
+          const todayMd  = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          if (target < todayMd) targetYear = today.getFullYear() + 1;
+          const years = targetYear - s.getFullYear();
+          if (years >= 1) {
+            events.push({
+              type: 'anniversary', name: p.name, group: p.group,
+              days, dateLabel: s.getDate() + ' ' + MONTH_SHORT[s.getMonth() + 1],
+              note: years + ' yr' + (years !== 1 ? 's' : '')
+            });
+          }
+        }
+      }
+    }
+  });
+
+  if (!events.length) {
+    el.innerHTML = `<div class="section-header"><div class="section-title" style="color:var(--ink-3)">🎂 Birthdays &amp; Anniversaries</div></div>
+      <div style="padding:12px 16px;background:var(--surface-2);border-radius:8px;font-size:12px;color:var(--ink-3)">No birthdays or work anniversaries in the next ${WINDOW_DAYS} days.</div>`;
+    return;
+  }
+
+  events.sort((a, b) => a.days - b.days || a.name.localeCompare(b.name));
+
+  const dayLabel = (n) => n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : 'in ' + n + ' days';
+
+  let html = `<div class="section-header"><div class="section-title" style="color:var(--purple)">🎂 Birthdays &amp; Anniversaries — next ${WINDOW_DAYS} days</div></div>`;
+  html += '<div class="roster-card" style="overflow:hidden">';
+  events.forEach(ev => {
+    const icon  = ev.type === 'birthday' ? '🎂' : '🎉';
+    const tint  = ev.type === 'birthday' ? '#FFF1F2' : '#FEF3C7';
+    const color = ev.type === 'birthday' ? '#E11D48' : '#B45309';
+    const typeLabel = ev.type === 'birthday' ? 'Birthday' : 'Work anniversary';
+    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);background:${ev.days === 0 ? tint : 'white'}">
+      <div style="font-size:18px;width:26px;text-align:center">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:var(--navy);font-size:13px">${esc(ev.name)}
+          <span style="font-weight:500;color:${color};font-size:11px;margin-left:6px">${typeLabel}${ev.note ? ' · ' + ev.note : ''}</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:1px">${ev.dateLabel} · ${dayLabel(ev.days)}${ev.group ? ' · ' + esc(ev.group) : ''}</div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
 }

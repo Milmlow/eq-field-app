@@ -19,15 +19,14 @@ function openAddSite() {
   );
   populateSiteLeadDropdown();
   document.getElementById('site-lead').value = '';
-  const emailEl = document.getElementById('site-lead-email');
-  if (emailEl) emailEl.value = '';
   document.querySelector('#modal-site h3').textContent = 'Add Site';
   openModal('modal-site');
 }
 
 function openEditSite(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const site = STATE.sites.find(s => s.id === id);
+  // v3.4.22: coerce both sides to string so uuid (eq) AND bigint (sks) match
+  const site = STATE.sites.find(s => String(s.id) === String(id));
   if (!site) return;
   document.getElementById('site-edit-id').value  = id;
   document.getElementById('site-name').value     = site.name;
@@ -35,8 +34,6 @@ function openEditSite(id) {
   document.getElementById('site-address').value  = site.address || '';
   populateSiteLeadDropdown();
   document.getElementById('site-lead').value     = site.site_lead || '';
-  const emailEl = document.getElementById('site-lead-email');
-  if (emailEl) emailEl.value = site.site_lead_email || '';
   document.querySelector('#modal-site h3').textContent = 'Edit Site';
   openModal('modal-site');
 }
@@ -48,7 +45,6 @@ function saveSite() {
   const abbr     = document.getElementById('site-abbr').value.trim().toUpperCase();
   const address  = document.getElementById('site-address').value.trim();
   const siteLead = document.getElementById('site-lead').value;
-  const siteLeadEmail = (document.getElementById('site-lead-email') || {}).value || '';
 
   // Look up phone for selected lead
   const leadPerson    = [...(STATE.people || []), ...(STATE.managers || [])].find(p => p.name === siteLead);
@@ -57,25 +53,26 @@ function saveSite() {
   if (!name || !abbr) { showToast('Name and abbreviation required'); return; }
 
   // SUP-004: Enforce unique abbreviation per org
+  // v3.4.22: editId is uuid (eq) or bigint-as-string (sks); coerce both sides
   const existingSite = STATE.sites.find(s =>
-    s.abbr.toUpperCase() === abbr && (!editId || s.id !== parseInt(editId))
+    s.abbr.toUpperCase() === abbr && (!editId || String(s.id) !== String(editId))
   );
   if (existingSite) { showToast(`⚠ Abbreviation "${abbr}" already used by ${existingSite.name}`); return; }
 
   let site;
   if (editId) {
-    site = STATE.sites.find(s => s.id === parseInt(editId));
+    // v3.4.22: editId is uuid (eq) or bigint-as-string (sks); coerce both sides
+    site = STATE.sites.find(s => String(s.id) === String(editId));
     if (site) {
       site.name            = name;
       site.abbr            = abbr;
       site.address         = address;
       site.site_lead       = siteLead || null;
       site.site_lead_phone = siteLeadPhone || null;
-      site.site_lead_email = siteLeadEmail.trim().toLowerCase() || null;
     }
     showToast(`${name} updated`);
   } else {
-    site = { id: 'temp_' + Date.now(), name, abbr, address, site_lead: siteLead || null, site_lead_phone: siteLeadPhone || null, site_lead_email: siteLeadEmail.trim().toLowerCase() || null };
+    site = { id: 'temp_' + Date.now(), name, abbr, address, site_lead: siteLead || null, site_lead_phone: siteLeadPhone || null };
     STATE.sites.push(site);
     showToast(`${name} added`);
   }
@@ -140,10 +137,10 @@ function renderSites() {
             <div class="site-name-lg">${esc(site.name)}</div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px">
-            <button class="btn-icon btn-sm" title="Edit site" onclick="openEditSite(${site.id})">✎</button>
+            <button class="btn-icon btn-sm" title="Edit site" onclick="openEditSite('${site.id}')">✎</button>
             <button class="btn-icon btn-sm" style="color:var(--red)" title="Delete site"
               data-sid="${site.id}" data-sname="${esc(site.name)}"
-              onclick="confirmDeleteSite(parseInt(this.dataset.sid), this.dataset.sname)">✕</button>
+              onclick="confirmDeleteSite(this.dataset.sid, this.dataset.sname)">✕</button>
           </div>
         </div>
         ${site.address ? `<div class="site-detail"><span>📍</span>${esc(site.address)}</div>` : ''}

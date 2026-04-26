@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
-// scripts/apprentices.js  —  EQ Solves Field  v2.3
+// scripts/apprentices.js  —  EQ Solves Field  v2.2
 // Apprentice Management: profiles, Skills Passport,
-// tradesman feedback, self-assessment, rotations, journal.
+// tradesman feedback, self-assessment, rotations.
 // Depends on: app-state.js, utils.js, supabase.js
 // Changes v2.0:
 //   - Contacts are source of truth (year_level on people)
@@ -21,14 +21,6 @@
 //   - Goal presets by year on profile modal (+ free-text override)
 //   - Feedback form presets on all four text fields
 //   - Custom per-apprentice competencies on Skills Passport
-// Changes v2.3 (shipped in app v3.4.7 — Tier 2):
-//   - 3E: Apprentices can edit their own goals (year/site stay mgr-only).
-//         goals_updated_at / goals_updated_by audit stamp + display.
-//   - 3F: "Ask for Feedback" — apprentice picks supervisor + optional
-//         prompt, fires email w/ deep link, row in feedback_requests.
-//         Supervisor inbound-asks card surfaces on the apprentice list.
-//   - 3G: Journal tab (scripts/journal.js) — private-default reflection
-//         entries with per-entry share toggle + rotating prompts.
 // ─────────────────────────────────────────────────────────────
 
 let apprenticeProfiles = [];
@@ -37,11 +29,8 @@ let _uuidNameCache = {};
 let skillsRatings = [];
 let feedbackEntries = [];
 let apprenticeRotations = [];
-let feedbackRequests = [];        // v2.3 — Tier 2 / 3F
-let apprenticeJournal = [];        // v2.3 — Tier 2 / 3G
 let activeApprenticeId = null;
 let activeApprenticeTab = 'overview';
-let _pendingFeedbackRequestId = null; // set when a supervisor deep-links in via ?request=<id>
 
 // ── Helpers: period ───────────────────────────────────────────
 
@@ -62,28 +51,6 @@ function _periodRank(p) {
   const m = /Q(\d)\s+(\d{4})/.exec(p || '');
   if (!m) return 0;
   return parseInt(m[2], 10) * 10 + parseInt(m[1], 10);
-}
-
-// ── Self-edit gate (v2.3 — Tier 2 / 3E) ───────────────────────
-// An apprentice can edit their OWN goals & journal without supervisor
-// mode. A manager (supervisor) can edit any profile. staffTsPerson is
-// set by auth.js on PIN login; shape: { id: <people.id UUID>, name, group }.
-function canEditThisProfile(profile) {
-  if (isManager) return true;
-  if (!profile) return false;
-  try {
-    if (typeof staffTsPerson !== 'undefined' && staffTsPerson
-        && String(staffTsPerson.id) === String(profile.person_id)) return true;
-  } catch(_) {}
-  return false;
-}
-
-function _editorDisplayName() {
-  if (isManager) return (typeof currentManagerName !== 'undefined' && currentManagerName) || 'Supervisor';
-  try {
-    if (typeof staffTsPerson !== 'undefined' && staffTsPerson && staffTsPerson.name) return staffTsPerson.name;
-  } catch(_) {}
-  return 'Unknown';
 }
 
 // ── Goal suggestions by year ──────────────────────────────────
@@ -343,7 +310,7 @@ function getCustomRating(profile, compId, type, period) {
 // Add a new custom competency. Prompts for a name, PATCHes profile,
 // refreshes UI. String id derived from timestamp + random nibble.
 async function addCustomCompetency(profileId) {
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
   const name = (prompt('Add a custom skill for this apprentice:\n(e.g. Thermal scanning, Rack termination, Site induction)') || '').trim();
   if (!name) return;
@@ -371,7 +338,7 @@ async function addCustomCompetency(profileId) {
 
 // Remove a custom comp and any ratings tied to it. Confirms first.
 async function removeCustomCompetency(profileId, compId) {
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
   const list = getCustomCompetencies(profile);
   const entry = list.find(c => c.id === compId);
@@ -449,35 +416,22 @@ function jobComboHtml(id, placeholder, value) {
 
 async function loadApprenticeData() {
   try {
-    const [profiles, comps, ratings, feedback, rots, dbPeople, fbReqs, journal] = await Promise.all([
+    const [profiles, comps, ratings, feedback, rots, dbPeople] = await Promise.all([
       sbFetch('apprentice_profiles?order=id.asc'),
       sbFetch('competencies?order=sort_order.asc&active=eq.true'),
       sbFetch('skills_ratings?order=period.asc,rating_type.asc,competency_id.asc'),
       sbFetch('feedback_entries?order=feedback_date.desc'),
       sbFetch('rotations?order=date_start.desc'),
-      sbFetch('people?select=id,name,year_level,licence,group&order=name.asc'),
-      // v2.3: Tier 2 tables — absent on older tenants so swallow failure
-      sbFetch('feedback_requests?order=created_at.desc').catch(() => []),
-      sbFetch('apprentice_journal?order=entry_date.desc').catch(() => []),
+      sbFetch('people?select=id,name,year_level,group&order=name.asc'),
     ]);
 
-    // Build UUID→name + UUID→year_level lookups.
-    // v3.4.10: if year_level isn't populated yet, fall back to parsing
-    // licence (which the Add Person modal writes as '2nd Year' etc.).
-    // This keeps legacy apprentice rows showing the right year until
-    // the EQ demo backfill migration reaches them.
+    // Build UUID→name + UUID→year_level lookups
     const uuidToName = {};
     const uuidToYear = {};
-    const parseLicenceYear = (s) => {
-      if (!s) return null;
-      const m = String(s).trim().match(/^([1-4])(?:st|nd|rd|th)\s+Year$/i);
-      return m ? parseInt(m[1], 10) : null;
-    };
     if (dbPeople && dbPeople.length) {
       dbPeople.forEach(p => {
         uuidToName[String(p.id)] = p.name;
-        const y = p.year_level || parseLicenceYear(p.licence);
-        if (y) uuidToYear[String(p.id)] = y;
+        if (p.year_level) uuidToYear[String(p.id)] = p.year_level;
       });
     }
     if (typeof STATE !== 'undefined' && STATE.people) {
@@ -496,8 +450,6 @@ async function loadApprenticeData() {
     if (ratings) skillsRatings = ratings;
     if (feedback) feedbackEntries = feedback;
     if (rots) apprenticeRotations = rots;
-    if (fbReqs) feedbackRequests = fbReqs;
-    if (journal) apprenticeJournal = journal;
   } catch (e) {
     console.warn('EQ[apprentices] load failed:', e && e.message || e);
   }
@@ -537,7 +489,7 @@ function avgRating(profileOrId, type) {
     apprenticeId = profile.id;
   } else {
     apprenticeId = profileOrId;
-    profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId)) || null;
+    profile = apprenticeProfiles.find(p => p.id === apprenticeId) || null;
   }
 
   const ratings = skillsRatings
@@ -670,7 +622,6 @@ function renderApprentices() {
 
   // Check-in card (manager-only, only if at least one apprentice has reasons)
   if (isManager) {
-    html += renderInboundAsksCard();
     html += renderCheckInCard(apprenticePeople);
   }
 
@@ -717,40 +668,6 @@ function renderApprentices() {
 
   html += '</div>';
   container.innerHTML = html;
-}
-
-// ── Inbound asks card (v2.3 / 3F) ─────────────────────────────
-// When a supervisor is in manager mode AND has incoming feedback
-// requests addressed to them (by name match), show them as tappable
-// cards that open the feedback form with the request bound.
-
-function renderInboundAsksCard() {
-  const inbox = getInboundRequestsForSupervisor(currentManagerName);
-  if (!inbox.length) return '';
-
-  let html = '<div class="roster-card" style="padding:16px 20px;margin-bottom:16px;background:linear-gradient(135deg,#EEF2FF 0%,#E0E7FF 100%);border-left:4px solid #6B5BD6">';
-  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
-  html += '<div style="font-size:22px">💬</div>';
-  html += '<div>';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--navy)">Apprentices asking for your feedback</div>';
-  html += '<div style="font-size:11px;color:var(--ink-3);margin-top:2px">Tap one to leave a short note — no pressure, whenever you\'re ready.</div>';
-  html += '</div></div>';
-
-  html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
-  inbox.forEach(req => {
-    const when = new Date(req.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-    const promptPreview = req.prompt ? (req.prompt.length > 60 ? req.prompt.slice(0, 60) + '…' : req.prompt) : 'General check-in';
-    const profile = apprenticeProfiles.find(p => p.id === req.apprentice_id);
-    if (!profile) return;
-    const name = getPersonNameById(profile.person_id);
-    html += '<button onclick="openFeedbackForm(' + profile.id + ',\'' + esc(name) + '\',\'' + esc(req.id) + '\')" style="background:white;border:1px solid #C7D2FE;border-radius:10px;padding:10px 14px;text-align:left;cursor:pointer;font-family:inherit;min-width:220px;transition:transform .1s" onmouseover="this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.transform=\'\'">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><div style="font-size:13px;font-weight:700;color:var(--navy)">' + esc(name) + '</div><div style="font-size:10px;color:var(--ink-3)">' + when + '</div></div>';
-    html += '<div style="font-size:11px;color:var(--ink-2);line-height:1.4">' + esc(promptPreview) + '</div>';
-    html += '</button>';
-  });
-  html += '</div>';
-  html += '</div>';
-  return html;
 }
 
 // ── Check-in card (v2.1) ──────────────────────────────────────
@@ -810,7 +727,7 @@ function openApprenticeProfile(profileId, personName) {
 
 function renderApprenticeProfile(profileId) {
   const container = document.getElementById('apprentices-content');
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile || !container) return;
 
   const person = (STATE.people || []).find(p =>
@@ -835,19 +752,10 @@ function renderApprenticeProfile(profileId) {
 
   // Tabs
   const fbCount = feedbackEntries.filter(f => f.apprentice_id === profileId).length;
-  const isSelfView = (typeof staffTsPerson !== 'undefined' && staffTsPerson
-      && String(staffTsPerson.id) === String(profile.person_id));
-  // Journal entry count — apprentice sees all their own, manager sees only shared
-  let journalCount = 0;
-  if (typeof apprenticeJournal !== 'undefined') {
-    journalCount = apprenticeJournal.filter(j =>
-      j.apprentice_id === profileId && (isSelfView || j.shared)).length;
-  }
   const tabs = [
     { id: 'overview', label: '👤 Overview' },
     { id: 'passport', label: '🎯 Skills Passport' },
     { id: 'feedback', label: '💬 Feedback (' + fbCount + ')' },
-    { id: 'journal', label: '📓 Journal' + (journalCount ? ' (' + journalCount + ')' : '') },
     { id: 'rotations', label: '🏗 Rotations' },
   ];
   html += '<div style="display:flex;gap:4px;margin-top:16px;border-bottom:2px solid var(--border);padding-bottom:0">';
@@ -860,7 +768,6 @@ function renderApprenticeProfile(profileId) {
   if (activeApprenticeTab === 'overview') html += renderApprenticeOverviewTab(profile, personName, person);
   else if (activeApprenticeTab === 'passport') html += renderSkillsPassportTab(profile);
   else if (activeApprenticeTab === 'feedback') html += renderFeedbackTab(profile, personName);
-  else if (activeApprenticeTab === 'journal' && typeof renderApprenticeJournalTab === 'function') html += renderApprenticeJournalTab(profile, personName);
   else if (activeApprenticeTab === 'rotations') html += renderRotationsTab(profile);
 
   container.innerHTML = html;
@@ -887,11 +794,7 @@ function renderApprenticeOverviewTab(profile, personName, person) {
   html += '<div class="roster-card" style="padding:18px 20px;grid-column:1/-1">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">';
   html += '<div style="font-size:13px;font-weight:700;color:var(--navy)">Development Goals</div>';
-  if (canEditThisProfile(profile)) {
-    const goalsBtnLabel = (!isManager && staffTsPerson && String(staffTsPerson.id) === String(profile.person_id))
-      ? 'Edit My Goals' : 'Edit Goals';
-    html += '<button class="btn btn-secondary btn-sm" onclick="openEditGoals(' + profile.id + ')">' + goalsBtnLabel + '</button>';
-  }
+  if (isManager) html += '<button class="btn btn-secondary btn-sm" onclick="openEditGoals(' + profile.id + ')">Edit Goals</button>';
   html += '</div>';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">';
   const goals = [
@@ -905,16 +808,7 @@ function renderApprenticeOverviewTab(profile, personName, person) {
     html += '<div style="font-size:12px;color:var(--ink-2);line-height:1.5">' + (g.val ? esc(g.val) : '<span style="color:var(--ink-4)">Not set yet</span>') + '</div>';
     html += '</div>';
   });
-  html += '</div>';
-  // Audit line — only render if we have an updated stamp
-  if (profile.goals_updated_at) {
-    const auditDate = new Date(profile.goals_updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-    html += '<div style="font-size:10px;color:var(--ink-4);margin-top:10px;text-align:right">Last edited by ' + esc(profile.goals_updated_by || 'someone') + ' · ' + auditDate + '</div>';
-  }
-  html += '</div>';
-
-  // Pending feedback asks (v2.3 / 3F) — shown to apprentice + supervisor
-  html += renderPendingRequestsCard(profile, personName);
+  html += '</div></div>';
 
   // Follow-ups card (v2.1) — only shows if there's something to resolve
   html += renderFollowUpsCard(profile, personName);
@@ -966,38 +860,7 @@ function renderApprenticeOverviewTab(profile, personName, person) {
     html += '<button class="btn btn-secondary btn-sm" onclick="openTradesmanRatingForm(' + profile.id + ',\'' + esc(personName) + '\')">Rate Skills</button>';
     html += '<button class="btn btn-secondary btn-sm" onclick="openAddRotation(' + profile.id + ',\'' + esc(personName) + '\')">+ Add Rotation</button>';
     html += '</div>';
-  } else if (typeof staffTsPerson !== 'undefined' && staffTsPerson
-      && String(staffTsPerson.id) === String(profile.person_id)) {
-    // Self-view: apprentice-initiated actions only (no assessing themselves)
-    html += '<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">';
-    html += '<button class="btn btn-primary btn-sm" onclick="openRequestFeedbackForm(' + profile.id + ')">💬 Ask for Feedback</button>';
-    html += '<button class="btn btn-secondary btn-sm" onclick="openSelfAssessmentForm(' + profile.id + ')">⭐ How am I going?</button>';
-    html += '</div>';
   }
-  return html;
-}
-
-// ── Pending / inbound request cards (v2.3 / 3F) ───────────────
-
-function renderPendingRequestsCard(profile, personName) {
-  const pending = getPendingFeedbackRequests(profile.id);
-  if (!pending.length) return '';
-  const isSelf = (typeof staffTsPerson !== 'undefined' && staffTsPerson
-    && String(staffTsPerson.id) === String(profile.person_id));
-  let html = '<div class="roster-card" style="padding:14px 18px;grid-column:1/-1;background:#F5F3FF;border-left:4px solid var(--purple)">';
-  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
-  html += '<div style="font-size:18px">💬</div>';
-  html += '<div style="font-size:12px;font-weight:700;color:var(--navy)">' + (isSelf ? 'You\'ve asked for feedback' : 'Open asks from ' + esc(personName)) + '</div>';
-  html += '</div>';
-  pending.forEach(r => {
-    const when = new Date(r.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-    html += '<div style="background:#fff;border-radius:6px;padding:10px 12px;margin-top:6px;font-size:12px;color:var(--ink-2)">';
-    html += '<div style="font-size:11px;color:var(--ink-3);margin-bottom:3px">Asked ' + esc(r.requested_of || 'someone') + ' · ' + when + '</div>';
-    if (r.prompt) html += '<div style="line-height:1.5">' + esc(r.prompt) + '</div>';
-    else html += '<div style="color:var(--ink-3);font-style:italic">No specific question — general check-in</div>';
-    html += '</div>';
-  });
-  html += '</div>';
   return html;
 }
 
@@ -1123,7 +986,7 @@ function renderPassportGrid(profileOrId, period) {
     apprenticeId = profile.id;
   } else {
     apprenticeId = profileOrId;
-    profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId)) || null;
+    profile = apprenticeProfiles.find(p => p.id === apprenticeId) || null;
   }
   const appRatings = skillsRatings.filter(r => r.apprentice_id === apprenticeId && r.period === period);
   const selfMap = {};
@@ -1208,7 +1071,7 @@ function renderGrowthView(profileOrId, allPeriods) {
     apprenticeId = profile.id;
   } else {
     apprenticeId = profileOrId;
-    profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId)) || null;
+    profile = apprenticeProfiles.find(p => p.id === apprenticeId) || null;
   }
 
   const window4 = allPeriods.slice(-4); // last up to 4 periods
@@ -1313,7 +1176,7 @@ function renderPassportForPeriod(apprenticeId, period) {
   const container = document.getElementById('apprentices-content');
   if (!container) return;
   // Re-render passport tab with selected period
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId));
+  const profile = apprenticeProfiles.find(p => p.id === apprenticeId);
   if (!profile) return;
   // Find the passport-grid div and replace just that
   const gridEl = container.querySelector('.passport-grid-wrap');
@@ -1446,9 +1309,9 @@ function openSetupProfile(personName) {
 // ── Edit Goals / Profile ──────────────────────────────────────
 
 function openEditGoals(profileId) {
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  if (!isManager) { showToast('Supervision access required'); return; }
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
-  if (!canEditThisProfile(profile)) { showToast('You can only edit your own goals'); return; }
   const modal = document.getElementById('modal-apprentice-profile');
   if (!modal) return;
   const personName = getPersonNameById(profile.person_id);
@@ -1468,22 +1331,7 @@ function openEditGoals(profileId) {
   (STATE.sites || []).forEach(s => { siteHtml += '<option value="' + esc(s.abbr) + '"' + (s.abbr === profile.current_site ? ' selected' : '') + '>' + esc(s.abbr) + ' — ' + esc(s.name) + '</option>'; });
   document.getElementById('ap-site').innerHTML = siteHtml;
 
-  // Self-edit mode: apprentices editing their own profile can only touch
-  // goal fields — year, start date, site and notes stay supervisor-managed.
-  const selfEditMode = !isManager;
-  ['ap-year', 'ap-start-date', 'ap-site', 'ap-notes'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.disabled = selfEditMode;
-      // Visually dim the disabled rows so it's obvious what's yours vs. theirs
-      const wrap = el.closest('.form-row') || el.parentElement;
-      if (wrap) wrap.style.opacity = selfEditMode ? '0.45' : '1';
-    }
-  });
-
-  document.getElementById('modal-ap-title').textContent = selfEditMode
-    ? 'Edit My Goals — ' + personName
-    : 'Edit Profile — ' + personName;
+  document.getElementById('modal-ap-title').textContent = 'Edit Profile — ' + personName;
   refreshGoalSuggestions();
   openModal('modal-apprentice-profile');
 }
@@ -1502,6 +1350,7 @@ function openEditContactYear(personName, profileId) {
 // ── Save Profile ──────────────────────────────────────────────
 
 async function saveApprenticeProfile() {
+  if (!isManager) { showToast('Supervision access required'); return; }
   const editId = document.getElementById('ap-edit-id').value;
   const personName = document.getElementById('ap-person').value;
   const yearLevel = parseInt(document.getElementById('ap-year').value);
@@ -1514,71 +1363,32 @@ async function saveApprenticeProfile() {
 
   if (!personName) { showToast('Select an apprentice'); return; }
 
-  // Editing existing profile — gate on canEditThisProfile (manager OR self).
-  // Creating a new profile — always supervisor-gated.
-  let editProfile = null;
-  if (editId) {
-    editProfile = apprenticeProfiles.find(p => String(p.id) === String(editId));
-    if (!canEditThisProfile(editProfile)) { showToast('You can only edit your own goals'); return; }
-  } else if (!isManager) {
-    showToast('Supervision access required'); return;
-  }
-
-  const nowIso = new Date().toISOString();
-  const editorName = _editorDisplayName();
-  const selfOnly = !!(editId && !isManager);
-
-  // Self-edit: goals only + audit stamps. Everything else stays untouched
-  // so the apprentice can't bump their own year level or reassign site.
-  const profileRow = selfOnly
-    ? {
-        goal_technical: goalTech,
-        goal_professional: goalProf,
-        goal_personal: goalPersonal,
-        goals_updated_at: nowIso,
-        goals_updated_by: editorName,
-        updated_at: nowIso,
-      }
-    : {
-        year_level: yearLevel,
-        start_date: startDate,
-        notes,
-        goal_technical: goalTech,
-        goal_professional: goalProf,
-        goal_personal: goalPersonal,
-        current_site: site,
-        goals_updated_at: nowIso,
-        goals_updated_by: editorName,
-        updated_at: nowIso,
-      };
+  const profileRow = {
+    year_level: yearLevel,
+    start_date: startDate,
+    notes,
+    goal_technical: goalTech,
+    goal_professional: goalProf,
+    goal_personal: goalPersonal,
+    current_site: site,
+    updated_at: new Date().toISOString(),
+  };
 
   try {
     if (editId) {
       await sbFetch('apprentice_profiles?id=eq.' + editId, 'PATCH', profileRow);
-      // Also update year_level on people (contacts = source of truth).
-      // Skipped in self-edit mode — apprentice can't change their own year.
-      if (!selfOnly) {
-        const personObj = (STATE.people || []).find(p => p.name === personName);
-        if (personObj) {
-          await sbFetch('people?id=eq.' + personObj.id, 'PATCH', { year_level: yearLevel });
-          personObj.year_level = yearLevel; // update SEED in memory
-        }
+      // Also update year_level on people (contacts = source of truth)
+      const personObj = (STATE.people || []).find(p => p.name === personName);
+      if (personObj) {
+        await sbFetch('people?id=eq.' + personObj.id, 'PATCH', { year_level: yearLevel });
+        personObj.year_level = yearLevel; // update SEED in memory
       }
-      const idx = apprenticeProfiles.findIndex(p => String(p.id) === String(editId));
+      const idx = apprenticeProfiles.findIndex(p => p.id === parseInt(editId));
       if (idx >= 0) Object.assign(apprenticeProfiles[idx], profileRow);
-      showToast(selfOnly ? 'Goals updated ✓' : 'Profile updated ✓');
+      showToast('Profile updated ✓');
       closeModal('modal-apprentice-profile');
       document.getElementById('ap-person').disabled = false;
-      // Re-enable any fields we disabled for self-edit mode
-      ['ap-year','ap-start-date','ap-site','ap-notes'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.disabled = false;
-          const wrap = el.closest('.form-row') || el.parentElement;
-          if (wrap) wrap.style.opacity = '1';
-        }
-      });
-      renderApprenticeProfile(editId);
+      renderApprenticeProfile(parseInt(editId));
     } else {
       // New profile — resolve DB UUID from person name
       let resolvedPersonId = null;
@@ -1619,7 +1429,7 @@ async function saveApprenticeProfile() {
 // ── Self-assessment form ──────────────────────────────────────
 
 function openSelfAssessmentForm(profileId) {
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
   const personName = getPersonNameById(profile.person_id);
   const modal = document.getElementById('modal-apprentice-self');
@@ -1707,10 +1517,10 @@ function setSAStarRating(btn, attrId, val) {
 }
 
 async function submitSelfAssessment() {
-  const profileId = document.getElementById('sa-apprentice-id').value;
+  const profileId = parseInt(document.getElementById('sa-apprentice-id').value);
   const period = document.getElementById('sa-period').value;
   if (!period) { showToast('Select a period'); return; }
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
   const ratedBy = getPersonNameById(profile.person_id);
 
@@ -1778,7 +1588,7 @@ async function submitSelfAssessment() {
 
 // ── Feedback form ─────────────────────────────────────────────
 
-function openFeedbackForm(profileId, personName, requestId) {
+function openFeedbackForm(profileId, personName) {
   if (!isManager) { showToast('Supervision access required'); return; }
   const modal = document.getElementById('modal-apprentice-feedback');
   if (!modal) return;
@@ -1789,36 +1599,7 @@ function openFeedbackForm(profileId, personName, requestId) {
   document.getElementById('fb-needs-improve').value = '';
   document.getElementById('fb-follow-up').value = '';
   document.getElementById('fb-rating').value = '';
-  // Stash request id on the hidden field so submitFeedback can mark it complete
-  const reqEl = document.getElementById('fb-request-id');
-  if (reqEl) reqEl.value = requestId || '';
   document.getElementById('modal-fb-title').textContent = 'Give Feedback — ' + personName;
-
-  // If this is a fulfilment of a request, surface the prompt + "asked by"
-  const bannerEl = document.getElementById('fb-request-banner');
-  if (bannerEl) {
-    if (requestId) {
-      const req = feedbackRequests.find(r => r.id === requestId);
-      if (req) {
-        let banner = '<div style="background:#EEF2FF;border-left:4px solid var(--purple);padding:10px 12px;border-radius:4px;margin-bottom:12px">';
-        banner += '<div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Requested by ' + esc(req.requested_by || 'apprentice') + '</div>';
-        if (req.prompt) {
-          banner += '<div style="font-size:12px;color:var(--ink-2);line-height:1.5">💬 ' + esc(req.prompt) + '</div>';
-        } else {
-          banner += '<div style="font-size:12px;color:var(--ink-3);font-style:italic">No specific prompt — give them your general thoughts.</div>';
-        }
-        banner += '</div>';
-        bannerEl.innerHTML = banner;
-        bannerEl.style.display = '';
-      } else {
-        bannerEl.innerHTML = '';
-        bannerEl.style.display = 'none';
-      }
-    } else {
-      bannerEl.innerHTML = '';
-      bannerEl.style.display = 'none';
-    }
-  }
 
   // Name combobox
   const nameWrap = document.getElementById('fb-name-wrap');
@@ -1840,9 +1621,7 @@ function openFeedbackForm(profileId, personName, requestId) {
 }
 
 async function submitFeedback() {
-  const profileId = document.getElementById('fb-apprentice-id').value;
-  const reqEl = document.getElementById('fb-request-id');
-  const requestId = reqEl ? (reqEl.value || '') : '';
+  const profileId = parseInt(document.getElementById('fb-apprentice-id').value);
   const submittedBy = document.getElementById('fb-submitted-by').value.trim();
   const didWell = document.getElementById('fb-did-well').value.trim();
   const trustNext = document.getElementById('fb-trust-next').value.trim();
@@ -1870,205 +1649,14 @@ async function submitFeedback() {
   };
 
   try {
-    const created = await sbFetch('feedback_entries', 'POST', row, 'return=representation');
-    const newEntry = Array.isArray(created) ? created[0] : created;
-    // If this was a fulfilment of an ask, stamp the feedback_requests row.
-    if (requestId && newEntry && newEntry.id) {
-      try {
-        await sbFetch('feedback_requests?id=eq.' + requestId, 'PATCH', {
-          completed_at: new Date().toISOString(),
-          feedback_entry_id: newEntry.id,
-        });
-      } catch(e) { /* non-fatal — feedback itself is saved */ }
-    }
-    showToast(requestId ? 'Feedback delivered ✓' : 'Feedback saved ✓');
+    await sbFetch('feedback_entries', 'POST', row, 'return=minimal');
+    showToast('Feedback saved ✓');
     closeModal('modal-apprentice-feedback');
-    // Clear deep-link state so a reopen doesn't re-bind the old request
-    _pendingFeedbackRequestId = null;
     await loadApprenticeData();
     renderApprenticeProfile(profileId);
   } catch(e) {
     showToast('Save failed — check connection');
   }
-}
-
-// ── Request feedback (Tier 2 / 3F) ────────────────────────────
-// Apprentice initiates: picks a supervisor, adds an optional prompt,
-// sends an email, records a row in feedback_requests. Supervisor
-// opens the deep link in the email, which binds the incoming
-// openFeedbackForm() call to the request so it gets stamped
-// completed when they submit.
-
-function getPendingFeedbackRequests(profileId) {
-  return (feedbackRequests || []).filter(r =>
-    r.apprentice_id === profileId && !r.completed_at && !r.declined_at);
-}
-
-function getInboundRequestsForSupervisor(name) {
-  if (!name) return [];
-  const norm = String(name).trim().toLowerCase();
-  return (feedbackRequests || []).filter(r =>
-    !r.completed_at && !r.declined_at &&
-    r.requested_of && String(r.requested_of).trim().toLowerCase() === norm);
-}
-
-function openRequestFeedbackForm(profileId) {
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
-  if (!profile) return;
-  // Self-only: only the apprentice themselves may ask for feedback on their
-  // own profile. Supervisors write feedback directly, they don't need to ask.
-  if (!(typeof staffTsPerson !== 'undefined' && staffTsPerson
-      && String(staffTsPerson.id) === String(profile.person_id))) {
-    showToast('Only you can request feedback on yourself'); return;
-  }
-  const modal = document.getElementById('modal-request-feedback');
-  if (!modal) { showToast('Modal missing — refresh the app'); return; }
-  document.getElementById('rfb-apprentice-id').value = profileId;
-  document.getElementById('rfb-prompt').value = '';
-
-  // Build supervisor options from STATE.managers. Store email as data-email.
-  const sel = document.getElementById('rfb-supervisor');
-  let opts = '<option value="">— Pick a supervisor —</option>';
-  (STATE.managers || []).forEach(m => {
-    opts += '<option value="' + esc(m.name) + '" data-email="' + esc(m.email || '') + '">' + esc(m.name) + ((m.role) ? ' — ' + esc(m.role) : '') + '</option>';
-  });
-  sel.innerHTML = opts;
-
-  // Pre-populate prompt suggestions
-  const sugSel = document.getElementById('rfb-prompt-suggest');
-  if (sugSel) {
-    const suggestions = [
-      '',
-      'What should I focus on this quarter?',
-      'How am I tracking compared to where I should be?',
-      'What\'s one thing I could do better?',
-      'What are you seeing me do well lately?',
-      'What skill should I push next?',
-    ];
-    let sHtml = '';
-    suggestions.forEach((s, i) => {
-      sHtml += '<option value="' + esc(s) + '">' + (i === 0 ? '— Suggestions —' : esc(s)) + '</option>';
-    });
-    sugSel.innerHTML = sHtml;
-    sugSel.onchange = function() {
-      const v = this.value;
-      if (v) document.getElementById('rfb-prompt').value = v;
-      this.selectedIndex = 0;
-    };
-  }
-
-  openModal('modal-request-feedback');
-}
-
-async function submitFeedbackRequest() {
-  const profileId = document.getElementById('rfb-apprentice-id').value;
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
-  if (!profile) return;
-  const sel = document.getElementById('rfb-supervisor');
-  const supName = sel.value.trim();
-  const supEmail = (sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].getAttribute('data-email')) || '';
-  const prompt = document.getElementById('rfb-prompt').value.trim();
-  if (!supName) { showToast('Pick a supervisor'); return; }
-
-  const apprenticeName = (staffTsPerson && staffTsPerson.name) || getPersonNameById(profile.person_id) || 'An apprentice';
-
-  const row = {
-    org_id: TENANT.ORG_UUID,
-    apprentice_id: profileId,
-    requested_by: apprenticeName,
-    requested_of: supName,
-    requested_of_email: supEmail || null,
-    prompt: prompt || null,
-  };
-
-  try {
-    const created = await sbFetch('feedback_requests', 'POST', row, 'return=representation');
-    const newReq = Array.isArray(created) ? created[0] : created;
-    feedbackRequests.unshift(newReq);
-
-    // Fire the email — best effort. If it fails, the row still exists
-    // and the supervisor sees it next time they open the app.
-    if (supEmail && newReq && newReq.id) {
-      const deepLink = window.location.origin + window.location.pathname + '?request=' + encodeURIComponent(newReq.id);
-      const subject = apprenticeName + ' has asked for your feedback';
-      const html = _renderFeedbackRequestEmail(apprenticeName, supName, prompt, deepLink);
-      try {
-        const eqToken = sessionStorage.getItem('eq_session_token') || localStorage.getItem('eq_agent_token') || '';
-        const resp = await fetch('/.netlify/functions/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-eq-token': eqToken },
-          body: JSON.stringify({ to: [supEmail], subject, html })
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          console.error('Feedback request email error:', data);
-          // Don't toast error — request is still saved and surfaced in-app
-        }
-      } catch (e) {
-        console.error('Feedback request email error:', e);
-      }
-    }
-
-    showToast(supEmail ? 'Sent ✓ — email on its way' : 'Request sent ✓');
-    closeModal('modal-request-feedback');
-    renderApprenticeProfile(profileId);
-  } catch(e) {
-    showToast('Could not send — ' + (e.message || 'check connection'));
-  }
-}
-
-function _renderFeedbackRequestEmail(fromName, toName, prompt, link) {
-  const safeFrom = esc(fromName);
-  const safeTo = esc(toName);
-  const safePrompt = prompt ? esc(prompt) : '';
-  let html = '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1F2937;line-height:1.5">';
-  html += '<div style="background:linear-gradient(135deg,#1F335C 0%,#6B5BD6 100%);color:#fff;padding:24px 28px;border-radius:8px 8px 0 0">';
-  html += '<div style="font-size:13px;font-weight:700;letter-spacing:.5px;opacity:.85;text-transform:uppercase">EQ Field · Apprentice Module</div>';
-  html += '<div style="font-size:22px;font-weight:700;margin-top:4px">Feedback requested</div>';
-  html += '</div>';
-  html += '<div style="background:#fff;padding:24px 28px;border:1px solid #E5E7EB;border-top:0;border-radius:0 0 8px 8px">';
-  html += '<p style="margin:0 0 14px">Hi ' + safeTo + ',</p>';
-  html += '<p style="margin:0 0 14px"><strong>' + safeFrom + '</strong> has asked for your feedback on how they\'re going.</p>';
-  if (safePrompt) {
-    html += '<div style="background:#EEF2FF;border-left:4px solid #6B5BD6;padding:12px 14px;border-radius:4px;margin:14px 0">';
-    html += '<div style="font-size:11px;font-weight:700;color:#6B5BD6;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">They\'d especially like to know</div>';
-    html += '<div style="font-size:14px;color:#1F2937">' + safePrompt + '</div>';
-    html += '</div>';
-  }
-  html += '<p style="margin:0 0 14px">Whenever you\'ve got 2 minutes, tap below to leave them a note. Short and specific is perfect — no form-filling required.</p>';
-  html += '<div style="text-align:center;margin:22px 0"><a href="' + link + '" style="display:inline-block;background:#6B5BD6;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px">Give feedback →</a></div>';
-  html += '<p style="margin:14px 0 0;font-size:12px;color:#64748B">You can also open the EQ Field app and find their ask in your follow-ups. No rush — they\'ll appreciate it whenever you get to it.</p>';
-  html += '</div>';
-  html += '</div>';
-  return html;
-}
-
-// Called by app.js on load (or by our own check-on-init below) to
-// handle the ?request=<uuid> deep link. Waits for apprentice data
-// to be loaded so the request lookup works.
-async function handleFeedbackRequestDeepLink() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const reqId = params.get('request');
-    if (!reqId) return;
-    // Only supervisors can fulfil. If the current user is not in manager
-    // mode, stash the id for after they unlock.
-    _pendingFeedbackRequestId = reqId;
-    if (!isManager) {
-      showToast('Unlock supervision to respond to this request');
-      return;
-    }
-    const req = (feedbackRequests || []).find(r => r.id === reqId);
-    if (!req) { showToast('That feedback request is no longer available'); return; }
-    if (req.completed_at) { showToast('Already completed — thanks 👍'); return; }
-    const profile = apprenticeProfiles.find(p => p.id === req.apprentice_id);
-    if (!profile) return;
-    const personName = getPersonNameById(profile.person_id);
-    activeApprenticeId = profile.id;
-    activeApprenticeTab = 'overview';
-    renderApprentices();
-    setTimeout(() => openFeedbackForm(profile.id, personName, reqId), 150);
-  } catch(e) { console.warn('deep link handler:', e); }
 }
 
 // ── Tradesman rating form ─────────────────────────────────────
@@ -2077,7 +1665,7 @@ function openTradesmanRatingForm(profileId, personName) {
   if (!isManager) { showToast('Supervision access required'); return; }
   const modal = document.getElementById('modal-apprentice-trade-rating');
   if (!modal) return;
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
 
   document.getElementById('tr-apprentice-id').value = profileId;
@@ -2141,12 +1729,12 @@ function setTRStarRating(btn, attrId, val) {
 }
 
 async function submitTradesmanRating() {
-  const profileId = document.getElementById('tr-apprentice-id').value;
+  const profileId = parseInt(document.getElementById('tr-apprentice-id').value);
   const ratedBy = document.getElementById('tr-rated-by').value.trim();
   const period = document.getElementById('tr-period').value;
   if (!ratedBy) { showToast('Enter your name'); return; }
   if (!period) { showToast('Select a period'); return; }
-  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
+  const profile = apprenticeProfiles.find(p => p.id === profileId);
   if (!profile) return;
 
   const effective = getEffectiveCompetencies(profile);
@@ -2235,7 +1823,7 @@ function openAddRotation(profileId, personName) {
 }
 
 async function saveRotation() {
-  const profileId = document.getElementById('rot-apprentice-id').value;
+  const profileId = parseInt(document.getElementById('rot-apprentice-id').value);
   const site = document.getElementById('rot-site').value.trim();
   const type = document.getElementById('rot-type').value;
   const start = document.getElementById('rot-start').value;

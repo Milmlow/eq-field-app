@@ -28,7 +28,37 @@ function _isOrgTable(path) {
 }
 
 function _isDemoTenant() {
-  return (typeof TENANT !== 'undefined') && (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo');
+  return (typeof TENANT !== 'undefined') && (TENANT.ORG_SLUG === 'demo');
+}
+
+// ── DB ID validator ───────────────────────────────────────────
+// Returns true for ids that came from Postgres (PATCH/DELETE-safe).
+// Rejects:
+//   - null / undefined
+//   - temp IDs minted locally for offline writes (e.g. 'temp_abc123')
+//   - integer IDs from SEED demo data on the 'eq' tenant (e.g. 101, 306 ...)
+//
+// EQ tenants use uuid PKs everywhere (schedule/people/sites/managers).
+// SKS tenant uses bigint PKs on the same tables. The validator must accept
+// the right shape per tenant — otherwise on SKS every PATCH falls through to
+// POST and we duplicate rows on every edit.
+//
+// v3.4.22: tenant-gated. Pre-v3.4.22 was uuid-only and would have broken
+// SKS prod the moment this code landed there.
+const _UUID_RE   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const _BIGINT_RE = /^[1-9][0-9]{0,18}$/;
+function _isRealDbId(id) {
+  if (id === null || id === undefined) return false;
+  const s = String(id);
+  // SKS (and any future bigint tenant) — accept positive integer strings.
+  // Important: the 'eq' demo tenant must NOT take this branch, or SEED ids
+  // (101..318) would be treated as real and PATCH calls would 400 with
+  // `invalid input syntax for type uuid: "306"`.
+  if (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG === 'sks') {
+    return _BIGINT_RE.test(s);
+  }
+  // EQ + other uuid tenants — accept only uuids
+  return _UUID_RE.test(s);
 }
 
 function _sbLog(level, stage, details) {
@@ -263,7 +293,7 @@ async function checkSupabaseHealth() {
         'Range-Unit':    'items',
         'Range':         '0-0'
       },
-      signal: _abortAfter(10000),   // v3.4.4 (T1): iOS Safari <16.4 polyfill
+      signal: AbortSignal.timeout(10000),
       cache: 'no-store',
       credentials: 'omit'        // reduces Brave-shield cross-origin heuristics
     });
@@ -302,7 +332,7 @@ setInterval(() => refreshData(true), 5 * 60 * 1000);
 // otherwise POST a new row and write the generated id back onto `entity`.
 // `temp*` ids (client-side placeholders) always POST.
 async function _upsertById(table, entity, row) {
-  const isTempId = !entity.id || String(entity.id).startsWith('temp');
+  const isTempId = !_isRealDbId(entity.id);
   try {
     if (!isTempId) {
       const existing = await sbFetch(`${table}?id=eq.${entity.id}&select=id`);
@@ -332,7 +362,10 @@ async function savePersonToSB(person) {
     agency:   person.agency  || null,
     email:    person.email   || null,
     tafe_day: person.tafe_day || null,
-    notify_roster: !!person.notify_roster,
+    // v3.4.16: birthdays + start date
+    dob_day:    person.dob_day    || null,
+    dob_month:  person.dob_month  || null,
+    start_date: person.start_date || null,
     pin:      person.pin     || null
   });
 }
@@ -347,8 +380,7 @@ async function saveSiteToSB(site) {
     abbr:            site.abbr,
     address:         site.address         || null,
     site_lead:       site.site_lead       || null,
-    site_lead_phone: site.site_lead_phone || null,
-    site_lead_email: site.site_lead_email || null
+    site_lead_phone: site.site_lead_phone || null
   });
 }
 
@@ -359,7 +391,7 @@ async function deleteSiteFromSB(id) {
 async function saveCellToSB(name, week, day, val) {
   const existing = STATE.schedule.find(r => r.name === name && r.week === week);
 
-  if (existing && existing.id && !String(existing.id).startsWith('temp')) {
+  if (existing && _isRealDbId(existing.id)) {
     // ── TRUE COMPARE-AND-SWAP ──────────────────────────────────
     // PATCH with both id=eq.<id> AND updated_at=eq.<stamp>. PostgREST
     // returns the updated rows only if the WHERE clause matched — so an
@@ -466,7 +498,7 @@ async function saveRowToSB(name, week, dayVals) {
   const patch = {};
   Object.entries(dayVals).forEach(([d, v]) => { patch[d] = v || null; });
 
-  if (existing.id && !String(existing.id).startsWith('temp')) {
+  if (_isRealDbId(existing.id)) {
     let res;
     try {
       if (existing.updated_at) {
@@ -557,7 +589,11 @@ async function importPeopleToSB(people) {
     email:    p.email   || null,
     licence:  p.licence || null,
     agency:   p.agency  || null,
-    tafe_day: p.tafe_day || null
+    tafe_day: p.tafe_day || null,
+    // v3.4.16: birthdays + start date (pass through when present)
+    dob_day:    p.dob_day    || null,
+    dob_month:  p.dob_month  || null,
+    start_date: p.start_date || null
   }));
   await sbFetch('people', 'POST', rows);
 }

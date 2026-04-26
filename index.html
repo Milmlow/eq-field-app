@@ -26,6 +26,7 @@
 
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
+<script src="scripts/analytics.js"></script>
 <script src="scripts/utils.js"></script>
 <script src="scripts/supabase.js"></script>
 <script src="scripts/roster.js"></script>
@@ -46,6 +47,8 @@
 <script src="scripts/apprentices.js"></script>
 <script src="scripts/journal.js"></script>
 <script src="scripts/tafe.js"></script>
+<script src="scripts/digest-settings.js"></script>
+<script src="scripts/whatsnew.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -164,20 +167,298 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.9
+  EQ Solves — Field  v3.4.25
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.4.9  (Leave date timezone fix)
+  CHANGES IN v3.4.25  (parseInt(uuid) cluster — N1 from audit)
+  ──────────────────────────────────────────────────────────
+  Closes the EQ-only bulk-ops bug surfaced by the pre-merge audit.
+  Bulk PIN, batch fill, apprentice profile reads, staff PIN gate,
+  and journal entry submit all called parseInt(<uuid string>) which
+  returned NaN on EQ live, silently breaking those flows. SKS prod
+  was unaffected (bigint ids parse cleanly), but the merge would
+  have shipped this bug to SKS in latent form.
+
+  Files swept:
+  - scripts/people.js: bulk PIN ops drop parseInt(cb.dataset.id);
+    STATE.people.find now String-coerces (2 sites).
+  - scripts/batch.js: batch-fill drops parseInt(cb.value);
+    selectedIds.has now String-coerces.
+  - scripts/apprentices.js: 5 form id reads drop parseInt;
+    apprenticeProfiles.find/findIndex now String-coerce
+    (8 occurrences total).
+  - scripts/auth.js: staff timesheet gate drops parseInt(sel.value).
+  - scripts/journal.js: journal entry drops parseInt + coerces find.
+
+  parseInt PRESERVED where the value really is an integer:
+  PIN values (4-digit), year level (1-4), competency_id, rating.
+
+  CHANGES IN v3.4.24  (Roster header readability)
+  ──────────────────────────────────────────────────────────
+  - styles/base.css: td.name-col min-width 140px → 110px on
+    desktop. Frees ~30px for the day-date columns to breathe.
+  - scripts/roster.js: per-day date sub-text under "Mon/Tue/…"
+    was 9px gray on navy (very low contrast). Now 11px bold white.
+
+  CHANGES IN v3.4.23  ("What's new" banner — SKS upgrade comms)
+  ──────────────────────────────────────────────────────────
+  - scripts/whatsnew.js: dismissible card on the dashboard,
+    summarising the v3.4.10 → v3.4.22 changes for users coming
+    from v3.4.9. Once-per-user via localStorage flag
+    `eq.whatsnew.v3.4.22.seen`. Bump the flag name in this file
+    next time there's a comparable batch of features to surface.
+  - index.html: empty <div id="whatsnew-banner"> at top of
+    page-dashboard; whatsnew.js script tag after digest-settings.js.
+  - sw.js: precache list adds /scripts/whatsnew.js.
+
+  Why this exists: SKS Labour prod is currently on v3.4.9. When
+  the demo→main promotion lands, SKS users wake up to 12 releases
+  of changes — Friday digest emails, birthdays card, timesheet
+  reminder buttons, leave approval changes, nav reshuffle. The
+  banner gives them a one-screen "what's new" on first load so
+  unannounced features don't generate "is this broken?" tickets.
+
+  CHANGES IN v3.4.22  (SKS-promotion blockers — id handling)
+  ──────────────────────────────────────────────────────────
+  Closes the gap between EQ Field demo and SKS Labour prod so the
+  demo→main promotion is safe to ship. Two id-handling problems:
+
+  1. _isRealDbId (scripts/supabase.js) was uuid-only since v3.4.13.
+     SKS uses bigint PKs — running this code there would have
+     rejected every real id and forced every save through POST,
+     duplicating rows on every edit. Now tenant-gated: bigint for
+     'sks', uuid for everything else (the 'eq' demo SEED ids 101..318
+     are still rejected on EQ, so v3.4.13's original fix is preserved).
+
+  2. The latent uuid-in-onclick sweep promised in v3.4.21:
+     - people.js: editPerson + confirmRemove (2 sites each)
+     - managers.js: openEditManager + confirmRemoveManager (2 sites each)
+     - sites.js: openEditSite + confirmDeleteSite (1 site each)
+     - roster.js: editPerson (1 site)
+     All quoted; parseInt() removed where it would NaN on uuid.
+     find() comparisons coerced to String(x.id) === String(id) so
+     they survive both uuid (eq) and bigint (sks) id types.
+
+  Also bumps APP_VERSION (was lagging at 3.4.20 since v3.4.21 didn't
+  touch app-state.js).
+
+  CHANGES IN v3.4.21  (Hotfix — uuid id breaking inline handlers)
+  ──────────────────────────────────────────────────────────
+  - leave.js: quote ${r.id} in 5 inline handlers (Review, Resend,
+    Withdraw, Archive, Restore) and drop parseInt() on the modal
+    hidden id read in respondLeave. Every click on Review threw
+    SyntaxError silently; Approve/Reject would have produced
+    id=NaN even after that.
+  - dashboard.js: same quote-the-id fix for the Review button on
+    the dashboard pending-leave widget.
+  - jobnumbers.js: quote ${j.id} in Edit, drop parseInt() on the
+    Delete data-jid read AND on the saveJobNumber existing-row
+    find().
+  - Root cause: leave was ported from SKS v3.4.5; SKS uses bigint
+    so `${r.id}` rendered as valid JS there. EQ Field uses uuid
+    (e.g. 5e6f-...), which the browser parses as invalid
+    scientific-notation tokens.
+  - Latent (NOT fixed in this release): people.js / managers.js /
+    sites.js / roster.js have the same pattern but operate on
+    SEED integer ids in the 'eq' tenant so don't currently fail.
+    Slated for v3.4.22.
+
+  CHANGES IN v3.4.20  (Leave process hardening — L17 + L18)
+  ──────────────────────────────────────────────────────────
+  - L17: Supervisor lock button + mobile drawer now display the
+    currently-unlocked supervisor's name. Was "Editing unlocked",
+    now "Royce Milmlow — unlocked" (desktop) / "Unlocked as
+    Royce Milmlow — tap to lock" (mobile). Prevents shared-device
+    mis-attribution: symptom on SKS prod was Royce approving
+    Tara's leave but audit + email showing Ben Ritchie because
+    the session was still unlocked in Ben's name.
+  - L18: writeLeaveToSchedule no longer silently drops days 2..N
+    of a multi-day leave when the requester has no existing
+    schedule row for that week. Pre-pushes the local STATE.schedule
+    entry before calling saveCellToSB per-day, so day 1's POST
+    stamps id/updated_at onto the entry and days 2..N find it
+    and PATCH correctly. Symptom on SKS prod was Ross requesting
+    3 weekdays and only day 1 landing in the roster.
+  - sw.js — cache bumped to v3.4.20.
+
+  CHANGES IN v3.4.19  (Nav shuffle — timesheets graduates)
+  ──────────────────────────────────────────────────────────
+  - Timesheets promoted out of "Testing" — now sits under the
+    "Forecast" section in both desktop sidebar and mobile
+    drawer. BETA tag removed.
+  - Apprentices gains a BETA tag (moved into "actively in
+    test" state alongside Leave + Job Numbers).
+  - "Testing" nav label renamed to "Testing (DO NOT USE)"
+    so the crew can't miss the signal. Keeps the items
+    discoverable for managers while making their status
+    unambiguous.
+  - sw.js — cache bumped to v3.4.19.
+
+  CHANGES IN v3.4.18  (Timesheet reminder emails)
+  ──────────────────────────────────────────────────────────
+  - Timesheets pending popover gains a per-row "Send reminder"
+    button. Clicking it calls a new Supabase edge function
+    `ts-reminder` which emails the person a "please complete
+    your timesheet" nudge for the current week.
+  - Rate-limit: one reminder per (org, person, week) per
+    REMIND_COOLDOWN_HOURS (default 12). Cooldown returns
+    `rateLimited: true` instead of an error so the UI can
+    show "Already reminded · last sent <time>".
+  - New table `ts_reminders_sent` records every send (success
+    + failure) for auditability. Migration:
+    2026-04-21_ts_reminders_sent.sql.
+  - Edge function reuses the supervisor-digest transport
+    config — RESEND or NETLIFY paths; no new secrets needed.
+  - Audit log entry written on every send / cooldown skip.
+  - Button is disabled with "No email" tooltip when the
+    person has no email on file (caught client-side, before
+    the function call).
+  - sw.js — cache bumped to v3.4.18.
+
+  CHANGES IN v3.4.17  (Timesheet completion clarity)
+  ──────────────────────────────────────────────────────────
+  - Timesheets page: new progress bar shows "X of Y complete (Z%)"
+    for the current week, with a colour-coded fill and a "N pending"
+    toggle that lists incomplete staff inline (Partial vs No Data).
+  - Row tint + coloured left border now use the same day-based rule
+    as the stat cards (Mon–Fri `_job` populated). Prior versions
+    tinted by hours and disagreed with the Complete/Partial counts.
+  - Friday supervisor digest (Section 4) now shows per-name missing
+    day counts — "Alex Mitchell · 3 days missing" — instead of a bare
+    name list. Edge function signature is backward compatible.
+  - sw.js — cache bumped to v3.4.17.
+
+  CHANGES IN v3.4.16  (Birthdays + work anniversaries)
+  ──────────────────────────────────────────────────────────
+  - people: new columns dob_day (smallint), dob_month (smallint),
+    start_date (date). Migration 2026-04-21_people_dob_start_date.sql.
+  - Person modal: new Birthday (Day + Month) and Start Date inputs.
+    Year of birth is deliberately not stored — day + month only.
+  - Contacts list: 🎂 Today chip when DOB matches today, 🎉 N yrs
+    chip on work-anniversary day. Chips appear inline on both the
+    desktop table and mobile card views.
+  - Dashboard: new "Birthdays & Anniversaries — next 30 days" card
+    rendered below the Pending Leave block. Sorted by days-until.
+  - CSV export/import: People and Contacts CSVs gain Birthday and
+    StartDate columns. Birthday accepts DD-MMM, DD/MM, D Mon, etc.
+  - supabase.js: savePersonToSB and importPeopleToSB pass the three
+    new fields. loadFromSupabase maps dob_day/dob_month/start_date.
+  - sw.js — cache bumped to v3.4.16.
+
+  CHANGES IN v3.4.15  (Leave date timezone fix — ported from SKS main v3.4.9)
   ──────────────────────────────────────────────────────────
   - L16: Fix timezone bug in scripts/leave.js — approved leave was being
     written to the roster one day earlier than requested (e.g. an RDO
-    approved for Friday 24/04/2026 landed on Thursday 23/04/2026).
+    approved for Friday 24/04/2026 landed on Thursday 23/04/2026 on SKS prod).
     Root cause: _getLeaveDates used d.toISOString().slice(0,10) to format
     each day, which converts local midnight to UTC. In AEST/AEDT (UTC+10/+11)
     midnight-local is still the previous calendar day in UTC, so the
     returned ISO date was shifted back by one. Replaced with a local
     YYYY-MM-DD formatter (_toLocalIso). Same fix applied to the
     backdated-leave guard's todayIso and the leave calendar's todayStr.
+  - sw.js — cache bumped to v3.4.15.
+
+  CHANGES IN v3.4.14  (Analytics scope — demo-only, SKS stripped)
+  ──────────────────────────────────────────────────────────
+  - scripts/analytics.js — _ANALYTICS_CONFIG no longer carries the
+    `sks` block. Decision 2026-04-20: analytics is scoped to the EQ
+    Solves demo site only; SKS prod is deliberately NOT wired
+    (privacy, IR, and no ongoing UX need on a stable tenant).
+  - scripts/analytics.js — init now no-ops for any tenant slug not
+    in config (previously fell back to demo config, meaning SKS
+    hostname could have posted events tagged as `tenant: sks`
+    against the demo project).
+  - SKS PostHog key + SKS Clarity ID (wek8dmtbuu) parked in
+    KEYS_INVENTORY.md, no longer referenced in shipped code.
+  - sw.js — cache bumped to v3.4.14.
+
+  CHANGES IN v3.4.13  (Schedule PATCH fix — integer SEED IDs)
+  ──────────────────────────────────────────────────────────
+  - scripts/supabase.js — new _isRealDbId() helper. Rejects null,
+    undefined, temp_* IDs AND integer IDs from SEED demo data. Real
+    Postgres primary keys are uuid; anything else 400s on PATCH with
+    `invalid input syntax for type uuid: "306"`.
+  - scripts/supabase.js + scripts/batch.js — replaced all 5 call sites
+    that previously used `!String(id).startsWith('temp')`. That guard
+    let integer SEED IDs (schedule 101–318) through as if they were
+    real DB rows, causing 18 console 400s on any page that touched
+    the demo schedule. Now those rows INSERT on first edit (POST) and
+    PATCH thereafter against the uuid the server returns.
+  - No schema or RLS changes. Non-demo tenants (SKS) are unaffected —
+    they never had integer IDs in the first place.
+  - sw.js — cache bumped to v3.4.13 so existing clients pick up the
+    patched supabase.js / batch.js.
+
+  CHANGES IN v3.4.12  (Clarity IDs — Field demo + SKS prod)
+  ──────────────────────────────────────────────────────────
+  - scripts/analytics.js — replaced both Clarity placeholder IDs with
+    real values. `eq` (demo) → wek7yeida5, `sks` (prod) → wek8dmtbuu.
+    Clarity loader now runs on both sites; the `REPLACE_ME` guard no
+    longer no-ops it.
+  - sw.js — cache bumped to v3.4.12 so existing clients pick up the
+    new analytics.js (which otherwise lives behind the SW network-first
+    cache until a fresh install).
+  - No event or schema changes. PostHog pipeline unchanged.
+
+  CHANGES IN v3.4.11  (Analytics wire-up — PostHog EU + Clarity)
+  ──────────────────────────────────────────────────────────
+  - scripts/analytics.js — new. Plain-JS IIFE loader for PostHog (EU
+    cloud, eu.i.posthog.com) + Microsoft Clarity. Hostname-keyed config:
+    eq-solves-field.* uses dev project, sks-nsw-labour.* uses prod.
+    Clarity IDs still placeholders — Clarity init guarded, no-ops until
+    filled in. PostHog keys are live.
+  - index.html — loads scripts/analytics.js after app-state.js. initApp()
+    fires session_started with { app_env, tenant_slug, app_version } once
+    the app is identified. Six PII-ish inputs masked from replays via
+    data-ph-no-capture + data-clarity-mask="true": gate PIN, staff TS PIN,
+    person PIN, bulk PIN, site address, journal reflection.
+  - scripts/leave.js — fires leave_request_submitted on successful submit.
+  - scripts/people.js — fires people_modal_opened (add/edit) and
+    people_modal_saved (incl. has_apprentice_year flag).
+  - scripts/import-export.js — fires csv_exported for people and contacts
+    (with group-suffix for targeted exports).
+  - Five more events pending — checkPin(), timesheets, roster — their
+    host scripts are referenced in index.html but don't exist on disk
+    yet. Snippets staged in scripts/analytics-TODO-hooks.md.
+  - sw.js — cache bumped to v3.4.11 + /scripts/analytics.js added to
+    PRECACHE so offline clients get analytics too.
+  - Privacy/disclosure: this deploy is to the DEMO site only. SKS prod
+    push gated on Royce sending the internal disclosure note.
+
+  CHANGES IN v3.4.10  (Apprentice year — contacts as source of truth)
+  ──────────────────────────────────────────────────────────
+  - Add Person form already swapped Licence → Year dropdown for apprentices
+    (v3.4.6), but the year was only written to people.licence as a string.
+    The Apprentices page keys on people.year_level (int), so the two
+    drifted whenever somebody set the year in one place but not the other.
+  - scripts/people.js — savePerson() now also writes year_level (int 1..4)
+    derived from licence. New yearFromLicence() helper handles the parse.
+  - scripts/people.js — contacts table (desktop + mobile) gains a small
+    year pill next to the group badge, matching the TAFE-day pill style.
+    Falls back to parsing licence if year_level isn't populated yet.
+  - scripts/apprentices.js — _resolvedYear uuid map now falls back to
+    parsing people.licence so legacy rows render before backfill lands.
+    Query now selects people.licence alongside year_level.
+  - DB: one-time backfill on EQ demo — people.year_level = parse(licence)
+    for all apprentices whose licence matched '[1-4](st|nd|rd|th) Year'.
+    Fixed two demo rows where year_level and licence disagreed.
+  - scripts/import-export.js — People + Contacts CSV exports gain a new
+    "Year" column between Group and Phone. Blank for non-apprentices.
+
+  CHANGES IN v3.4.9  (Supervisor Digest — Friday 12:00 AEST)
+  ──────────────────────────────────────────────────────────
+  - New supabase/functions/supervisor-digest/ edge function. Fires weekly
+    via pg_cron (02:00 UTC Friday = 12:00 AEST). Per-supervisor email
+    covers leave next week, pending approvals awaiting that supervisor,
+    unrostered staff next week, and timesheet completion this week.
+  - migrations/2026-04-19_managers_digest_opt_in.sql — adds
+    managers.digest_opt_in (default true) + supporting indexes.
+  - migrations/2026-04-19_digest_cron_schedule.sql — pg_cron entry +
+    public.trigger_supervisor_digest() helper for manual runs.
+  - New scripts/digest-settings.js renders a compact per-supervisor
+    opt-in strip above the Supervision page so you can toggle without
+    touching SQL. Hydrates from managers.digest_opt_in, PATCHes via
+    the same sbFetch() used elsewhere.
 
   CHANGES IN v3.4.8  (Leave Module — ported from SKS v3.4.5)
   ──────────────────────────────────────────────────────────
@@ -404,7 +685,7 @@
     </div>
     <div id="gate-pin-wrap" style="width:100%;margin-bottom:4px">
       <label for="gate-pin" style="font-size:10px;font-weight:600;color:var(--ink-3);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Access code</label>
-      <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
+      <input class="gate-input" id="gate-pin" type="password" maxlength="20" placeholder="· · · ·" autocomplete="off" data-ph-no-capture data-clarity-mask="true" onkeydown="if(event.key==='Enter')checkPin()" oninput="document.getElementById('gate-err').textContent=''">
     </div>
     <div class="gate-error" id="gate-err"></div>
     <div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-bottom:14px">
@@ -425,6 +706,10 @@
         </div>
       </div>
     </div>
+    <!-- ANALYTICS-TODO: when scripts/auth.js is created, checkPin() must call:
+         success: window.EQ_ANALYTICS.events.pinLoginSucceeded({ role: 'tradie'|'supervisor'|'admin' });
+         failure: window.EQ_ANALYTICS.events.pinLoginFailed({ attempt_count: N });
+         See scripts/analytics-TODO-hooks.md -->
     <button class="gate-btn" onclick="checkPin()">Enter</button>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(61,168,216,.12);display:flex;flex-direction:column;gap:8px;width:100%">
       <button onclick="openStaffTsGate()" style="background:rgba(61,168,216,.08);border:1.5px solid rgba(61,168,216,.6);color:#3DA8D8;font-size:12px;padding:11px 18px;border-radius:8px;cursor:pointer;font-family:inherit;width:100%;font-weight:600;text-align:center;letter-spacing:.2px">⏱ My Timesheet →</button>
@@ -472,7 +757,7 @@
     </div>
     <div style="margin-bottom:6px">
       <label style="font-size:11px;font-weight:600;color:var(--ink-2);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px">4-Digit PIN</label>
-      <input id="staff-ts-pin" type="password" maxlength="4" placeholder="· · · ·" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:24px;text-align:center;letter-spacing:8px;font-weight:700;color:var(--navy);outline:none;transition:border-color .15s" onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'" oninput="document.getElementById('staff-ts-err').textContent=''" onkeydown="if(event.key==='Enter')checkStaffTsLogin()">
+      <input id="staff-ts-pin" type="password" maxlength="4" placeholder="· · · ·" data-ph-no-capture data-clarity-mask="true" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:24px;text-align:center;letter-spacing:8px;font-weight:700;color:var(--navy);outline:none;transition:border-color .15s" onfocus="this.style.borderColor='var(--purple)'" onblur="this.style.borderColor='var(--border)'" oninput="document.getElementById('staff-ts-err').textContent=''" onkeydown="if(event.key==='Enter')checkStaffTsLogin()">
       <div id="staff-ts-err" style="color:var(--red);font-size:12px;min-height:18px;margin-top:5px;text-align:center"></div>
     </div>
     <button onclick="checkStaffTsLogin()" style="width:100%;padding:12px;background:var(--purple);color:white;border:none;border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;transition:background .15s">View My Timesheet →</button>
@@ -503,6 +788,7 @@
       <button class="nav-item" onclick="showPage('managers')" id="nav-managers"><span class="nav-icon">☎</span> Supervision <span class="nav-badge" id="badge-managers">0</span></button>
       <button class="nav-item" onclick="showPage('sites')" id="nav-sites"><span class="nav-icon">⬡</span> Sites</button>
       <button class="nav-item" onclick="showPage('roster')" id="nav-roster"><span class="nav-icon">⊞</span> Weekly Roster</button>
+      <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets</button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Manage</div>
@@ -513,11 +799,10 @@
       <button class="nav-item" onclick="showPage('help')" id="nav-help"><span class="nav-icon">❓</span> Help</button>
     </div>
     <div class="nav-section">
-      <div class="nav-label">Testing</div>
+      <div class="nav-label">Testing (DO NOT USE)</div>
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('leave')" id="nav-leave"><span class="nav-icon">🏖</span> Leave <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-leave" style="display:none">0</span></button>
-      <button class="nav-item" onclick="showPage('timesheets')" id="nav-timesheets"><span class="nav-icon">⏱</span> Timesheets <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices</button>
+      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
   </div>
@@ -531,7 +816,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.9</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.25</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
@@ -574,6 +859,8 @@
 
   <!-- Pages — content injected by render functions -->
   <div class="page print-active" id="page-dashboard">
+    <!-- v3.4.23: "What's new" banner — populated by scripts/whatsnew.js, dismissed via localStorage -->
+    <div id="whatsnew-banner" style="display:none"></div>
     <div class="stats-row">
       <div class="stat-card"><div class="stat-card-label">⚡ Direct</div><div class="stat-card-value" id="sc-direct">—</div><div class="stat-card-sub">employees</div><div class="stat-accent-bar" style="background:var(--navy)"></div></div>
       <div class="stat-card"><div class="stat-card-label">🎓 Apprentices</div><div class="stat-card-value" id="sc-app">—</div><div class="stat-card-sub">On roster</div><div class="stat-accent-bar" style="background:var(--purple)"></div></div>
@@ -597,6 +884,8 @@
     <div class="section-header"><div class="section-title">Leave &amp; Absences This Week</div></div>
     <div id="dashboard-leave" style="display:flex;flex-wrap:wrap;gap:8px"></div>
     <div id="dashboard-leave-requests" style="margin-top:20px"></div>
+    <!-- v3.4.16: Birthdays + work anniversaries card -->
+    <div id="dashboard-anniversaries" style="margin-top:20px"></div>
   </div>
 
   <div class="page hidden" id="page-roster">
@@ -683,6 +972,8 @@
         <div class="stat-card"><div class="stat-card-label">Incomplete</div><div class="stat-card-value" style="color:var(--amber)" id="ts-stat-partial">—</div></div>
         <div class="stat-card"><div class="stat-card-label">No Data</div><div class="stat-card-value" style="color:var(--red)" id="ts-stat-empty">—</div></div>
       </div>
+      <!-- v3.4.17: inline progress bar for the current week + pending-list hover helper -->
+      <div id="ts-progress-bar" style="margin:10px 0 6px"></div>
       <div id="ts-completion-tracker" style="margin-top:12px"></div>
     </div>
     <div class="export-bar">
@@ -909,6 +1200,7 @@
     <button class="drawer-item" onclick="mobileNav('sites');closeMobileDrawer()" id="ditem-sites"><span class="d-icon">⬡</span> Sites</button>
     <button class="drawer-item" onclick="mobileNav('managers');closeMobileDrawer()" id="ditem-managers"><span class="d-icon">☎</span> Supervision</button>
     <button class="drawer-item" onclick="mobileNav('contacts');closeMobileDrawer()" id="ditem-contacts"><span class="d-icon">◉</span> Contacts</button>
+    <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets</button>
     <div class="drawer-divider"></div>
     <div class="drawer-label">Manage</div>
     <button class="drawer-item edit-only" onclick="mobileNav('editor');closeMobileDrawer()" id="ditem-editor"><span class="d-icon">✎</span> Edit Roster</button>
@@ -916,11 +1208,10 @@
     <button class="drawer-item" onclick="mobileNav('data');closeMobileDrawer()" id="ditem-data"><span class="d-icon">⇅</span> Import / Export</button>
     <button class="drawer-item" onclick="mobileNav('help');closeMobileDrawer()" id="ditem-help"><span class="d-icon">❓</span> Help</button>
     <div class="drawer-divider"></div>
-    <div class="drawer-label">Testing</div>
+    <div class="drawer-label">Testing (DO NOT USE)</div>
     <button class="drawer-item" onclick="mobileNav('leave');closeMobileDrawer()" id="ditem-leave"><span class="d-icon">🏖</span> Leave & Absences <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('jobnumbers');closeMobileDrawer()" id="ditem-jobnumbers"><span class="d-icon">🔢</span> Job Numbers <span class="beta-tag">BETA</span></button>
-    <button class="drawer-item" onclick="mobileNav('timesheets');closeMobileDrawer()" id="ditem-timesheets"><span class="d-icon">⏱</span> Timesheets <span class="beta-tag">BETA</span></button>
-    <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices</button>
+    <button class="drawer-item" onclick="mobileNav('apprentices');closeMobileDrawer()" id="ditem-apprentices"><span class="d-icon">🎓</span> Apprentices <span class="beta-tag">BETA</span></button>
     <button class="drawer-item" onclick="mobileNav('trial');closeMobileDrawer()" id="ditem-trial"><span class="d-icon">◎</span> Trial Dashboard <span class="beta-tag" style="background:rgba(6,182,212,.15);color:#06B6D4;border-color:rgba(6,182,212,.3)">NEW</span></button>
     <div class="drawer-divider"></div>
     <button id="audit-drawer-btn" class="drawer-item edit-only" onclick="openAuditLog();closeMobileDrawer()"><span class="d-icon">📋</span> Audit Log</button>
@@ -984,10 +1275,12 @@
 
 <!-- Person modal -->
 <div class="modal-overlay" id="modal-person"><div class="modal"><div class="modal-header"><h3 id="modal-person-title">Add Person</h3><button class="modal-close" onclick="closeModal('modal-person')">✕</button></div><div class="modal-body"><input type="hidden" id="person-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="person-name" placeholder="e.g. Alex Mitchell"></div><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="person-phone" placeholder="04XX XXX XXX"></div></div><div class="form-row"><div class="form-group"><label class="form-label">Group</label><select class="form-select" id="person-group" onchange="onPersonGroupChange()"><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select></div><div class="form-group"><label class="form-label" id="person-licence-label">Licence</label><div id="person-licence-slot"><input class="form-input" id="person-licence" placeholder="e.g. Licensed"></div></div></div><div class="form-group"><label class="form-label">Agency (Labour Hire only)</label><input class="form-input" id="person-agency" placeholder="e.g. Core, Atom"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="person-email" type="email" placeholder="name@example.com"></div><div class="form-group"><label class="form-label">TAFE Day <span style="font-size:10px;color:var(--ink-3);font-weight:400">(apprentices)</span></label><select class="form-select" id="person-tafe-day"><option value="">— None —</option><option value="mon">Monday</option><option value="tue">Tuesday</option><option value="wed">Wednesday</option><option value="thu">Thursday</option><option value="fri">Friday</option></select><div class="form-hint">Used by the "Apply TAFE Day" button on the roster editor.</div></div>
-<div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
+<!-- v3.4.16: Birthday (day + month only, no year stored) + Start Date for anniversaries -->
+<div class="form-row"><div class="form-group"><label class="form-label">Birthday <span style="font-size:10px;color:var(--ink-3);font-weight:400">(day + month)</span></label><div style="display:flex;gap:8px"><select class="form-select" id="person-dob-day" style="flex:1"><option value="">Day</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option></select><select class="form-select" id="person-dob-month" style="flex:1.5"><option value="">Month</option><option value="1">Jan</option><option value="2">Feb</option><option value="3">Mar</option><option value="4">Apr</option><option value="5">May</option><option value="6">Jun</option><option value="7">Jul</option><option value="8">Aug</option><option value="9">Sep</option><option value="10">Oct</option><option value="11">Nov</option><option value="12">Dec</option></select></div><div class="form-hint">Year is not stored — day + month only.</div></div><div class="form-group"><label class="form-label">Start Date <span style="font-size:10px;color:var(--ink-3);font-weight:400">(for work anniversaries)</span></label><input class="form-input" id="person-start-date" type="date"><div class="form-hint">Used by the Dashboard anniversaries widget.</div></div></div>
+<div class="form-group edit-only"><label class="form-label">Staff Timesheet PIN <span style="font-size:10px;color:var(--ink-3);font-weight:400">(4 digits)</span></label><input class="form-input" id="person-pin" type="password" maxlength="4" placeholder="····" autocomplete="new-password" data-ph-no-capture data-clarity-mask="true" style="letter-spacing:6px;font-size:18px;width:110px;text-align:center"><div class="form-hint">Leave blank to keep existing PIN.</div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-person')">Cancel</button><button class="btn btn-primary" onclick="savePerson()">Save</button></div></div></div>
 
 <!-- Site modal -->
-<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
+<div class="modal-overlay" id="modal-site"><div class="modal"><div class="modal-header"><h3>Add Site</h3><button class="modal-close" onclick="closeModal('modal-site')">✕</button></div><div class="modal-body"><input type="hidden" id="site-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Site Name</label><input class="form-input" id="site-name" placeholder="e.g. St George Private Hospital"></div><div class="form-group"><label class="form-label">Abbreviation</label><input class="form-input" id="site-abbr" placeholder="e.g. STG" maxlength="8"><div class="form-hint">Short code for roster chips</div></div></div><div class="form-group"><label class="form-label">Address</label><input class="form-input" id="site-address" placeholder="Street address" data-ph-no-capture data-clarity-mask="true"></div><div class="form-group"><label class="form-label">Person in Charge</label><select class="form-input" id="site-lead" style="background:var(--surface)"><option value="">— None assigned —</option></select></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-site')">Cancel</button><button class="btn btn-primary" onclick="saveSite()">Add Site</button></div></div></div>
 
 <!-- Confirm modal -->
 <div class="modal-overlay" id="modal-confirm" style="z-index:400"><div class="modal" style="max-width:360px"><div class="modal-header"><h3 id="confirm-title">Confirm</h3><button class="modal-close" onclick="closeModal('modal-confirm')">✕</button></div><div class="modal-body"><p id="confirm-msg" style="font-size:13px;color:var(--ink-2);line-height:1.6"></p></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-confirm')">Cancel</button><button class="btn btn-danger" id="confirm-action">Confirm</button></div></div></div>
@@ -1064,7 +1357,7 @@
   <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
     <div style="font-size:11px;font-weight:700;color:var(--ink-2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Bulk action for selected staff</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <input type="number" id="pin-bulk-value" placeholder="New PIN (4 digits)" min="1000" max="9999" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;width:160px;text-align:center;letter-spacing:4px">
+      <input type="number" id="pin-bulk-value" placeholder="New PIN (4 digits)" min="1000" max="9999" data-ph-no-capture data-clarity-mask="true" style="padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:13px;width:160px;text-align:center;letter-spacing:4px">
       <button class="btn btn-primary btn-sm" onclick="applyBulkPin()">Apply to Selected</button>
       <button class="btn btn-secondary btn-sm" style="color:var(--red)" onclick="clearBulkPin()">Clear PINs</button>
     </div>
@@ -1105,7 +1398,7 @@ async function loadFromSupabase() {
 
   // Demo / EQ tenant — load from SEED, no Supabase
   if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
-    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.people    = SEED.people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:r.group||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null }));
     STATE.sites     = SEED.sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:'', site_lead_phone:'' }));
     STATE.schedule  = SEED.schedule.map(r => ({ id:r.id||Math.random(), name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:'', sun:'' }));
     STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
@@ -1127,7 +1420,7 @@ async function loadFromSupabase() {
       sbFetch('timesheets?select=*'),
     ]);
 
-    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'' }));
+    STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null }));
     STATE.sites  = sites.map(r => ({ id:r.id, name:r.name, abbr:r.abbr, address:r.address||'', site_lead:r.site_lead||'', site_lead_phone:r.site_lead_phone||'' }));
 
     // BUG-004 FIX: raw string key — esc() breaks names with & < > chars
@@ -1464,6 +1757,30 @@ async function initApp() {
 
   // Start Supabase Realtime (live multi-user updates on schedule table).
   if (typeof startRealtime === 'function') startRealtime();
+
+  // ── Analytics: identify + session_started ────────────────────
+  // Fires once per cold boot after the app is ready. Identity is
+  // best-effort — falls back to anonymous if the user's login
+  // state isn't yet resolved (e.g. agency mode or pre-gate).
+  if (window.EQ_ANALYTICS) {
+    try {
+      const slug = (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) ? TENANT.ORG_SLUG : 'eq';
+      const tenantId = (typeof TENANT !== 'undefined' && TENANT.ORG_UUID) ? TENANT.ORG_UUID : slug;
+      const handle =
+        (typeof currentManagerName !== 'undefined' && currentManagerName) ? currentManagerName :
+        (typeof agencyName !== 'undefined' && agencyName) ? ('agency:' + agencyName) :
+        'anonymous';
+      const role = (typeof isManager !== 'undefined' && isManager) ? 'supervisor' :
+                   (typeof agencyMode !== 'undefined' && agencyMode) ? 'admin' : 'tradie';
+      window.EQ_ANALYTICS.identify({
+        userId:     slug + ':' + String(handle).toLowerCase().replace(/\s+/g, '.'),
+        tenantId:   tenantId,
+        role:       role,
+        appVersion: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : null),
+      });
+      window.EQ_ANALYTICS.events.sessionStarted({});
+    } catch (e) { /* never break boot on analytics */ }
+  }
 }
 
 window.onload = async function() {
@@ -1811,7 +2128,7 @@ const eqAgent = (function() {
       <div id="jn-prompt-display" style="margin-bottom:14px"></div>
       <div class="form-group">
         <label class="form-label">Your reflection</label>
-        <textarea class="form-input" id="jn-reflection" rows="7" placeholder="Write whatever you want — nobody else sees this unless you tick the share box below."></textarea>
+        <textarea class="form-input" id="jn-reflection" rows="7" data-ph-no-capture data-clarity-mask="true" placeholder="Write whatever you want — nobody else sees this unless you tick the share box below."></textarea>
       </div>
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--ink-2);line-height:1.5">

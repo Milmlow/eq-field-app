@@ -325,7 +325,7 @@ async function submitLeaveRequest() {
   // v3.4.5 (L13): Backdated-leave guard — if the start date is earlier than
   // today, ask for confirmation before inserting. Prevents accidental submits
   // when the date picker was left on a stale value.
-  // v3.4.9 (L16): local date, not UTC — see _toLocalIso note.
+  // v3.4.15 (L16): local date, not UTC — see _toLocalIso note.
   const todayIso = _toLocalIso(new Date());
   if (dateStart < todayIso) {
     document.getElementById('confirm-title').textContent = 'Backdated Leave Request';
@@ -364,6 +364,26 @@ async function _performLeaveSubmit(row) {
     });
     await loadLeaveRequests();
     renderLeave();
+
+    // Analytics — fire after successful submit so failed submits don't
+    // pollute the funnel. days_requested covers both the range path
+    // (inclusive day count) and the picked-days path (array length).
+    try {
+      if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events) {
+        var daysRequested;
+        if (Array.isArray(row.individual_days)) {
+          daysRequested = row.individual_days.length;
+        } else {
+          var _s = new Date(row.date_start + 'T00:00:00');
+          var _e = new Date(row.date_end   + 'T00:00:00');
+          daysRequested = Math.floor((_e - _s) / 86400000) + 1;
+        }
+        window.EQ_ANALYTICS.events.leaveRequestSubmitted({
+          leave_type:     row.leave_type,
+          days_requested: daysRequested,
+        });
+      }
+    } catch (e) { /* never break app */ }
   } catch (e) {
     showToast('Failed to submit — check connection');
   }
@@ -420,7 +440,8 @@ function openLeaveRespond(id) {
 async function respondLeave(status) {
   if (!isManager) { showToast('Supervision access required'); return; }
   // BUG-014 FIX: read id exactly once
-  const id   = parseInt(document.getElementById('leave-respond-id').value);
+  // v3.4.21: id is a uuid string — do NOT parseInt (was producing NaN on uuid, silent fail)
+  const id   = document.getElementById('leave-respond-id').value;
   const note = document.getElementById('leave-response-note').value.trim();
   const req  = leaveRequests.find(r => r.id === id);
 
@@ -487,10 +508,11 @@ async function respondLeave(status) {
   }
 }
 
-// v3.4.9 (L16): format as LOCAL YYYY-MM-DD, not UTC. The old
-// `d.toISOString().slice(0,10)` shifted dates back one day in AEST/AEDT
-// because midnight-local is still the previous day in UTC. Symptom:
-// an approved RDO for Friday 24/04 landed on Thursday 23/04 in the roster.
+// v3.4.15 (L16, ported from SKS main v3.4.9): format as LOCAL YYYY-MM-DD,
+// not UTC. The old `d.toISOString().slice(0,10)` shifted dates back one day
+// in AEST/AEDT because midnight-local is still the previous calendar day in
+// UTC. Symptom on SKS prod: an approved RDO for Friday 24/04 landed on
+// Thursday 23/04 in the roster.
 function _toLocalIso(d) {
   const yyyy = d.getFullYear();
   const mm   = String(d.getMonth() + 1).padStart(2, '0');
@@ -528,14 +550,25 @@ async function writeLeaveToSchedule(req) {
   });
 
   for (const [week, dayKeys] of Object.entries(byWeek)) {
-    for (const day of dayKeys) {
-      await saveCellToSB(req.requester_name, week, day, req.leave_type);
-    }
+    // v3.4.20 (L18): pre-push a local schedule entry BEFORE the per-day save loop.
+    // If the push is left until afterward, the first saveCellToSB call finds no
+    // STATE.schedule row → takes the POST path and stamps id/updated_at onto a
+    // local `existing` var that never makes it into STATE.schedule. Subsequent
+    // day calls then look up STATE.schedule.find, get undefined, fall through
+    // the `_sbPendingRows` await branch and silently return without patching.
+    // Symptom on SKS prod: Ross requested 3 weekdays of leave on a week where
+    // his schedule row didn't exist yet; only day 1 landed in the roster.
     let entry = STATE.schedule.find(r => r.name === req.requester_name && r.week === week);
     if (!entry) {
       entry = { name: req.requester_name, week, mon: '', tue: '', wed: '', thu: '', fri: '', sat: '', sun: '' };
       STATE.schedule.push(entry);
+      if (STATE.scheduleIndex) STATE.scheduleIndex[`${req.requester_name}||${week}`] = entry;
     }
+
+    for (const day of dayKeys) {
+      await saveCellToSB(req.requester_name, week, day, req.leave_type);
+    }
+
     dayKeys.forEach(d => { entry[d] = req.leave_type; });
     if (STATE.scheduleIndex) STATE.scheduleIndex[`${req.requester_name}||${week}`] = entry;
   }
@@ -864,11 +897,11 @@ function renderLeave() {
         <div style="font-size:10px;color:var(--ink-4);margin-top:4px">${new Date(r.created_at).toLocaleString('en-AU')}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-        ${canRespond ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond(${r.id})">Review</button>` : ''}
-        ${r.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="resendLeaveEmail(${r.id})" style="font-size:10px">📧 Resend</button>` : ''}
-        ${canWithdraw ? `<button class="btn btn-secondary btn-sm" onclick="withdrawLeaveRequest(${r.id})" style="font-size:10px;color:var(--red);border-color:var(--red)">✕ Withdraw</button>` : ''}
-        ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest(${r.id})" style="font-size:10px">📦 Archive</button>` : ''}
-        ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest(${r.id})" style="font-size:10px">↩ Restore</button>` : ''}
+        ${canRespond ? `<button class="btn btn-primary btn-sm" onclick="openLeaveRespond('${r.id}')">Review</button>` : ''}
+        ${r.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="resendLeaveEmail('${r.id}')" style="font-size:10px">📧 Resend</button>` : ''}
+        ${canWithdraw ? `<button class="btn btn-secondary btn-sm" onclick="withdrawLeaveRequest('${r.id}')" style="font-size:10px;color:var(--red);border-color:var(--red)">✕ Withdraw</button>` : ''}
+        ${isResolved && !isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="archiveLeaveRequest('${r.id}')" style="font-size:10px">📦 Archive</button>` : ''}
+        ${isArchived && isManager ? `<button class="btn btn-secondary btn-sm" onclick="unarchiveLeaveRequest('${r.id}')" style="font-size:10px">↩ Restore</button>` : ''}
       </div>
     </div>`;
   });
@@ -965,7 +998,7 @@ function renderLeaveCalendar() {
   const lastDay   = new Date(leaveCalYear, leaveCalMonth + 1, 0);
   const startDow  = (firstDay.getDay() + 6) % 7;
   const totalDays = lastDay.getDate();
-  const todayStr  = _toLocalIso(new Date()); // v3.4.9 (L16): local, not UTC
+  const todayStr  = _toLocalIso(new Date()); // v3.4.15 (L16): local, not UTC
 
   const typeColors = { 'A/L': 'var(--blue)', 'U/L': 'var(--amber)', 'RDO': 'var(--green)' };
   const typeBg     = { 'A/L': 'var(--blue-lt)', 'U/L': 'var(--amber-lt)', 'RDO': 'var(--green-lt)' };

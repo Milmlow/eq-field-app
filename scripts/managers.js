@@ -64,10 +64,10 @@ function renderManagers() {
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn-icon" title="Edit" onclick="openEditManager(${m.id})">✎</button>
+            <button class="btn-icon" title="Edit" onclick="openEditManager('${m.id}')">✎</button>
             <button class="btn-icon" style="color:var(--red)" title="Remove"
               data-mid="${m.id}" data-mname="${esc(m.name)}"
-              onclick="confirmRemoveManager(parseInt(this.dataset.mid), this.dataset.mname)">✕</button>
+              onclick="confirmRemoveManager(this.dataset.mid, this.dataset.mname)">✕</button>
           </div>
         </div>`;
       });
@@ -90,10 +90,10 @@ function renderManagers() {
           <td class="phone-col">${m.phone ? `<a href="tel:${m.phone}">${m.phone}</a>` : '<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
           <td class="meta-col">${m.email ? `<a href="mailto:${esc(m.email)}" style="color:var(--purple)">${esc(m.email)}</a>` : '—'}</td>
           <td class="center" style="white-space:nowrap">
-            <button class="btn-icon" title="Edit" onclick="openEditManager(${m.id})">✎</button>
+            <button class="btn-icon" title="Edit" onclick="openEditManager('${m.id}')">✎</button>
             <button class="btn-icon" style="color:var(--red)" title="Remove"
               data-mid="${m.id}" data-mname="${esc(m.name)}"
-              onclick="confirmRemoveManager(parseInt(this.dataset.mid), this.dataset.mname)">✕</button>
+              onclick="confirmRemoveManager(this.dataset.mid, this.dataset.mname)">✕</button>
           </td>
         </tr>`;
       });
@@ -116,7 +116,8 @@ function openAddManager() {
 
 function openEditManager(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const m = (STATE.managers || []).find(x => x.id === id);
+  // v3.4.22: coerce both sides to string so uuid (eq) AND bigint (sks) match
+  const m = (STATE.managers || []).find(x => String(x.id) === String(id));
   if (!m) return;
   document.getElementById('modal-manager-title').textContent = 'Edit Contact';
   document.getElementById('manager-edit-id').value   = id;
@@ -140,15 +141,17 @@ function saveManager() {
   if (!name) { showToast('Name is required'); return; }
 
   // BUG-001 FIX: use editId not id; check managers not people
+  // v3.4.22: editId is uuid (eq) or bigint-as-string (sks); coerce both sides
   const existingMgr = (STATE.managers || []).find(x =>
-    x.name.toLowerCase() === name.toLowerCase() && (!editId || x.id !== parseInt(editId))
+    x.name.toLowerCase() === name.toLowerCase() && (!editId || String(x.id) !== String(editId))
   );
   if (existingMgr) { showToast(`⚠ ${name} already exists in supervision contacts`); return; }
 
   if (!STATE.managers) STATE.managers = [];
   let mgr;
   if (editId) {
-    mgr = STATE.managers.find(x => x.id === parseInt(editId));
+    // v3.4.22: editId is uuid (eq) or bigint-as-string (sks); coerce both sides
+    mgr = STATE.managers.find(x => String(x.id) === String(editId));
     if (mgr) { mgr.name = name; mgr.role = role; mgr.category = category; mgr.phone = phone; mgr.email = email; }
     showToast(`${name} updated`);
   } else {

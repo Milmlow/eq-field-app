@@ -89,10 +89,10 @@ function renderJobNumbers() {
       <td style="padding:8px 10px;text-align:center"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${sb};color:${sc}">${esc(j.status || '')}</span></td>`;
     if (isManager) {
       html += `<td style="padding:8px 10px;text-align:center">
-        <button class="btn-icon btn-sm" title="Edit" onclick="editJobNumber(${j.id})">✎</button>
+        <button class="btn-icon btn-sm" title="Edit" onclick="editJobNumber('${j.id}')">✎</button>
         <button class="btn-icon btn-sm" style="color:var(--red)" title="Delete"
           data-jid="${j.id}" data-jnum="${esc(j.number || '')}"
-          onclick="confirmDeleteJobNumber(parseInt(this.dataset.jid), this.dataset.jnum)">✕</button>
+          onclick="confirmDeleteJobNumber(this.dataset.jid, this.dataset.jnum)">✕</button>
       </td>`;
     }
     html += '</tr>';
@@ -161,7 +161,8 @@ async function saveJobNumber() {
   try {
     if (editId) {
       await sbFetch('job_numbers?id=eq.' + editId, 'PATCH', row);
-      const existing = jobNumbers.find(j => j.id === parseInt(editId));
+      // v3.4.21: id is a uuid string — do NOT parseInt
+      const existing = jobNumbers.find(j => j.id === editId);
       if (existing) Object.assign(existing, row);
       showToast(`${number} updated`);
     } else {

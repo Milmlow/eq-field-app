@@ -163,7 +163,7 @@ function renderApprenticeJournalTab(profile, personName) {
 // ── Entry form ───────────────────────────────────────────────
 
 function openJournalEntryForm(profileId, promptKey) {
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const isSelf = (typeof staffTsPerson !== 'undefined' && staffTsPerson
       && String(staffTsPerson.id) === String(profile.person_id));
@@ -220,8 +220,8 @@ function _journalSkipPrompt() {
 }
 
 async function submitJournalEntry() {
-  const profileId = parseInt(document.getElementById('jn-apprentice-id').value);
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profileId = document.getElementById('jn-apprentice-id').value;
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const isSelf = (typeof staffTsPerson !== 'undefined' && staffTsPerson
       && String(staffTsPerson.id) === String(profile.person_id));

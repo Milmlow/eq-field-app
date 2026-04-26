@@ -1,5 +1,5 @@
-// EQ Solves — Field  ·  Service Worker  v3.4.9
-const CACHE = 'eq-field-v3.4.9';
+// EQ Solves — Field  ·  Service Worker  v3.4.25
+const CACHE = 'eq-field-v3.4.25';
 
 const PRECACHE = [
   '/',
@@ -28,6 +28,9 @@ const PRECACHE = [
   '/scripts/trial-dashboard.js',
   '/scripts/apprentices.js',
   '/scripts/journal.js',
+  '/scripts/digest-settings.js',
+  '/scripts/analytics.js',
+  '/scripts/whatsnew.js',
 ];
 
 // Static assets that rarely change — cache-first is safe

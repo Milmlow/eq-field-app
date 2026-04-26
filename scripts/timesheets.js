@@ -158,10 +158,8 @@ function tsTotalHrs(entry) {
         return sum + (parseFloat(part.split(':')[1]) || 0);
       }, 0);
     }
-    // v3.4.4 (T3): count hours whenever they're recorded, even if the job
-    // column is blank — the old "jobStr && h" guard hid legitimate hours and
-    // distorted the weekly total.
-    return s + (parseFloat(entry[d + '_hrs']) || 0);
+    const h = parseFloat(entry[d + '_hrs']) || 0;
+    return s + (jobStr && h ? h : 0);
   }, 0);
 }
 
@@ -206,47 +204,8 @@ async function saveTsCell(name, grp, week, day, job, hrs) {
       row[d + '_hrs'] = parseFloat(hVal) || null;
     }
   });
-
-  // v3.4.4 (T2): compare-and-swap on updated_at to detect concurrent edits.
-  // When entry.id + entry.updated_at are known (i.e. loaded from server), do
-  // a CAS PATCH. Zero affected rows means another supervisor wrote first —
-  // refresh from server and tell the user before they clobber unknowingly.
-  // When we don't have an id yet (first insert), fall back to the existing
-  // upsert path.
-  try {
-    if (entry.id && entry.updated_at) {
-      const enc = encodeURIComponent(entry.updated_at);
-      const res = await sbFetch(
-        `timesheets?id=eq.${entry.id}&updated_at=eq.${enc}`,
-        'PATCH', row, 'return=representation'
-      );
-      if (Array.isArray(res) && res.length === 0) {
-        try {
-          const fresh = await sbFetch(`timesheets?id=eq.${entry.id}&select=*`);
-          if (fresh && fresh[0]) Object.assign(entry, fresh[0]);
-        } catch (re) { console.warn('EQ[ts] refresh after CAS miss failed:', re); }
-        renderTimesheets();
-        showToast('⚠ Another supervisor edited this row — your change was NOT saved. Review and retry.');
-        return;
-      }
-      if (Array.isArray(res) && res[0]) {
-        entry.id = res[0].id;
-        entry.updated_at = res[0].updated_at;
-      }
-    } else {
-      const res = await sbFetch(
-        'timesheets?on_conflict=name,week,org_id',
-        'POST', row, 'resolution=merge-duplicates,return=representation'
-      );
-      if (Array.isArray(res) && res[0]) {
-        entry.id = res[0].id;
-        entry.updated_at = res[0].updated_at;
-      }
-    }
-  } catch (e) {
-    showToast('Timesheet save failed — check connection');
-    console.error('EQ[ts] save error:', e);
-  }
+  sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal')
+    .catch(() => showToast('Timesheet save failed — check connection'));
 }
 
 // ── Cell change handler ───────────────────────────────────────
@@ -317,24 +276,12 @@ async function fillTsWeekFromMon(name, grp) {
   const monHrs = entry.mon_hrs;
   const days   = ['tue', 'wed', 'thu', 'fri'];
 
-  // v3.4.4 (T6): itemise what will be overwritten so supervisors don't
-  // unknowingly erase earlier entries.
+  // Warn before clobbering existing Tue–Fri data
   const hasExisting = days.some(d => entry[d + '_job'] || entry[d + '_hrs']);
   if (hasExisting) {
-    const dayLbl = { tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri' };
-    const lines = days.map(d => {
-      const j = entry[d + '_job'] || '';
-      const h = entry[d + '_hrs'];
-      if (!j && (h == null || h === '')) return `  ${dayLbl[d]}: (empty)`;
-      const jLabel = String(j).includes('|') ? String(j) : (j || '—');
-      return `  ${dayLbl[d]}: ${jLabel} / ${h || 0}h`;
-    }).join('\n');
-    const monLabel = String(monJob).includes('|') ? String(monJob) : String(monJob).split(':')[0];
     const ok = window.confirm(
-      `${name} — overwrite Tue–Fri with Monday's values?\n\n` +
-      `Current data:\n${lines}\n\n` +
-      `New values for each day:\n  ${monLabel} / ${monHrs || 0}h\n\n` +
-      `This cannot be undone.`
+      `${name} already has Tue–Fri data for this week.\n\n` +
+      `Overwrite Tue–Fri with Monday's job (${String(monJob).split(':')[0]}) / ${monHrs || 0}h?`
     );
     if (!ok) return;
   }
@@ -414,7 +361,17 @@ function renderTimesheets() {
     const entry      = getTsEntry(p.name, week);
     const total      = tsTotalHrs(entry);
     const totalClass = total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-amber' : 'ts-total-empty';
-    const rowBg      = !entry ? 'background:#FFF1F2' : total > 0 && total < 40 ? 'background:#FFFBEB' : '';
+    // v3.4.17: tint + left border aligned to the day-based completion
+    // definition used by updateTsStats (hasAny / hasFull on Mon–Fri
+    // `_job` cells). Prior versions tinted by hours which disagreed
+    // with the stat-card counts.
+    const _jobs      = ['mon','tue','wed','thu','fri'].map(d => entry && entry[d + '_job'] ? entry[d + '_job'] : '');
+    const _hasAny    = _jobs.some(j => j);
+    const _hasFull   = _jobs.every(j => j);
+    let rowBg;
+    if (!_hasAny)       rowBg = 'background:#FFF1F2;border-left:4px solid var(--red);';      // empty
+    else if (!_hasFull) rowBg = 'background:#FFFBEB;border-left:4px solid var(--amber);';    // partial
+    else                rowBg = 'border-left:4px solid var(--green);';                        // complete
     const pid        = p.name.replace(/\W/g, '_');
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'
@@ -428,13 +385,8 @@ function renderTimesheets() {
         const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
         let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
         if (rawJob.includes('|')) {
-          // v3.4.4 (T4): validate split-day format — warn when extra pipe
-          // segments are present so the malformed data doesn't silently
-          // lose information. Render the first two parts either way.
           const parts = rawJob.split('|');
-          if (parts.length !== 2) console.warn('EQ[ts] malformed split-day value for', p.name, d, '— expected 2 segments, got', parts.length, ':', rawJob);
-          const p0 = (parts[0] || '').split(':');
-          const p1 = (parts[1] || '').split(':');
+          const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
           job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
         } else {
           job1 = rawJob; hrs1 = rawHrs;
@@ -485,20 +437,95 @@ function renderTimesheets() {
 // Legacy tab function — kept for backward compat, now a no-op
 function setTsTab(tab) { renderTimesheets(); }
 
+// v3.4.17: toggle the "N pending" popover above the timesheet grid.
+function _togglePendingPopover() {
+  const pop = document.getElementById('ts-pending-popover');
+  const btn = document.getElementById('ts-pending-toggle');
+  if (!pop) return;
+  const open = pop.style.display !== 'none';
+  pop.style.display = open ? 'none' : 'block';
+  if (btn) btn.setAttribute('aria-expanded', String(!open));
+}
+
+// v3.4.18: per-row "Send reminder" button on the pending popover. Calls
+// the ts-reminder edge function, which handles email transport + cooldown
+// rate-limit (default 12h per person+week). Demo tenant is rejected
+// before the call so we don't get a confusing edge-function error.
+async function sendTsReminder(personName, week, btn) {
+  if (!isManager) { showToast('Supervision access required'); return; }
+  if (!personName || !week) return;
+
+  // Demo tenant has no Supabase backend — surface this clearly.
+  if (typeof TENANT === 'undefined' || !TENANT.ORG_SLUG || TENANT.ORG_SLUG === 'demo' || !SB_URL || !SB_KEY) {
+    showToast('Reminder emails need a live tenant — demo mode is local-only');
+    return;
+  }
+
+  const person = (STATE.people || []).find(p => p.name === personName);
+  if (!person) { showToast('Person not found'); return; }
+  if (!person.email) { showToast(`${personName} has no email on file`); return; }
+
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    const url  = SB_URL.replace(/\/$/, '') + '/functions/v1/ts-reminder';
+    const sentBy = (typeof currentManagerName === 'string' && currentManagerName) ? currentManagerName : 'Supervisor';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + SB_KEY,
+        'apikey':        SB_KEY,
+      },
+      body: JSON.stringify({
+        orgSlug:    TENANT.ORG_SLUG,
+        personName: personName,
+        week:       week,
+        sentBy:     sentBy,
+      }),
+    });
+    let body = {};
+    try { body = await resp.json(); } catch (_) { /* non-JSON */ }
+
+    if (resp.ok && body && body.ok) {
+      if (body.rateLimited) {
+        const when = body.lastSentAt ? new Date(body.lastSentAt).toLocaleString() : 'recently';
+        showToast(`Already reminded · last sent ${when}`);
+        if (btn) { btn.disabled = true; btn.textContent = '✓ Reminded'; }
+        auditLog(`Reminder skipped (cooldown ${body.cooldownHours || 12}h) — ${personName}`, 'Timesheet', personName, week);
+        return;
+      }
+      showToast(`✓ Reminder sent to ${person.email}`);
+      if (btn) { btn.disabled = true; btn.textContent = '✓ Sent'; }
+      auditLog(`Sent timesheet reminder → ${person.email}`, 'Timesheet', personName, week);
+      return;
+    }
+    const errMsg = (body && (body.error || body.detail)) || ('HTTP ' + resp.status);
+    showToast('Reminder failed — ' + String(errMsg).slice(0, 120));
+    if (btn) { btn.disabled = false; btn.textContent = original || 'Retry'; }
+  } catch (e) {
+    showToast('Reminder failed — check connection');
+    if (btn) { btn.disabled = false; btn.textContent = original || 'Retry'; }
+    console.warn('ts-reminder error:', e);
+  }
+}
+
 // ── Stats ─────────────────────────────────────────────────────
 
 function updateTsStats() {
   const allTs = [...STATE.people].filter(p => p.group === 'Apprentice' || p.group === 'Labour Hire');
   const week  = STATE.currentWeek;
   let complete = 0, partial = 0, empty = 0;
+  const pending = []; // v3.4.17: names of staff whose timesheets aren't complete for this week
 
   allTs.forEach(p => {
     const entry   = getTsEntry(p.name, week);
     const hasAny  = entry && TS_DAYS.some(d => entry[d + '_job']);
     const hasFull = entry && ['mon','tue','wed','thu','fri'].every(d => entry[d + '_job']);
-    if (!hasAny)        empty++;
-    else if (hasFull)   complete++;
-    else                partial++;
+    if (!hasAny)        { empty++;   pending.push({ name: p.name, status: 'empty'   }); }
+    else if (hasFull)   { complete++; }
+    else                { partial++; pending.push({ name: p.name, status: 'partial' }); }
   });
 
   const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -506,6 +533,55 @@ function updateTsStats() {
   setEl('ts-stat-complete', complete);
   setEl('ts-stat-partial',  partial);
   setEl('ts-stat-empty',    empty);
+
+  // v3.4.17: sticky-ish progress bar above the grid
+  const pb = document.getElementById('ts-progress-bar');
+  if (pb) {
+    const total = allTs.length;
+    const pct   = total ? Math.round((complete / total) * 100) : 0;
+    const barColor = pct === 100 ? 'var(--green)' : pct >= 60 ? '#F59E0B' : 'var(--red)';
+    // v3.4.18: each pending row gets a "Send reminder" button. The button
+    // is disabled if the person has no email on file — surfaces the gap
+    // before the supervisor clicks, instead of after the edge function
+    // 422s. Safe in demo mode — sendTsReminder() short-circuits.
+    const _peopleByName = (STATE.people || []).reduce((m, p) => { m[p.name] = p; return m; }, {});
+    const _btnStyle = (enabled) => `padding:3px 9px;border:1px solid ${enabled ? 'var(--navy)' : 'var(--ink-4)'};background:${enabled ? 'var(--navy)' : 'var(--surface-2)'};color:${enabled ? '#fff' : 'var(--ink-4)'};border-radius:6px;font-size:10px;font-weight:700;cursor:${enabled ? 'pointer' : 'not-allowed'};font-family:inherit;letter-spacing:.2px`;
+
+    const pendingChip = pending.length
+      ? `<button type="button" onclick="_togglePendingPopover()" aria-expanded="false" id="ts-pending-toggle"
+            style="margin-left:10px;padding:4px 10px;border:1px solid #FECACA;background:#FEF2F2;color:var(--red);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">
+            ${pending.length} pending ▾
+         </button>
+         <div id="ts-pending-popover" style="display:none;margin-top:8px;padding:10px 12px;background:white;border:1px solid var(--border);border-radius:8px;max-height:320px;overflow:auto">
+           <div style="font-size:10px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Timesheets pending this week</div>
+           ${pending.map(x => {
+             const _pp      = _peopleByName[x.name];
+             const _hasMail = !!(_pp && _pp.email);
+             const _btn     = _hasMail
+               ? `<button type="button" onclick="sendTsReminder('${esc(x.name)}','${esc(week)}',this)" title="Email ${esc(_pp.email)}" style="${_btnStyle(true)}">Send reminder</button>`
+               : `<button type="button" disabled title="No email on file" style="${_btnStyle(false)}">No email</button>`;
+             return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border);font-size:12px">
+               <span style="color:var(--ink);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.name)}</span>
+               <span style="font-size:10px;font-weight:700;color:${x.status === 'empty' ? 'var(--red)' : 'var(--amber)'}">${x.status === 'empty' ? 'No data' : 'Partial'}</span>
+               ${_btn}
+             </div>`;
+           }).join('')}
+         </div>`
+      : '';
+    pb.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.5px">This week — ${esc(week || '—')}</span>
+            <span style="font-size:13px;font-weight:800;color:${barColor}">${complete} of ${total} complete (${pct}%)</span>
+          </div>
+          <div style="height:10px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border)">
+            <div style="height:100%;width:${pct}%;background:${barColor};transition:width .25s ease"></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center">${pendingChip}</div>
+      </div>`;
+  }
 
   // Completion tracker — last 6 weeks
   const tracker = document.getElementById('ts-completion-tracker');
@@ -736,7 +812,7 @@ async function importTsCSV(evt) {
   const peopleByName = {};
   STATE.people.forEach(p => { peopleByName[p.name] = p; });
 
-  let updated = 0, unknown = 0, cells = 0, clamped = 0;
+  let updated = 0, unknown = 0, cells = 0;
   for (const r of rows) {
     const name = (r[iName] || '').trim();
     const week = (r[iWeek] || '').trim();
@@ -750,17 +826,7 @@ async function importTsCSV(evt) {
       const jobRaw = dc.job >= 0 ? (r[dc.job] || '').trim() : '';
       const hrsRaw = dc.hrs >= 0 ? (r[dc.hrs] || '').trim() : '';
       if (!jobRaw && !hrsRaw) continue;
-      // v3.4.4 (T7): clamp imported hours to [0, 24] so CSV can't introduce
-      // values the UI would otherwise refuse. Count adjustments for the toast.
-      let hrs = parseFloat(hrsRaw);
-      if (isNaN(hrs)) {
-        hrs = null;
-      } else if (hrs < 0 || hrs > 24) {
-        const orig = hrs;
-        hrs = Math.max(0, Math.min(24, hrs));
-        clamped++;
-        console.warn(`CSV import: ${name} ${dc.label} ${orig}h → clamped to ${hrs}h`);
-      }
+      const hrs = parseFloat(hrsRaw) || null;
       await saveTsCell(name, group, week, dc.day, jobRaw || null, hrs);
       cells++;
       rowTouched = true;
@@ -771,7 +837,6 @@ async function importTsCSV(evt) {
   renderTimesheets();
   const bits = [updated + ' staff updated', cells + ' cells'];
   if (unknown) bits.push(unknown + ' unknown names skipped');
-  if (clamped) bits.push(clamped + ' hours clamped to 0–24');
   showToast('✓ Imported — ' + bits.join(', '));
   auditLog('Imported timesheet CSV — ' + bits.join(', '), 'Timesheet', '', STATE.currentWeek);
 
@@ -805,11 +870,8 @@ function renderStaffTs() {
     const rawHrs = entry && entry[d + '_hrs'] != null ? entry[d + '_hrs'] : '';
     let job1 = '', hrs1 = '', job2 = '', hrs2 = '', isSplit = false;
     if (rawJob.includes('|')) {
-      // v3.4.4 (T4): same defensive parse as supervisor view.
       const parts = rawJob.split('|');
-      if (parts.length !== 2) console.warn('EQ[ts] malformed split-day value (staff view) for', name, d, '—', parts.length, 'segments:', rawJob);
-      const p0 = (parts[0] || '').split(':');
-      const p1 = (parts[1] || '').split(':');
+      const p0 = parts[0].split(':'); const p1 = parts[1].split(':');
       job1 = p0[0] || ''; hrs1 = p0[1] || ''; job2 = p1[0] || ''; hrs2 = p1[1] || ''; isSplit = true;
     } else { job1 = rawJob; hrs1 = rawHrs; }
 
@@ -895,14 +957,9 @@ async function onStaffTsCellChange(el) {
   const hrs1El = root.querySelector(`[data-name="${name}"][data-day="${day}"][data-type="hrs"][data-slot="1"]`);
 
   const job0 = job0El ? job0El.value.trim() : '';
-  // v3.4.4 (T5): staff self-entry now clamps to [0, 24] silently. Negative
-  // values were being accepted and distorting totals.
-  const _clamp = v => Math.max(0, Math.min(24, v));
-  let hrs0 = hrs0El ? _clamp(parseFloat(hrs0El.value) || 0) : 0;
-  if (hrs0El && parseFloat(hrs0El.value) !== hrs0 && hrs0El.value !== '') hrs0El.value = hrs0;
+  const hrs0 = hrs0El ? parseFloat(hrs0El.value) || 0 : 0;
   const job1 = job1El ? job1El.value.trim() : '';
-  let hrs1 = hrs1El ? _clamp(parseFloat(hrs1El.value) || 0) : 0;
-  if (hrs1El && parseFloat(hrs1El.value) !== hrs1 && hrs1El.value !== '') hrs1El.value = hrs1;
+  const hrs1 = hrs1El ? parseFloat(hrs1El.value) || 0 : 0;
 
   let combinedJob, combinedHrs;
   if (job1) { combinedJob = `${job0}:${hrs0}|${job1}:${hrs1}`; combinedHrs = hrs0 + hrs1; }

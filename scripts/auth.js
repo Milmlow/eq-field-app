@@ -467,7 +467,16 @@ function applyManagerMode() {
     document.body.classList.add('manager-mode');
     if (icon)     icon.textContent    = '🔓';
     if (label)    label.textContent   = 'Supervision mode';
-    if (status)   { status.textContent = 'Editing unlocked'; status.style.color = '#86EFAC'; }
+    // v3.4.20 (L17): surface the current supervisor's name while unlocked so
+    // shared-device hand-offs can't silently attribute actions to the
+    // previous unlocker. Symptom on SKS prod: Royce approved Tara's leave
+    // but audit + email showed Ben Ritchie as approver because Ben had
+    // unlocked earlier and the session persisted unchanged.
+    if (status)   {
+      const who = (currentManagerName || '').trim();
+      status.textContent = who ? (who + ' — unlocked') : 'Editing unlocked';
+      status.style.color = '#86EFAC';
+    }
     if (btn)      btn.style.background = 'rgba(22,163,74,.25)';
     if (auditBtn) auditBtn.style.display = 'inline';
   } else {
@@ -489,7 +498,14 @@ function updateMobileLock() {
   if (isManager) {
     if (btn)    { btn.classList.remove('locked'); btn.classList.add('unlocked'); }
     if (icon)   icon.textContent   = '🔓';
-    if (status) status.textContent = 'Supervision mode — tap to lock';
+    // v3.4.20 (L17): include the current supervisor's name so a shared
+    // device doesn't silently attribute actions to the previous unlocker.
+    if (status) {
+      const who = (currentManagerName || '').trim();
+      status.textContent = who
+        ? ('Unlocked as ' + who + ' — tap to lock')
+        : 'Supervision mode — tap to lock';
+    }
   } else {
     if (btn)    { btn.classList.remove('unlocked'); btn.classList.add('locked'); }
     if (icon)   icon.textContent   = '🔒';
@@ -607,7 +623,7 @@ function closeStaffTsGate() {
 
 async function checkStaffTsLogin() {
   const sel      = document.getElementById('staff-ts-name-select');
-  const personId = parseInt(sel.value);
+  const personId = sel.value;
   const pin      = document.getElementById('staff-ts-pin').value.trim();
   const errEl    = document.getElementById('staff-ts-err');
   const pinEl    = document.getElementById('staff-ts-pin');
