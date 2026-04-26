@@ -1,3 +1,4 @@
+/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/people.js  —  EQ Solves Field
 // People CRUD: add, edit, remove, contacts list render.

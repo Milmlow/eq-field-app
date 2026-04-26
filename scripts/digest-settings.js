@@ -1,5 +1,6 @@
+/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
 // ─────────────────────────────────────────────────────────────
-// scripts/digest-settings.js  —  EQ Solves Field  v3.4.9
+// scripts/digest-settings.js  —  EQ Solves Field  v3.4.26
 // Per-supervisor opt-in toggle for the weekly digest email.
 // Renders a compact strip above #managers-content on the Supervision
 // page. Reads/writes managers.digest_opt_in via the existing sbFetch()
@@ -20,9 +21,11 @@
     try {
       const rows = await sbFetch('managers?select=id,digest_opt_in');
       const byId = {};
-      (rows || []).forEach(r => { byId[r.id] = r.digest_opt_in; });
+      // v3.4.26: stringify keys so bigint vs string ids don't miss.
+      (rows || []).forEach(r => { byId[String(r.id)] = r.digest_opt_in; });
       STATE.managers.forEach(m => {
-        if (byId[m.id] !== undefined) m.digest_opt_in = byId[m.id];
+        const k = String(m.id);
+        if (byId[k] !== undefined) m.digest_opt_in = byId[k];
         // Default opt-in true if the column isn't there yet (migration not applied).
         if (m.digest_opt_in === undefined) m.digest_opt_in = true;
       });
@@ -35,13 +38,20 @@
   }
 
   async function toggleDigest(managerId, nextVal) {
-    const mgr = (STATE.managers || []).find(m => m.id === managerId);
-    if (!mgr) return;
+    // v3.4.26: coerce both sides to String. SKS managers.id is bigint
+    // (number) but onchange passes the id as a quoted string template,
+    // so strict === would always fail and the handler would silently no-op.
+    const idStr = String(managerId);
+    const mgr = (STATE.managers || []).find(m => String(m.id) === idStr);
+    if (!mgr) {
+      console.warn('toggleDigest: manager not found for id', managerId, '— STATE has', (STATE.managers || []).length, 'managers');
+      return;
+    }
     const prev = mgr.digest_opt_in;
     mgr.digest_opt_in = nextVal;          // optimistic
     renderDigestPanel();                  // reflect immediately
     try {
-      await sbFetch(`managers?id=eq.${encodeURIComponent(managerId)}`, 'PATCH', { digest_opt_in: nextVal });
+      await sbFetch(`managers?id=eq.${encodeURIComponent(idStr)}`, 'PATCH', { digest_opt_in: nextVal });
       if (typeof showToast === 'function') {
         showToast(nextVal ? `📧 Digest on for ${mgr.name}` : `✋ Digest off for ${mgr.name}`);
       }
