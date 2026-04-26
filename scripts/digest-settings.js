@@ -66,9 +66,9 @@
   }
   window.toggleDigest = toggleDigest;
 
-  function renderDigestPanel() {
+  function _ensurePanel() {
     const host = document.getElementById('managers-content');
-    if (!host) return;
+    if (!host) return null;
     let panel = document.getElementById('digest-settings-panel');
     if (!panel) {
       panel = document.createElement('div');
@@ -76,12 +76,18 @@
       panel.style.cssText = 'background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;margin-bottom:14px';
       host.parentNode.insertBefore(panel, host);
     }
-    const mgrs = (STATE.managers || []).filter(m => m.email);
+    return panel;
+  }
+
+  function _paintPanel(rows) {
+    const panel = _ensurePanel();
+    if (!panel) return;
+    const mgrs = (rows || []).filter(m => m.email);
     if (!mgrs.length) {
       panel.innerHTML = '<div style="font-size:12px;color:#6B7280">No supervisors with emails — nobody to receive the weekly digest.</div>';
       return;
     }
-    const rows = mgrs.map(m => {
+    const items = mgrs.map(m => {
       const on = m.digest_opt_in !== false;
       return `
         <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:#374151">
@@ -98,7 +104,38 @@
           <div style="font-size:12px;color:#6B7280;margin-top:2px">Fridays 12:00 AEST · leave next week, pending approvals, unrostered staff, timesheet completion</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px">${rows}</div>`;
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px">${items}</div>`;
+  }
+
+  // v3.4.29: bulletproof render — always fetches fresh from DB on every call.
+  // STATE.managers can't be trusted to carry digest_opt_in (the bulk loader
+  // doesn't include the column), so paint from the source of truth directly.
+  // Falls back to STATE.managers if the fetch fails (offline / RLS hiccup).
+  async function renderDigestPanel() {
+    const host = document.getElementById('managers-content');
+    if (!host) return;
+    // First paint: use STATE so user sees something instantly. Synced after fetch.
+    const seed = (STATE.managers || []).map(m => ({
+      id: m.id, name: m.name, email: m.email,
+      digest_opt_in: m.digest_opt_in === false ? false : true,
+    }));
+    _paintPanel(seed);
+    // Then re-fetch and repaint with truth.
+    if (!window.sbFetch) return;
+    try {
+      const rows = await sbFetch('managers?select=id,name,email,digest_opt_in&order=name.asc');
+      // Sync STATE so toggle's optimistic update is in agreement.
+      const byId = {};
+      (rows || []).forEach(r => { byId[String(r.id)] = r.digest_opt_in; });
+      (STATE.managers || []).forEach(m => {
+        const k = String(m.id);
+        if (byId[k] !== undefined) m.digest_opt_in = byId[k];
+      });
+      _paintPanel(rows);
+    } catch (e) {
+      // Migration not applied yet (column absent) → keep the seed paint.
+      console.warn('renderDigestPanel: fresh fetch failed, keeping STATE-derived paint', e);
+    }
   }
   window.renderDigestPanel = renderDigestPanel;
 
@@ -116,15 +153,8 @@
     const orig = window.renderManagers;
     window.renderManagers = function () {
       const r = orig.apply(this, arguments);
-      // v3.4.28: if any manager row lacks digest_opt_in (because the bulk
-      // managers fetch didn't include the column), re-hydrate before
-      // rendering so we never paint stale "all ticked" defaults.
-      const needsHydrate = (STATE.managers || []).some(m => m.digest_opt_in === undefined);
-      if (needsHydrate) {
-        hydrateDigestOptIns().then(() => renderDigestPanel());
-      } else {
-        renderDigestPanel();
-      }
+      // v3.4.29: renderDigestPanel always fetches fresh; no pre-hydrate needed.
+      renderDigestPanel();
       return r;
     };
     window.__EQ_RENDER_MANAGERS_WRAPPED__ = true;

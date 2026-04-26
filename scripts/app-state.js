@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.28';
+const APP_VERSION = '3.4.29';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -60,6 +60,19 @@ const ORG_TABLES = [
   'apprentice_profiles', 'skills_ratings', 'feedback_entries',
   'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log'
 ];
+
+// v3.4.29: tables a tenant doesn't have. sbFetch GET on these returns []
+// without making a request, killing the 404 console spam on lean tenants.
+// Add a tenant key here when you spin up a new tenant; default = all enabled.
+const TENANT_DISABLED_TABLES = {
+  sks: [
+    'apprentice_profiles', 'apprentice_journal',
+    'skills_ratings', 'competencies', 'sks_quotes_materials',
+    'feedback_entries', 'feedback_requests',
+    'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log',
+    'checkins'
+  ]
+};
 
 // ── Group name normalisation ─────────────────────────────────
 // SKS Supabase stores "SKS Direct" but the app code is hard-coded to
