@@ -1,4 +1,4 @@
-/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
+/*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/digest-settings.js  —  EQ Solves Field  v3.4.26
 // Per-supervisor opt-in toggle for the weekly digest email.

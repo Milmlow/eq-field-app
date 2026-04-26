@@ -1,4 +1,4 @@
-/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
+/*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/whatsnew.js  —  EQ Solves Field
 // "What's new" banner shown once per user after a major upgrade.

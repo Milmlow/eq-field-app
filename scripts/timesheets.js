@@ -1,4 +1,4 @@
-/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
+/*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/timesheets.js  —  EQ Solves Field
 // Timesheets: render, cell save, batch fill, export,

@@ -1,6 +1,6 @@
-/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.26
-const CACHE = 'eq-field-v3.4.26';
+/*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
+// EQ Solves — Field  ·  Service Worker  v3.4.27
+const CACHE = 'eq-field-v3.4.27';
 
 const PRECACHE = [
   '/',
