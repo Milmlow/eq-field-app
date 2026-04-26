@@ -1,3 +1,4 @@
+/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
 // ─────────────────────────────────────────────────────────────
 // Supabase Edge Function: supervisor-digest
 // EQ Solves — Field  v3.4.9
@@ -113,6 +114,7 @@ function isRosteredCell(v: string | null | undefined): boolean {
 }
 
 // ── HTML helpers ──────────────────────────────────────────────
+function sleep(ms: number): Promise<void> { return new Promise((res) => setTimeout(res, ms)); }
 function escHtml(s: unknown): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -361,6 +363,9 @@ async function runForOrg(sb: SupabaseClient, orgId: string, orgName: string, opt
   // Per-supervisor dispatch.
   let sent = 0;
   const errors: string[] = [];
+  // v3.4.9.4: stay under Resend's 2/sec free-tier limit. Configurable.
+  const sendIntervalMs = Math.max(0, parseInt(Deno.env.get("DIGEST_SEND_INTERVAL_MS") || "600", 10));
+  let firstLiveSend = true;
   for (const mgr of managers) {
     if (!mgr.email) continue;
     const pendingForMe = pendingAll.filter((r) => r.approver_name === mgr.name)
@@ -386,6 +391,9 @@ async function runForOrg(sb: SupabaseClient, orgId: string, orgName: string, opt
       sent += 1;
       continue;
     }
+    // v3.4.9.4: throttle to stay under Resend's 2/sec free-tier limit.
+    if (!firstLiveSend && sendIntervalMs > 0) await sleep(sendIntervalMs);
+    firstLiveSend = false;
     const res = await sendEmail({ to: mgr.email, subject, html });
     if (res.ok) sent += 1;
     else errors.push(`${mgr.name} <${mgr.email}>: ${res.detail}`);

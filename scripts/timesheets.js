@@ -1,9 +1,21 @@
+/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/timesheets.js  —  EQ Solves Field
 // Timesheets: render, cell save, batch fill, export,
 // staff self-entry (renderStaffTs, onStaffTsCellChange).
 // Depends on: app-state.js, utils.js, supabase.js, roster.js
 // ─────────────────────────────────────────────────────────────
+
+// v3.4.26: ensure .ts-total-red class exists even if base.css hasn't been
+// updated. Idempotent — only injects once per page load.
+(function injectTsTotalRedStyle(){
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('eq-ts-total-red-style')) return;
+  const s = document.createElement('style');
+  s.id = 'eq-ts-total-red-style';
+  s.textContent = '.ts-total-red{color:var(--red,#EF4444);font-weight:700}';
+  document.head.appendChild(s);
+})();
 
 const TS_DAYS   = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const TS_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -170,7 +182,8 @@ function updateTsRowTotal(name, week) {
   const el    = document.getElementById(id);
   if (!el) return;
   el.textContent = total > 0 ? total + 'h' : '—';
-  el.className   = 'ts-total-col ' + (total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-amber' : 'ts-total-empty');
+  // v3.4.26: red if any hours but week incomplete, else green/empty.
+  el.className   = 'ts-total-col ' + (total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-red' : 'ts-total-empty');
 }
 
 // ── Save cell ─────────────────────────────────────────────────
@@ -360,18 +373,19 @@ function renderTimesheets() {
 
     const entry      = getTsEntry(p.name, week);
     const total      = tsTotalHrs(entry);
-    const totalClass = total >= 40 ? 'ts-total-green' : total > 0 ? 'ts-total-amber' : 'ts-total-empty';
-    // v3.4.17: tint + left border aligned to the day-based completion
-    // definition used by updateTsStats (hasAny / hasFull on Mon–Fri
-    // `_job` cells). Prior versions tinted by hours which disagreed
-    // with the stat-card counts.
-    const _jobs      = ['mon','tue','wed','thu','fri'].map(d => entry && entry[d + '_job'] ? entry[d + '_job'] : '');
-    const _hasAny    = _jobs.some(j => j);
-    const _hasFull   = _jobs.every(j => j);
+    // v3.4.26: completion rule — every Mon–Fri ≥ 8 hrs AND total ≥ 40 hrs.
+    // Anything less colours the row red; amber state retired. Hours are
+    // the source of truth, not job-cell presence, so a row with job
+    // numbers but no hrs reads incomplete until hrs are filled in.
+    const _hrs            = ['mon','tue','wed','thu','fri'].map(d => Number((entry && entry[d + '_hrs']) || 0));
+    const _weekTotal      = _hrs.reduce((a, b) => a + b, 0);
+    const _allDaysAt8Plus = _hrs.every(h => h >= 8);
+    const _hasAnyHrs      = _hrs.some(h => h > 0);
+    const _isComplete     = _hasAnyHrs && _allDaysAt8Plus && _weekTotal >= 40;
+    const totalClass      = _isComplete ? 'ts-total-green' : (_hasAnyHrs ? 'ts-total-red' : 'ts-total-empty');
     let rowBg;
-    if (!_hasAny)       rowBg = 'background:#FFF1F2;border-left:4px solid var(--red);';      // empty
-    else if (!_hasFull) rowBg = 'background:#FFFBEB;border-left:4px solid var(--amber);';    // partial
-    else                rowBg = 'border-left:4px solid var(--green);';                        // complete
+    if (_isComplete) rowBg = 'border-left:4px solid var(--green);';                       // complete
+    else             rowBg = 'background:#FFF1F2;border-left:4px solid var(--red);';      // incomplete
     const pid        = p.name.replace(/\W/g, '_');
     const grpBadge   = p.group === 'Apprentice'
       ? '<span style="font-size:9px;font-weight:700;color:var(--purple);background:var(--purple-lt);padding:1px 5px;border-radius:3px">APP</span>'

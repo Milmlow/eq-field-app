@@ -11,8 +11,11 @@
 <meta name="apple-mobile-web-app-title" content="EQ Solves — Field">
 <link rel="manifest" href="/manifest.json">
 <!-- SKS Labour — Favicon & Home Screen Icons -->
+<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/favicon-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/favicon-512x512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -167,8 +170,25 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.25
+  EQ Solves — Field  v3.4.26
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.26  (SKS go-live polish)
+  ──────────────────────────────────────────
+  • Digest opt-in checkbox no-op fixed (bigint vs string strict-equality
+    in find()) — supervisor unticks now persist on SKS.
+  • Timesheet completion rule tightened: red unless every Mon–Fri ≥ 8 hrs
+    AND week ≥ 40 hrs. Drops the prior amber middle state.
+  • Hours are the source of truth for the row colour, not job-cell presence.
+  • SKS-branded favicon set (16/32/48/180/192/512 + .ico) replaces the
+    older incomplete icon set.
+  • Sidebar footer carries proprietary © line; LICENSE.md added at root.
+  • Source-file copyright headers prepended to scripts/*.js, sw.js,
+    supabase/functions/*/index.ts.
+  • Database (SKS only): people.year_level column added + apprentices
+    backfilled from licence text. Closes a console-spam regression.
+  • supervisor-digest edge function v3.4.9.4: 600ms inter-send throttle
+    so we don't 429 against Resend's 2/sec free tier.
 
   CHANGES IN v3.4.25  (parseInt(uuid) cluster — N1 from audit)
   ──────────────────────────────────────────────────────────
@@ -816,12 +836,16 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.25</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.26</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
       &nbsp;·&nbsp;
       <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.32);font-size:8.5px;line-height:1.5">
+        © 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust.<br>
+        All rights reserved. Proprietary &amp; confidential — unauthorised use prohibited.
+      </div>
     </div>
   </div>
 </nav>

@@ -1,3 +1,4 @@
+/*! Copyright (c) 2026 CDC Solutions Pty Ltd ATF Hexican Holdings Trust. All rights reserved. Proprietary & confidential — see LICENSE.md. Unauthorised copying, distribution, or use is prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/journal.js  —  EQ Solves Field  v1.0
 // Apprentice reflection journal. Private by default. Per-entry
