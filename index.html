@@ -48,6 +48,7 @@
 <script src="scripts/journal.js"></script>
 <script src="scripts/tafe.js"></script>
 <script src="scripts/digest-settings.js"></script>
+<script src="scripts/whatsnew.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -166,8 +167,26 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.22
+  EQ Solves — Field  v3.4.23
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.23  ("What's new" banner — SKS upgrade comms)
+  ──────────────────────────────────────────────────────────
+  - scripts/whatsnew.js: dismissible card on the dashboard,
+    summarising the v3.4.10 → v3.4.22 changes for users coming
+    from v3.4.9. Once-per-user via localStorage flag
+    `eq.whatsnew.v3.4.22.seen`. Bump the flag name in this file
+    next time there's a comparable batch of features to surface.
+  - index.html: empty <div id="whatsnew-banner"> at top of
+    page-dashboard; whatsnew.js script tag after digest-settings.js.
+  - sw.js: precache list adds /scripts/whatsnew.js.
+
+  Why this exists: SKS Labour prod is currently on v3.4.9. When
+  the demo→main promotion lands, SKS users wake up to 12 releases
+  of changes — Friday digest emails, birthdays card, timesheet
+  reminder buttons, leave approval changes, nav reshuffle. The
+  banner gives them a one-screen "what's new" on first load so
+  unannounced features don't generate "is this broken?" tickets.
 
   CHANGES IN v3.4.22  (SKS-promotion blockers — id handling)
   ──────────────────────────────────────────────────────────
@@ -767,7 +786,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.22</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.23</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
@@ -810,6 +829,8 @@
 
   <!-- Pages — content injected by render functions -->
   <div class="page print-active" id="page-dashboard">
+    <!-- v3.4.23: "What's new" banner — populated by scripts/whatsnew.js, dismissed via localStorage -->
+    <div id="whatsnew-banner" style="display:none"></div>
     <div class="stats-row">
       <div class="stat-card"><div class="stat-card-label">⚡ Direct</div><div class="stat-card-value" id="sc-direct">—</div><div class="stat-card-sub">employees</div><div class="stat-accent-bar" style="background:var(--navy)"></div></div>
       <div class="stat-card"><div class="stat-card-label">🎓 Apprentices</div><div class="stat-card-value" id="sc-app">—</div><div class="stat-card-sub">On roster</div><div class="stat-accent-bar" style="background:var(--purple)"></div></div>
