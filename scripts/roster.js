@@ -259,7 +259,7 @@ function renderRoster() {
       <div class="roster-card"><div class="table-scroll"><table>
         <thead><tr>
           <th class="name-col sortable${rosterSort.col==='name'?' sort-'+rosterSort.dir:''}" onclick="setSortCol('name')">Name</th>
-          ${days.map((d, i) => `<th class="center sortable${rosterSort.col===d?' sort-'+rosterSort.dir:''}" onclick="setSortCol('${d}')">${dayLabels[i]}<br><span style="font-size:9px;font-weight:400;color:var(--ink-3)">${weekDates[i]}</span></th>`).join('')}
+          ${days.map((d, i) => `<th class="center sortable${rosterSort.col===d?' sort-'+rosterSort.dir:''}" onclick="setSortCol('${d}')">${dayLabels[i]}<br><span style="font-size:11px;font-weight:600;color:#fff">${weekDates[i]}</span></th>`).join('')}
         </tr></thead>
         <tbody>`;
 
