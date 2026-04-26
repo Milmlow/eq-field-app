@@ -108,9 +108,9 @@
   }
 
   // v3.4.29: bulletproof render — always fetches fresh from DB on every call.
-  // STATE.managers can't be trusted to carry digest_opt_in (the bulk loader
-  // doesn't include the column), so paint from the source of truth directly.
-  // Falls back to STATE.managers if the fetch fails (offline / RLS hiccup).
+  // v3.4.34: demo tenant has no Supabase, so sbFetch returns []. Don't blank
+  // the panel in that case — keep the seed paint (which IS the truth on
+  // demo, since STATE.managers is the only source of data).
   async function renderDigestPanel() {
     const host = document.getElementById('managers-content');
     if (!host) return;
@@ -120,20 +120,24 @@
       digest_opt_in: m.digest_opt_in === false ? false : true,
     }));
     _paintPanel(seed);
-    // Then re-fetch and repaint with truth.
-    if (!window.sbFetch) return;
+
+    // Demo / EQ tenant — no DB, no fetch, seed IS the truth.
+    if (typeof TENANT !== 'undefined' && (TENANT.ORG_SLUG === 'demo' || TENANT.ORG_SLUG === 'eq')) return;
+    if (!window.sbFetch || (typeof SB_URL !== 'undefined' && !SB_URL)) return;
+
     try {
       const rows = await sbFetch('managers?select=id,name,email,digest_opt_in&order=name.asc');
+      // v3.4.34: empty fetch → keep the seed paint (was overwriting with "No supervisors").
+      if (!Array.isArray(rows) || rows.length === 0) return;
       // Sync STATE so toggle's optimistic update is in agreement.
       const byId = {};
-      (rows || []).forEach(r => { byId[String(r.id)] = r.digest_opt_in; });
+      rows.forEach(r => { byId[String(r.id)] = r.digest_opt_in; });
       (STATE.managers || []).forEach(m => {
         const k = String(m.id);
         if (byId[k] !== undefined) m.digest_opt_in = byId[k];
       });
       _paintPanel(rows);
     } catch (e) {
-      // Migration not applied yet (column absent) → keep the seed paint.
       console.warn('renderDigestPanel: fresh fetch failed, keeping STATE-derived paint', e);
     }
   }
