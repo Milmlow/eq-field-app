@@ -166,6 +166,10 @@ function saveManager() {
   document.getElementById('badge-managers').textContent = STATE.managers.length;
   renderManagers();
   saveManagerToSB(mgr).catch(() => showToast('Save failed — check connection'));
+  // v3.4.35: track new supervisor adds (skip edits).
+  if (!editId && window.EQ_ANALYTICS && EQ_ANALYTICS.events) {
+    EQ_ANALYTICS.events.supervisorAdded({ category: category, has_email: !!email });
+  }
 }
 
 function confirmRemoveManager(id, name) {

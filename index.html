@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.34'; // cache-buster — bump on icon changes
+    var v = '3.4.35'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -189,8 +189,23 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.34
+  EQ Solves — Field  v3.4.35
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.35  (PostHog custom events — Royce on leave)
+  ────────────────────────────────────────────────────────────
+  • Six new analytics events fire on real user actions, so Royce can
+    monitor SKS usage from PostHog while he's away:
+      - unlock_failed     (auth.js: bad PIN, with reason)
+      - leave_approved    (leave.js: status flip + days span)
+      - leave_rejected    (leave.js: status flip)
+      - timesheet_saved   (timesheets.js: per-cell save)
+      - digest_toggled    (digest-settings.js: opt-in flip)
+      - supervisor_added  (managers.js: new contact added, not edits)
+  • Each is fired via the existing EQ_ANALYTICS.events.* helpers, so
+    PostHog and (eventually) other transports get the same call site.
+  • Strict masking on SKS still applies — events carry IDs/types,
+    not names, hours, leave reasons, or PII.
 
   CHANGES IN v3.4.34  (demo digest panel — keep seed paint when no DB)
   ────────────────────────────────────────────────────────────────────
@@ -939,7 +954,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.34</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.35</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>

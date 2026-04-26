@@ -219,6 +219,10 @@ async function saveTsCell(name, grp, week, day, job, hrs) {
   });
   sbFetch('timesheets?on_conflict=name,week,org_id', 'POST', row, 'resolution=merge-duplicates,return=minimal')
     .catch(() => showToast('Timesheet save failed — check connection'));
+  // v3.4.35: track per-cell saves so Royce can see timesheet activity volume.
+  if (window.EQ_ANALYTICS && EQ_ANALYTICS.events) {
+    EQ_ANALYTICS.events.timesheetSaved({ week_of: week, day: day, has_job: !!job });
+  }
 }
 
 // ── Cell change handler ───────────────────────────────────────

@@ -55,6 +55,10 @@
       if (typeof showToast === 'function') {
         showToast(nextVal ? `📧 Digest on for ${mgr.name}` : `✋ Digest off for ${mgr.name}`);
       }
+      // v3.4.35: track digest opt-in/out toggles for the analytics dashboard.
+      if (window.EQ_ANALYTICS && EQ_ANALYTICS.events) {
+        EQ_ANALYTICS.events.digestToggled({ manager_id: idStr, opt_in: nextVal });
+      }
     } catch (e) {
       console.error('toggleDigest failed:', e);
       mgr.digest_opt_in = prev;
