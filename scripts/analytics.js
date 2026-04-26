@@ -37,6 +37,18 @@ const _ANALYTICS_CONFIG = {
     clarityId:   'wek7yeida5',
     appEnv:      'demo',
   },
+  // SKS prod — Clarity only for now. PostHog key (phc_vM4Hrh7Q…) is in your
+  // local KEYS_INVENTORY.md; paste it here when you're ready to also pipe
+  // events + JS exception capture. Clarity alone gives recordings + heatmaps
+  // + rage-click detection from day one.
+  // v3.4.32 (2026-04-26) — Royce flipped this on after manual SKS go-live.
+  sks: {
+    posthogKey:  null,
+    posthogHost: 'https://eu.i.posthog.com',
+    clarityId:   'wek8dmtbuu',
+    appEnv:      'production',
+    strictMask:  true,
+  },
 };
 
 // ── Module state ──────────────────────────────────────────────
@@ -65,78 +77,86 @@ function _initAnalytics() {
     return;
   }
 
-  // Guard: skip init if keys are still placeholders. Avoids posting
-  // junk to a nonexistent PostHog project before keys are filled in.
-  if (String(_config.posthogKey).indexOf('REPLACE_ME') !== -1) {
-    console.warn('[analytics] placeholder keys — skipping init (fill in scripts/analytics.js)');
+  // v3.4.32: PostHog and Clarity now init independently. Each tool gets
+  // initialised only if its key is present and not a placeholder. Lets SKS
+  // run Clarity-only while the PostHog key is still parked locally.
+  const _hasPosthog = _config.posthogKey
+    && String(_config.posthogKey).indexOf('REPLACE_ME') === -1;
+  const _hasClarity = _config.clarityId
+    && String(_config.clarityId).indexOf('REPLACE_ME') === -1;
+  if (!_hasPosthog && !_hasClarity) {
+    console.warn('[analytics] no live keys for tenant "' + slug + '" — skipping init');
     return;
   }
 
-  // ── PostHog array.js snippet (standard official loader) ─────
-  // See https://posthog.com/docs/libraries/js — minified form.
-  (function (t, e) {
-    var o, n, p, r;
-    if (!e.__SV) {
-      window.posthog = e; e._i = [];
-      e.init = function (i, s, a) {
-        function g(t, e) {
-          var o = e.split('.');
-          2 == o.length && (t = t[o[0]], e = o[1]);
-          t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); };
-        }
-        p = t.createElement('script'); p.type = 'text/javascript'; p.async = !0;
-        p.src = s.api_host.replace('.i.posthog.com', '-assets.i.posthog.com') + '/static/array.js';
-        r = t.getElementsByTagName('script')[0]; r.parentNode.insertBefore(p, r);
-        var u = e; for (void 0 !== a ? u = e[a] = [] : a = 'posthog', u.people = u.people || [],
-          u.toString = function (t) {
-            var e = 'posthog'; return 'posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e;
-          }, u.people.toString = function () { return u.toString(1) + '.people (stub)'; },
-          o = 'init me ws ys ps bs capture je Di ks register register_once register_for_session unregister unregister_for_session Ps getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty Es $s createPersonProfile Is opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing Ss debug I As getPageViewId captureTraceFeedback captureTraceMetric'.split(' '),
-          n = 0; n < o.length; n++) g(u, o[n]);
-        e._i.push([i, s, a]);
-      };
-      e.__SV = 1;
-    }
-  })(document, window.posthog || []);
+  if (_hasPosthog) {
+    // ── PostHog array.js snippet (standard official loader) ─────
+    // See https://posthog.com/docs/libraries/js — minified form.
+    (function (t, e) {
+      var o, n, p, r;
+      if (!e.__SV) {
+        window.posthog = e; e._i = [];
+        e.init = function (i, s, a) {
+          function g(t, e) {
+            var o = e.split('.');
+            2 == o.length && (t = t[o[0]], e = o[1]);
+            t[e] = function () { t.push([e].concat(Array.prototype.slice.call(arguments, 0))); };
+          }
+          p = t.createElement('script'); p.type = 'text/javascript'; p.async = !0;
+          p.src = s.api_host.replace('.i.posthog.com', '-assets.i.posthog.com') + '/static/array.js';
+          r = t.getElementsByTagName('script')[0]; r.parentNode.insertBefore(p, r);
+          var u = e; for (void 0 !== a ? u = e[a] = [] : a = 'posthog', u.people = u.people || [],
+            u.toString = function (t) {
+              var e = 'posthog'; return 'posthog' !== a && (e += '.' + a), t || (e += ' (stub)'), e;
+            }, u.people.toString = function () { return u.toString(1) + '.people (stub)'; },
+            o = 'init me ws ys ps bs capture je Di ks register register_once register_for_session unregister unregister_for_session Ps getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty Es $s createPersonProfile Is opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing Ss debug I As getPageViewId captureTraceFeedback captureTraceMetric'.split(' '),
+            n = 0; n < o.length; n++) g(u, o[n]);
+          e._i.push([i, s, a]);
+        };
+        e.__SV = 1;
+      }
+    })(document, window.posthog || []);
 
-  // Read persisted distinct ID so anonymous → identified link survives
-  // offline/reconnect cycles (PWA behaviour). PostHog merges the anonymous
-  // ID into the identified profile when it reconnects.
-  var bootstrapDistinctId = null;
-  try { bootstrapDistinctId = localStorage.getItem('eq:analytics:userId'); } catch (e) {}
+    // Read persisted distinct ID so anonymous → identified link survives
+    // offline/reconnect cycles (PWA behaviour). PostHog merges the anonymous
+    // ID into the identified profile when it reconnects.
+    var bootstrapDistinctId = null;
+    try { bootstrapDistinctId = localStorage.getItem('eq:analytics:userId'); } catch (e) {}
 
-  window.posthog.init(_config.posthogKey, {
-    api_host:                      _config.posthogHost,
-    person_profiles:               'identified_only',
-    capture_pageview:              true,
-    capture_pageleave:             true,
-    autocapture:                   true,
-    disable_session_recording:     false,
-    mask_all_text:                 false,
-    mask_all_element_attributes:   false,
-    bootstrap: bootstrapDistinctId
-      ? { distinctID: bootstrapDistinctId, token: _config.posthogKey }
-      : undefined,
-  });
+    var _maskHard = !!_config.strictMask;
+    window.posthog.init(_config.posthogKey, {
+      api_host:                      _config.posthogHost,
+      person_profiles:               'identified_only',
+      capture_pageview:              true,
+      capture_pageleave:             true,
+      autocapture:                   true,
+      disable_session_recording:     false,
+      // v3.4.32: strict masking on tenants where PII is high (e.g. SKS).
+      // EQ demo stays unmasked so we can debug the demo data shape.
+      mask_all_text:                 _maskHard,
+      mask_all_element_attributes:   _maskHard,
+      bootstrap: bootstrapDistinctId
+        ? { distinctID: bootstrapDistinctId, token: _config.posthogKey }
+        : undefined,
+    });
 
-  window.posthog.register({
-    app:        'eq-field',
-    app_env:    _config.appEnv,
-    tenant:     slug,
-    app_version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : null),
-  });
+    window.posthog.register({
+      app:        'eq-field',
+      app_env:    _config.appEnv,
+      tenant:     slug,
+      app_version: (typeof APP_VERSION !== 'undefined' ? APP_VERSION : null),
+    });
+
+  }
 
   // ── Microsoft Clarity loader ───────────────────────────────
-  // Skip if Clarity ID is still a placeholder (accounts not created yet).
-  // PostHog stays active — Clarity is optional.
-  if (String(_config.clarityId).indexOf('REPLACE_ME') === -1) {
+  // v3.4.32: independent of PostHog. Init only if a real Clarity ID is set.
+  if (_hasClarity) {
     (function (c, l, a, r, i) {
       c[a] = c[a] || function () { (c[a].q = c[a].q || []).push(arguments); };
       var t = l.createElement(r); t.async = 1; t.src = 'https://www.clarity.ms/tag/' + i;
       var y = l.getElementsByTagName(r)[0]; y.parentNode.insertBefore(t, y);
     })(window, document, 'clarity', 'script', _config.clarityId);
-  } else {
-    console.info('[analytics] Clarity ID is a placeholder — skipping Clarity init (PostHog active)');
   }
 
   // ── Global error hooks — covers render errors AND async failures ──
