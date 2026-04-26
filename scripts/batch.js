@@ -75,12 +75,12 @@ function runBatchFill() {
   if (!selectedDays.length) { showToast('Select at least one day'); return; }
 
   const selectedIds = new Set(
-    [...document.querySelectorAll('#batch-people-list input:checked')].map(cb => parseInt(cb.value))
+    [...document.querySelectorAll('#batch-people-list input:checked')].map(cb => cb.value)
   );
   if (!selectedIds.size) { showToast('Select at least one person'); return; }
 
   const week   = STATE.currentWeek;
-  const people = STATE.people.filter(p => selectedIds.has(p.id));
+  const people = STATE.people.filter(p => selectedIds.has(String(p.id)));
 
   // Check for conflicts
   const conflicts = [];

@@ -343,7 +343,7 @@ function getCustomRating(profile, compId, type, period) {
 // Add a new custom competency. Prompts for a name, PATCHes profile,
 // refreshes UI. String id derived from timestamp + random nibble.
 async function addCustomCompetency(profileId) {
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const name = (prompt('Add a custom skill for this apprentice:\n(e.g. Thermal scanning, Rack termination, Site induction)') || '').trim();
   if (!name) return;
@@ -371,7 +371,7 @@ async function addCustomCompetency(profileId) {
 
 // Remove a custom comp and any ratings tied to it. Confirms first.
 async function removeCustomCompetency(profileId, compId) {
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const list = getCustomCompetencies(profile);
   const entry = list.find(c => c.id === compId);
@@ -537,7 +537,7 @@ function avgRating(profileOrId, type) {
     apprenticeId = profile.id;
   } else {
     apprenticeId = profileOrId;
-    profile = apprenticeProfiles.find(p => p.id === apprenticeId) || null;
+    profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId)) || null;
   }
 
   const ratings = skillsRatings
@@ -810,7 +810,7 @@ function openApprenticeProfile(profileId, personName) {
 
 function renderApprenticeProfile(profileId) {
   const container = document.getElementById('apprentices-content');
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile || !container) return;
 
   const person = (STATE.people || []).find(p =>
@@ -1123,7 +1123,7 @@ function renderPassportGrid(profileOrId, period) {
     apprenticeId = profile.id;
   } else {
     apprenticeId = profileOrId;
-    profile = apprenticeProfiles.find(p => p.id === apprenticeId) || null;
+    profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId)) || null;
   }
   const appRatings = skillsRatings.filter(r => r.apprentice_id === apprenticeId && r.period === period);
   const selfMap = {};
@@ -1208,7 +1208,7 @@ function renderGrowthView(profileOrId, allPeriods) {
     apprenticeId = profile.id;
   } else {
     apprenticeId = profileOrId;
-    profile = apprenticeProfiles.find(p => p.id === apprenticeId) || null;
+    profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId)) || null;
   }
 
   const window4 = allPeriods.slice(-4); // last up to 4 periods
@@ -1313,7 +1313,7 @@ function renderPassportForPeriod(apprenticeId, period) {
   const container = document.getElementById('apprentices-content');
   if (!container) return;
   // Re-render passport tab with selected period
-  const profile = apprenticeProfiles.find(p => p.id === apprenticeId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(apprenticeId));
   if (!profile) return;
   // Find the passport-grid div and replace just that
   const gridEl = container.querySelector('.passport-grid-wrap');
@@ -1446,7 +1446,7 @@ function openSetupProfile(personName) {
 // ── Edit Goals / Profile ──────────────────────────────────────
 
 function openEditGoals(profileId) {
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   if (!canEditThisProfile(profile)) { showToast('You can only edit your own goals'); return; }
   const modal = document.getElementById('modal-apprentice-profile');
@@ -1518,7 +1518,7 @@ async function saveApprenticeProfile() {
   // Creating a new profile — always supervisor-gated.
   let editProfile = null;
   if (editId) {
-    editProfile = apprenticeProfiles.find(p => p.id === parseInt(editId));
+    editProfile = apprenticeProfiles.find(p => String(p.id) === String(editId));
     if (!canEditThisProfile(editProfile)) { showToast('You can only edit your own goals'); return; }
   } else if (!isManager) {
     showToast('Supervision access required'); return;
@@ -1564,7 +1564,7 @@ async function saveApprenticeProfile() {
           personObj.year_level = yearLevel; // update SEED in memory
         }
       }
-      const idx = apprenticeProfiles.findIndex(p => p.id === parseInt(editId));
+      const idx = apprenticeProfiles.findIndex(p => String(p.id) === String(editId));
       if (idx >= 0) Object.assign(apprenticeProfiles[idx], profileRow);
       showToast(selfOnly ? 'Goals updated ✓' : 'Profile updated ✓');
       closeModal('modal-apprentice-profile');
@@ -1578,7 +1578,7 @@ async function saveApprenticeProfile() {
           if (wrap) wrap.style.opacity = '1';
         }
       });
-      renderApprenticeProfile(parseInt(editId));
+      renderApprenticeProfile(editId);
     } else {
       // New profile — resolve DB UUID from person name
       let resolvedPersonId = null;
@@ -1619,7 +1619,7 @@ async function saveApprenticeProfile() {
 // ── Self-assessment form ──────────────────────────────────────
 
 function openSelfAssessmentForm(profileId) {
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const personName = getPersonNameById(profile.person_id);
   const modal = document.getElementById('modal-apprentice-self');
@@ -1707,10 +1707,10 @@ function setSAStarRating(btn, attrId, val) {
 }
 
 async function submitSelfAssessment() {
-  const profileId = parseInt(document.getElementById('sa-apprentice-id').value);
+  const profileId = document.getElementById('sa-apprentice-id').value;
   const period = document.getElementById('sa-period').value;
   if (!period) { showToast('Select a period'); return; }
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const ratedBy = getPersonNameById(profile.person_id);
 
@@ -1840,7 +1840,7 @@ function openFeedbackForm(profileId, personName, requestId) {
 }
 
 async function submitFeedback() {
-  const profileId = parseInt(document.getElementById('fb-apprentice-id').value);
+  const profileId = document.getElementById('fb-apprentice-id').value;
   const reqEl = document.getElementById('fb-request-id');
   const requestId = reqEl ? (reqEl.value || '') : '';
   const submittedBy = document.getElementById('fb-submitted-by').value.trim();
@@ -1913,7 +1913,7 @@ function getInboundRequestsForSupervisor(name) {
 }
 
 function openRequestFeedbackForm(profileId) {
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   // Self-only: only the apprentice themselves may ask for feedback on their
   // own profile. Supervisors write feedback directly, they don't need to ask.
@@ -1961,8 +1961,8 @@ function openRequestFeedbackForm(profileId) {
 }
 
 async function submitFeedbackRequest() {
-  const profileId = parseInt(document.getElementById('rfb-apprentice-id').value);
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profileId = document.getElementById('rfb-apprentice-id').value;
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const sel = document.getElementById('rfb-supervisor');
   const supName = sel.value.trim();
@@ -2077,7 +2077,7 @@ function openTradesmanRatingForm(profileId, personName) {
   if (!isManager) { showToast('Supervision access required'); return; }
   const modal = document.getElementById('modal-apprentice-trade-rating');
   if (!modal) return;
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
 
   document.getElementById('tr-apprentice-id').value = profileId;
@@ -2141,12 +2141,12 @@ function setTRStarRating(btn, attrId, val) {
 }
 
 async function submitTradesmanRating() {
-  const profileId = parseInt(document.getElementById('tr-apprentice-id').value);
+  const profileId = document.getElementById('tr-apprentice-id').value;
   const ratedBy = document.getElementById('tr-rated-by').value.trim();
   const period = document.getElementById('tr-period').value;
   if (!ratedBy) { showToast('Enter your name'); return; }
   if (!period) { showToast('Select a period'); return; }
-  const profile = apprenticeProfiles.find(p => p.id === profileId);
+  const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
 
   const effective = getEffectiveCompetencies(profile);
@@ -2235,7 +2235,7 @@ function openAddRotation(profileId, personName) {
 }
 
 async function saveRotation() {
-  const profileId = parseInt(document.getElementById('rot-apprentice-id').value);
+  const profileId = document.getElementById('rot-apprentice-id').value;
   const site = document.getElementById('rot-site').value.trim();
   const type = document.getElementById('rot-type').value;
   const start = document.getElementById('rot-start').value;

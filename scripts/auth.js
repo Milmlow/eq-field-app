@@ -623,7 +623,7 @@ function closeStaffTsGate() {
 
 async function checkStaffTsLogin() {
   const sel      = document.getElementById('staff-ts-name-select');
-  const personId = parseInt(sel.value);
+  const personId = sel.value;
   const pin      = document.getElementById('staff-ts-pin').value.trim();
   const errEl    = document.getElementById('staff-ts-err');
   const pinEl    = document.getElementById('staff-ts-pin');

@@ -529,7 +529,7 @@ async function applyBulkPin() {
   if (!pinVal || pinVal < 1000 || pinVal > 9999) { showToast('Enter a valid 4-digit PIN'); return; }
 
   const selected = [...document.querySelectorAll('.pin-cb:checked')].map(cb => ({
-    id:   parseInt(cb.dataset.id),
+    id:   cb.dataset.id,
     name: cb.dataset.name
   }));
   if (!selected.length) { showToast('No staff selected'); return; }
@@ -538,7 +538,7 @@ async function applyBulkPin() {
   for (const person of selected) {
     try {
       await sbFetch(`people?id=eq.${person.id}`, 'PATCH', { pin: String(pinVal) });
-      const p = STATE.people.find(x => x.id === person.id);
+      const p = STATE.people.find(x => String(x.id) === String(person.id));
       if (p) p.pin = String(pinVal);
       count++;
     } catch (e) { console.error('PIN save failed for', person.name, e); }
@@ -554,7 +554,7 @@ async function applyBulkPin() {
 async function clearBulkPin() {
   if (!isManager) return;
   const selected = [...document.querySelectorAll('.pin-cb:checked')].map(cb => ({
-    id:   parseInt(cb.dataset.id),
+    id:   cb.dataset.id,
     name: cb.dataset.name
   }));
   if (!selected.length) { showToast('No staff selected'); return; }
@@ -562,7 +562,7 @@ async function clearBulkPin() {
   for (const person of selected) {
     try {
       await sbFetch(`people?id=eq.${person.id}`, 'PATCH', { pin: null });
-      const p = STATE.people.find(x => x.id === person.id);
+      const p = STATE.people.find(x => String(x.id) === String(person.id));
       if (p) p.pin = null;
     } catch (e) {}
   }
