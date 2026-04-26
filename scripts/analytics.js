@@ -43,7 +43,7 @@ const _ANALYTICS_CONFIG = {
   // + rage-click detection from day one.
   // v3.4.32 (2026-04-26) — Royce flipped this on after manual SKS go-live.
   sks: {
-    posthogKey:  null,
+    posthogKey:  'phc_vM4Hrh7QhjsUqHRb2xC7LbqSqMsB5tLQqwSApkpEVPnU',
     posthogHost: 'https://eu.i.posthog.com',
     clarityId:   'wek8dmtbuu',
     appEnv:      'production',
