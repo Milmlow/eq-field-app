@@ -304,6 +304,43 @@ const _events = {
   pinLoginFailed: function (p) {
     _track('pin_login_failed', { attempt_count: (p && p.attempt_count) || 1 });
   },
+
+  // v3.4.35: Royce-priority events for "see how it's used while I'm on leave".
+  unlockFailed: function (p) {
+    _track('unlock_failed', { reason: (p && p.reason) || 'unknown' });
+  },
+  leaveApproved: function (p) {
+    _track('leave_approved', {
+      leave_id:   p && p.leave_id,
+      leave_type: p && p.leave_type,
+      days:       (p && p.days) || null,
+    });
+  },
+  leaveRejected: function (p) {
+    _track('leave_rejected', {
+      leave_id:   p && p.leave_id,
+      leave_type: p && p.leave_type,
+    });
+  },
+  timesheetSaved: function (p) {
+    _track('timesheet_saved', {
+      week_of: p && p.week_of,
+      day:     p && p.day,
+      has_job: !!(p && p.has_job),
+    });
+  },
+  digestToggled: function (p) {
+    _track('digest_toggled', {
+      manager_id: p && p.manager_id,
+      opt_in:     !!(p && p.opt_in),
+    });
+  },
+  supervisorAdded: function (p) {
+    _track('supervisor_added', {
+      category:   p && p.category,
+      has_email:  !!(p && p.has_email),
+    });
+  },
 };
 
 // ── Small helpers ─────────────────────────────────────────────

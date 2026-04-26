@@ -496,6 +496,10 @@ async function submitManagerPassword() {
     showErr(serverErr || 'Incorrect password.');
     document.getElementById('manager-pw-input').value = '';
     document.getElementById('manager-pw-input').focus();
+    // v3.4.35: track unlock failures so Royce can see auth friction.
+    if (window.EQ_ANALYTICS && EQ_ANALYTICS.events) {
+      EQ_ANALYTICS.events.unlockFailed({ reason: serverErr || 'Incorrect password.' });
+    }
   }
 }
 

@@ -474,6 +474,17 @@ async function respondLeave(status) {
       responded_by:   currentManagerName,
       responded_at:   new Date().toISOString()
     });
+    // v3.4.35: track approval / rejection for the weekly leave-flow read.
+    if (window.EQ_ANALYTICS && EQ_ANALYTICS.events) {
+      if (status === 'Approved') {
+        const _days = (req.date_start && req.date_end)
+          ? (Math.round((new Date(req.date_end) - new Date(req.date_start)) / 86400000) + 1)
+          : null;
+        EQ_ANALYTICS.events.leaveApproved({ leave_id: id, leave_type: req.leave_type, days: _days });
+      } else if (status === 'Rejected') {
+        EQ_ANALYTICS.events.leaveRejected({ leave_id: id, leave_type: req.leave_type });
+      }
+    }
 
     if (status === 'Approved') {
       // LEV-003: Warn about roster conflicts
