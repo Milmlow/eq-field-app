@@ -32,6 +32,17 @@ function _isDemoTenant() {
   return (typeof TENANT !== 'undefined') && (TENANT.ORG_SLUG === 'demo');
 }
 
+// v3.4.29: tables disabled on the active tenant. Skip the network round-trip
+// for these — postgrest would 404 anyway, but the browser logs each as a
+// failed request. Returning [] silently keeps DevTools clean and saves ~50ms
+// of useless fetches on every page load.
+function _isDisabledTable(path) {
+  if (typeof TENANT === 'undefined' || typeof TENANT_DISABLED_TABLES === 'undefined') return false;
+  const list = TENANT_DISABLED_TABLES[TENANT.ORG_SLUG] || [];
+  if (!list.length) return false;
+  return list.includes(_baseTable(path));
+}
+
 // ── DB ID validator ───────────────────────────────────────────
 // Returns true for ids that came from Postgres (PATCH/DELETE-safe).
 // Rejects:
@@ -114,6 +125,11 @@ async function sbFetch(path, method = 'GET', body = null, prefer = 'return=minim
       if (body && typeof body === 'object') return [{ ...body, id: mk() }];
       return [{ id: mk() }];
     }
+    return [];
+  }
+
+  // v3.4.29: known-disabled table on this tenant — skip the fetch entirely.
+  if (method === 'GET' && _isDisabledTable(path)) {
     return [];
   }
 
