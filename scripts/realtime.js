@@ -11,12 +11,14 @@
 
 let _rtSocket      = null;
 let _rtRef         = 0;
-let _rtJoinRef     = null;
 let _rtHeartbeat   = null;
 let _rtReconnectT  = null;
 let _rtBackoffMs   = 1000;
 const _RT_MAX_BACKOFF = 30000;
-let _rtTopic       = null;
+// v3.4.4: track multiple topics keyed by table name — schedule stays
+// primary, leave_requests added so leave list updates live across
+// supervisors. Each entry: { topic, joinRef, joined }
+const _rtChannels  = {};
 let _rtEnabled     = false;
 let _rtLastEventAt = 0;
 
@@ -72,6 +74,7 @@ function stopRealtime() {
   _rtEnabled = false;
   clearTimeout(_rtReconnectT); _rtReconnectT = null;
   clearInterval(_rtHeartbeat); _rtHeartbeat = null;
+  for (const k of Object.keys(_rtChannels)) delete _rtChannels[k];
   if (_rtSocket) {
     try { _rtSocket.close(); } catch (e) {}
     _rtSocket = null;
@@ -103,7 +106,8 @@ function _rtConnect() {
 function _rtOnOpen() {
   _rtLog('info', 'connected');
   _rtBackoffMs = 1000;
-  _rtJoinChannel();
+  _rtJoinChannel('schedule');
+  _rtJoinChannel('leave_requests');
   _rtHeartbeat = setInterval(_rtSendHeartbeat, 25000);
 }
 
@@ -123,22 +127,29 @@ function _rtScheduleReconnect() {
 }
 
 // ── Channel join ─────────────────────────────────────────────
-function _rtJoinChannel() {
-  // Phoenix topic format for Supabase Realtime v1:
-  //   realtime:<schema>:<table>:<col>=eq.<value>
-  _rtTopic   = 'realtime:public:schedule:org_id=eq.' + TENANT.ORG_UUID;
-  _rtJoinRef = String(++_rtRef);
-
+// Phoenix topic format for Supabase Realtime v1:
+//   realtime:<schema>:<table>:<col>=eq.<value>
+function _rtJoinChannel(table) {
+  const topic   = 'realtime:public:' + table + ':org_id=eq.' + TENANT.ORG_UUID;
+  const joinRef = String(++_rtRef);
+  _rtChannels[table] = { topic, joinRef, joined: false };
   _rtSend({
-    topic:   _rtTopic,
+    topic,
     event:   'phx_join',
     payload: {
       // Supabase Realtime v1 understands { user_token } for RLS; we pass the
       // anon key so RLS policies that check auth.role() = 'anon' apply.
       user_token: SB_KEY
     },
-    ref: _rtJoinRef
+    ref: joinRef
   });
+}
+
+function _rtLookupChannel(topic) {
+  for (const table of Object.keys(_rtChannels)) {
+    if (_rtChannels[table].topic === topic) return { table, chan: _rtChannels[table] };
+  }
+  return null;
 }
 
 function _rtSendHeartbeat() {
@@ -159,21 +170,26 @@ function _rtSend(obj) {
 function _rtOnMessage(ev) {
   let msg;
   try { msg = JSON.parse(ev.data); } catch (e) { return; }
-  if (!msg || msg.topic !== _rtTopic) return;
+  if (!msg) return;
+
+  const found = _rtLookupChannel(msg.topic);
+  if (!found) return;
+  const { table, chan } = found;
 
   // Channel join ack
-  if (msg.event === 'phx_reply' && msg.ref === _rtJoinRef) {
+  if (msg.event === 'phx_reply' && msg.ref === chan.joinRef) {
     if (msg.payload && msg.payload.status === 'ok') {
-      _rtLog('info', 'joined schedule channel');
+      chan.joined = true;
+      _rtLog('info', 'joined ' + table + ' channel');
     } else {
-      _rtLog('error', 'join failed: ' + JSON.stringify(msg.payload));
+      _rtLog('error', 'join failed (' + table + '): ' + JSON.stringify(msg.payload));
     }
     return;
   }
 
   // Error frames
   if (msg.event === 'phx_error' || msg.event === 'phx_close') {
-    _rtLog('warn', 'channel ' + msg.event);
+    _rtLog('warn', 'channel ' + msg.event + ' (' + table + ')');
     return;
   }
 
@@ -195,7 +211,65 @@ function _rtOnMessage(ev) {
 
   if (evType !== 'INSERT' && evType !== 'UPDATE' && evType !== 'DELETE') return;
   _rtLastEventAt = Date.now();
-  _rtApplyChange(evType, record, oldRec);
+
+  if (table === 'schedule') {
+    _rtApplyChange(evType, record, oldRec);
+  } else if (table === 'leave_requests') {
+    _rtApplyLeaveChange(evType, record, oldRec);
+  }
+}
+
+// ── Merge leave_requests changes into in-memory list ─────────
+// v3.4.4: when another supervisor approves / rejects / archives a leave
+// request, reflect it live so stale state doesn't block decisions.
+function _rtApplyLeaveChange(type, record, oldRec) {
+  if (typeof leaveRequests === 'undefined') return;
+
+  const id = (record && record.id) || (oldRec && oldRec.id);
+  if (!id) return;
+
+  if (type === 'DELETE') {
+    const idx = leaveRequests.findIndex(r => String(r.id) === String(id));
+    if (idx >= 0) leaveRequests.splice(idx, 1);
+  } else {
+    if (!record) return;
+    // Honour the current Show Archived toggle — if hidden and this row became
+    // archived, drop it; if visible and a new row arrives, append.
+    const showArchived = typeof showArchivedLeave !== 'undefined' && showArchivedLeave;
+    const idx = leaveRequests.findIndex(r => String(r.id) === String(id));
+    if (idx >= 0) {
+      if (!showArchived && record.archived) {
+        leaveRequests.splice(idx, 1);
+      } else {
+        leaveRequests[idx] = Object.assign({}, leaveRequests[idx], record);
+      }
+    } else {
+      if (showArchived || !record.archived) {
+        leaveRequests.push(record);
+        leaveRequests.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      }
+    }
+  }
+
+  if (typeof updateLeaveBadge === 'function') updateLeaveBadge();
+
+  // Re-render Leave page if it's currently open; otherwise just leave the
+  // in-memory list fresh for next open.
+  if (typeof currentPage !== 'undefined' && currentPage === 'leave') {
+    if (typeof renderLeave === 'function') renderLeave();
+    if (typeof leaveViewMode !== 'undefined' && leaveViewMode === 'calendar' &&
+        typeof renderLeaveCalendar === 'function') renderLeaveCalendar();
+  }
+
+  const cue = document.getElementById('sync-status');
+  if (cue) {
+    cue.textContent = '⇣ Live update';
+    cue.style.display = '';
+    cue.style.background = 'var(--blue-lt)';
+    cue.style.color      = 'var(--blue)';
+    clearTimeout(cue._rtTimer);
+    cue._rtTimer = setTimeout(() => { cue.style.display = 'none'; }, 2000);
+  }
 }
 
 // ── Merge into STATE ─────────────────────────────────────────
