@@ -49,6 +49,10 @@
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
 <script src="scripts/analytics.js"></script>
+<script src="scripts/flags.js"></script>
+<script src="scripts/permission-matrix.js"></script>
+<script src="scripts/permissions.js"></script>
+<script src="scripts/project-hours.js"></script>
 <script src="scripts/utils.js"></script>
 <script src="scripts/supabase.js"></script>
 <script src="scripts/roster.js"></script>
@@ -2461,5 +2465,12 @@ const eqAgent = (function() {
 
 <!-- TAFE holidays modal -->
 <div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addTafeHoliday()">Add range</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-tafe-holidays')">Done</button></div></div></div>
+
+<!-- Project Hours panel (Phase 1, gated by feat_project_hours_v1 + EQ_PERMS.can('ph.view_dashboard')) -->
+<div id="project-hours-panel" hidden style="padding:24px; max-width:1200px; margin:0 auto; font-family:'Plus Jakarta Sans',system-ui,sans-serif">
+  <h2 style="margin:0 0 4px; font-size:22px; font-weight:700; letter-spacing:-0.01em">Project Hours</h2>
+  <p style="margin:0 0 20px; color:#666666; font-size:13px">Burn-down for sites you've ticked for hours tracking.</p>
+  <div id="project-hours-content"></div>
+</div>
 </body>
 </html>
