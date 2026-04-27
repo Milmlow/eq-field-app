@@ -381,14 +381,14 @@ JWT, where RLS and the frontend can read it.
     return allowed.indexOf(permKey) !== -1;
   }
 
-  window.EQPerms = { can: can };
+  window.EQ_PERMS = { can: can };
 })();
 ```
 
 Usage at every UI gate:
 
 ```javascript
-if (window.EQPerms && window.EQPerms.can('ph.view_dashboard')) {
+if (window.EQ_PERMS && window.EQ_PERMS.can('ph.view_dashboard')) {
   renderProjectHoursTab();
 }
 ```
@@ -417,7 +417,7 @@ auditable. Confirm this is the model you want.
 - [ ] Aggregation query verified against real timesheet data — column names
       confirmed, hours sum matches manual calculation on a test site
 - [ ] Project-hours UI gated by both `EQ_FLAGS.isEnabled('feat_project_hours_v1')`
-      *and* `EQPerms.can('ph.view_dashboard')`
+      *and* `EQ_PERMS.can('ph.view_dashboard')`
 
 **Role system (5-tier)**
 - [ ] Permission matrix completed in
@@ -430,8 +430,8 @@ auditable. Confirm this is the model you want.
 - [ ] `verify-pin.js` issues Supabase-native JWT with `app_metadata.eq_role`
       and `app_metadata.tenant_id`
 - [ ] `scripts/core/permission-matrix.js` (matrix export) + `scripts/core/permissions.js`
-      (`EQPerms.can()` helper) shipped
-- [ ] Existing UI gates that check `role === 'supervisor'` migrated to `EQPerms.can(...)`
+      (`EQ_PERMS.can()` helper) shipped
+- [ ] Existing UI gates that check `role === 'supervisor'` migrated to `EQ_PERMS.can(...)`
       (do NOT remove the `role` field from session — keep it as a fallback)
 
 **Verification**
