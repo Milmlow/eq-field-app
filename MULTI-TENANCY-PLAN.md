@@ -148,7 +148,7 @@ Create `scripts/flags.js` (loaded after `scripts/analytics.js` in `index.html`):
     return fallback;
   }
 
-  window.EQFlags = { isEnabled: isEnabled, variant: variant };
+  window.EQ_FLAGS = { isEnabled: isEnabled, variant: variant };
 })();
 ```
 
@@ -182,13 +182,13 @@ regresses.
 
 ```javascript
 // In whatever file renders the supervisor nav / dashboard
-if (window.EQFlags && window.EQFlags.isEnabled('feat_project_hours_v1')) {
+if (window.EQ_FLAGS && window.EQ_FLAGS.isEnabled('feat_project_hours_v1')) {
   renderProjectHoursTab();   // new code — does not exist yet
 }
 
 // In any new query/aggregation module (e.g. scripts/project-hours.js)
 function loadProjectHours(orgId) {
-  if (!window.EQFlags || !window.EQFlags.isEnabled('feat_project_hours_v1')) {
+  if (!window.EQ_FLAGS || !window.EQ_FLAGS.isEnabled('feat_project_hours_v1')) {
     return Promise.resolve(null);
   }
   // ...implementation
@@ -416,7 +416,7 @@ auditable. Confirm this is the model you want.
       eq-solves-field Supabase (defaults safe, no rows currently tracking)
 - [ ] Aggregation query verified against real timesheet data — column names
       confirmed, hours sum matches manual calculation on a test site
-- [ ] Project-hours UI gated by both `EQFlags.isEnabled('feat_project_hours_v1')`
+- [ ] Project-hours UI gated by both `EQ_FLAGS.isEnabled('feat_project_hours_v1')`
       *and* `EQPerms.can('ph.view_dashboard')`
 
 **Role system (5-tier)**
