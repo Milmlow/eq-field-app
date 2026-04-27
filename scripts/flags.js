@@ -19,8 +19,13 @@
   // means "feature does not exist for this user" — the safe failure
   // mode for any flag that gates new UI or DB queries.
   var DEFAULTS = {
-    'feat_project_hours_v1': false,
-    // Forward-looking — wired up when Phase 2 fires:
+    // 2026-04-27 — flipped on by default while PostHog is unconfigured.
+    // EQ_PERMS.can('ph.view_dashboard') still gates visibility to
+    // supervisors only, so this is not "everyone sees it" — it's
+    // "supervisors see it without needing a PostHog flag". When PostHog
+    // is wired up, set this back to false and rely on the flag.
+    'feat_project_hours_v1': true,
+    // Forward-looking — stay false until Phase 2 fires:
     'mt_tenant_resolver_v2': false,
     'mt_rls_strict':         false,
     'mt_self_serve_signup':  false
