@@ -114,7 +114,7 @@ exports.handler = async (event) => {
     }
 
     const payload = {
-      from: 'Leave Request <noreply@eq.solutions>',
+      from: process.env.EMAIL_FROM || 'Leave Request <noreply@eq.solutions>',
       to: toArr,
       subject,
       html

@@ -124,7 +124,7 @@ function openAddJobNumber() {
 
 function editJobNumber(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const j = jobNumbers.find(x => x.id === id);
+  const j = jobNumbers.find(x => String(x.id) === String(id));
   if (!j) return;
   document.getElementById('jn-edit-id').value     = id;
   document.getElementById('jn-number').value      = j.number      || '';
@@ -163,7 +163,7 @@ async function saveJobNumber() {
     if (editId) {
       await sbFetch('job_numbers?id=eq.' + editId, 'PATCH', row);
       // v3.4.21: id is a uuid string — do NOT parseInt
-      const existing = jobNumbers.find(j => j.id === editId);
+      const existing = jobNumbers.find(j => String(j.id) === String(editId));
       if (existing) Object.assign(existing, row);
       showToast(`${number} updated`);
     } else {
