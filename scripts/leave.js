@@ -394,7 +394,7 @@ async function _performLeaveSubmit(row) {
 
 function openLeaveRespond(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const req = leaveRequests.find(r => r.id === id);
+  const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
 
   document.getElementById('leave-respond-id').value    = id;
@@ -444,7 +444,7 @@ async function respondLeave(status) {
   // v3.4.21: id is a uuid string — do NOT parseInt (was producing NaN on uuid, silent fail)
   const id   = document.getElementById('leave-respond-id').value;
   const note = document.getElementById('leave-response-note').value.trim();
-  const req  = leaveRequests.find(r => r.id === id);
+  const req  = leaveRequests.find(r => String(r.id) === String(id));
 
   // A01-04: Block self-approval
   if (req && req.requester_name === currentManagerName && status === 'Approved') {
@@ -592,7 +592,7 @@ async function writeLeaveToSchedule(req) {
 
 async function archiveLeaveRequest(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const req = leaveRequests.find(r => r.id === id);
+  const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
   try {
     await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: true });
@@ -609,7 +609,7 @@ async function archiveLeaveRequest(id) {
 
 async function unarchiveLeaveRequest(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  const req = leaveRequests.find(r => r.id === id);
+  const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
   try {
     await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: false });
@@ -626,7 +626,7 @@ async function unarchiveLeaveRequest(id) {
 // themselves (matched via the auth-set sessionStorage name) or any supervisor.
 // Uses modal-confirm so people can't tap past it by accident on a small screen.
 async function withdrawLeaveRequest(id) {
-  const req = leaveRequests.find(r => r.id === id);
+  const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
   if (req.status !== 'Pending') { showToast('Only pending requests can be withdrawn'); return; }
   const loggedInName = sessionStorage.getItem('eq_logged_in_name') || '';
@@ -712,7 +712,7 @@ async function toggleShowArchived() {
 // ── Resend email ──────────────────────────────────────────────
 
 async function resendLeaveEmail(id) {
-  const req = leaveRequests.find(r => r.id === id);
+  const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) { showToast('Request not found'); return; }
   showToast('Resending email…');
   await triggerLeaveEmail('new_request', req);
