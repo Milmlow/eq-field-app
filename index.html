@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.35'; // cache-buster — bump on icon changes
+    var v = '3.4.37'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -189,8 +189,43 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.35
+  EQ Solves — Field  v3.4.37
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.37  (lift eq/demo exclusion on token mint)
+  ────────────────────────────────────────────────────────────
+  • auth.js: removed the `!== 'eq' && !== 'demo'` gate around the
+    verify-pin call in three places (gate login, restore-from-rawLocal,
+    legacy eq_remember_token restore). All three branches now mint a
+    session token unconditionally, so eq tenant (eq-solves-field)
+    can finally call /netlify/functions/send-email.
+  • Required: eq-solves-field Netlify env vars must match the eq
+    Supabase app_config codes — STAFF_CODE='demo', MANAGER_CODE='demo1234'.
+    SKS env vars stay STAFF_CODE='2026', MANAGER_CODE='SKSNSW'.
+  • Architecture note: PINs now live in TWO places — Supabase
+    app_config (used by the local gate check) and Netlify env vars
+    (used by verify-pin). Future cleanup: have verify-pin read
+    Supabase app_config directly so there's one source of truth.
+
+  CHANGES IN v3.4.36  (PIN auth simplified — plaintext compare via env vars)
+  ────────────────────────────────────────────────────────────
+  • verify-pin.js: replaced HMAC-hash PIN compare with plaintext
+    `code === STAFF_CODE` against `process.env.STAFF_CODE` /
+    `process.env.MANAGER_CODE`. Removes the brittle salt+hash chain
+    that kept silently breaking when env vars and hardcoded fallbacks
+    drifted across the two Netlify projects. SECRET_SALT is still used
+    for session-token signing — that stays.
+  • auth.js: demo gate now mints a server-side session token via
+    verify-pin after successful local check, so demo can call
+    /netlify/functions/send-email and other authenticated endpoints.
+    Lets Royce keep CC'ing his real email during dev to verify the
+    leave-email flow end-to-end.
+  • Required env vars per Netlify project:
+    - sks-nsw-labour:  STAFF_CODE='2026',  MANAGER_CODE='SKSNSW'
+    - eq-solves-field: STAFF_CODE='demo',  MANAGER_CODE='demo1234'
+  • Cruft env vars now safe to delete on both projects after verify:
+    SECRET_SALT, STAFF_HASH, MANAGER_HASH,
+    STAFF_HASH_OVERRIDE, MANAGER_HASH_OVERRIDE.
 
   CHANGES IN v3.4.35  (PostHog custom events — Royce on leave)
   ────────────────────────────────────────────────────────────
@@ -954,7 +989,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.35</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.37</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>

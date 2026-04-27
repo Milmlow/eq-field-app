@@ -35,13 +35,11 @@ function corsHeaders(event) {
   };
 }
 
-// ── PIN hashing ──────────────────────────────────────────────
-function hashCode(code) {
-  return crypto.createHmac('sha256', SECRET_SALT).update(code).digest('hex');
-}
-
-const STAFF_HASH   = '6c0d930698417257c42bf6e4388e32764e601829d03d7596262f24e4c12991a7';
-const MANAGER_HASH = '80b761e2be63fad0874dff5b4bbb3a2bf321f8bd65a806a97a6073d0dc9cd0f6';
+// ── PIN codes (plaintext, from env vars per tenant) ──────────
+// Each Netlify project sets STAFF_CODE / MANAGER_CODE for its tenant.
+// SECRET_SALT above is still used for session-token signing (see signToken).
+const STAFF_CODE   = process.env.STAFF_CODE;
+const MANAGER_CODE = process.env.MANAGER_CODE;
 
 // ── Rate limiting (in-memory, best-effort) ───────────────────
 const attempts = {};
@@ -131,10 +129,13 @@ exports.handler = async (event) => {
 
     if (!code) return { statusCode: 400, headers, body: JSON.stringify({ valid: false, role: null }) };
 
-    const codeHash = hashCode(code);
+    if (!STAFF_CODE || !MANAGER_CODE) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Server misconfigured — missing STAFF_CODE or MANAGER_CODE' }) };
+    }
+
     let role = null;
-    if (codeHash === STAFF_HASH) role = 'staff';
-    else if (codeHash === MANAGER_HASH) role = 'supervisor';
+    if (code === STAFF_CODE) role = 'staff';
+    else if (code === MANAGER_CODE) role = 'supervisor';
 
     if (role) {
       record.count = 0;

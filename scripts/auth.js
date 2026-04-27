@@ -202,11 +202,14 @@ async function checkPin() {
       } catch (e) {}
       // ── Mint a server-side session token for protected features ──
       // The local code-gate doesn't talk to the server, so features like
-      // EQ Agent (which call Netlify functions) have nothing to authenticate
-      // with. Fire-and-forget the same code to verify-pin, which knows the
-      // SKS PIN hashes and will return a signed 7-day session token. Failures
-      // are silent — core app functionality doesn't depend on this.
-      if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
+      // send-email and EQ Agent (which call Netlify functions) have nothing
+      // to authenticate with. Fire-and-forget the same code to verify-pin,
+      // which compares against STAFF_CODE/MANAGER_CODE env vars per-tenant
+      // and returns a signed 7-day session token. Failures are silent —
+      // core app functionality doesn't depend on this.
+      // v3.4.37: lifted eq/demo exclusion — both tenants now have Netlify
+      // backends and need tokens for send-email to work.
+      {
         (async () => {
           try {
             const resp = await fetch('/.netlify/functions/verify-pin', {
@@ -247,6 +250,29 @@ async function checkPin() {
       sessionStorage.setItem(ACCESS_KEY, '1');
       sessionStorage.setItem('eq_logged_in_name', name);
       if (role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+      // Mint a server-side session token so demo can call protected
+      // endpoints (send-email etc). Demo only — eq tenant has no backend.
+      if (TENANT.ORG_SLUG === 'demo') {
+        (async () => {
+          try {
+            const resp = await fetch('/.netlify/functions/verify-pin', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ code: val, name, remember: false })
+            });
+            const data = await resp.json();
+            if (data && data.valid && data.sessionToken) {
+              localStorage.setItem('eq_agent_token', data.sessionToken);
+              sessionStorage.setItem('eq_session_token', data.sessionToken);
+              console.info('EQ[auth] demo agent token minted');
+            } else {
+              console.warn('EQ[auth] demo agent token NOT minted — verify-pin returned', data);
+            }
+          } catch (e) {
+            console.warn('EQ[auth] demo agent token mint failed:', e && e.message || e);
+          }
+        })();
+      }
       document.getElementById('access-gate').classList.add('hidden');
       document.getElementById('gate-pin').value = '';
       initApp();
@@ -322,7 +348,7 @@ async function checkAccess() {
         // Re-mint a server-side session token for EQ Agent etc.
         // Only possible if the stored payload includes the code (newer
         // logins do; older ones won't until the user logs in again).
-        if (p.code && TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
+        if (p.code) {
           (async () => {
             try {
               const resp = await fetch('/.netlify/functions/verify-pin', {
@@ -352,7 +378,7 @@ async function checkAccess() {
     }
   } catch (e) {}
 
-  if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
+  {
     const token = localStorage.getItem('eq_remember_token');
     if (token) {
       try {
