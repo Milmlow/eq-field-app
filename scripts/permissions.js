@@ -25,9 +25,12 @@
 
   // Resolve current role. Order of preference:
   //   1. JWT app_metadata.eq_role  (Phase 2 onward — not yet present)
-  //   2. sessionStorage.eq_auto_admin === '1'  (today: supervisor)
-  //   3. sessionStorage.eq_session_token present (today: employee)
-  //   4. Otherwise null (logged out — no permissions)
+  //   2. window.isManager === true  (today: supervisor, set durably by
+  //      auth.js after login and persists for the page lifetime)
+  //   3. sessionStorage.eq_auto_admin === '1'  (today: brief one-shot
+  //      window between login and the auto-admin trigger consume; rare)
+  //   4. sessionStorage.eq_session_token present (today: employee)
+  //   5. Otherwise null (logged out — no permissions)
   function getRole() {
     // Phase 2 path — read from a parsed JWT if auth.js exposes one.
     try {
@@ -37,7 +40,15 @@
       }
     } catch (_) { /* noop */ }
 
-    // Today path — derive from existing sessionStorage flags.
+    // Today path — primary check is the `isManager` global declared in
+    // app-state.js and flipped true by index.html after a supervisor
+    // PIN entry. Persists for the page lifetime, so EQ_PERMS.can() stays
+    // accurate after the one-shot eq_auto_admin flag is consumed.
+    try {
+      if (typeof isManager !== 'undefined' && isManager === true) return 'supervisor';
+    } catch (_) { /* isManager may be temporal-dead-zone if loaded too early */ }
+
+    // Login moment, before isManager is set.
     try {
       if (sessionStorage.getItem('eq_auto_admin') === '1') return 'supervisor';
       if (sessionStorage.getItem('eq_session_token'))      return 'employee';

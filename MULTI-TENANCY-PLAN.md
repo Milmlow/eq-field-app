@@ -431,8 +431,11 @@ auditable. Confirm this is the model you want.
       and `app_metadata.tenant_id`
 - [ ] `scripts/core/permission-matrix.js` (matrix export) + `scripts/core/permissions.js`
       (`EQ_PERMS.can()` helper) shipped
-- [ ] Existing UI gates that check `role === 'supervisor'` migrated to `EQ_PERMS.can(...)`
-      (do NOT remove the `role` field from session — keep it as a fallback)
+- [ ] Existing `isManager` global **stays** — `EQ_PERMS` reads it as the
+      primary today-path role signal. New code uses `EQ_PERMS.can(...)` directly.
+      Legacy `isManager` checks migrate opportunistically (when touching a
+      file for other reasons), **not** as a sweep — there are 97 occurrences
+      across `scripts/` + `index.html`, more than the rest of Phase 1 combined
 
 **Verification**
 - [ ] Manually verified per role: log in as each of the 5 roles, confirm only
