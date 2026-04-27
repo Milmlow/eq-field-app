@@ -260,7 +260,7 @@ async function submitJournalEntry() {
 async function toggleJournalShared(entryId, nextShared) {
   try {
     await sbFetch('apprentice_journal?id=eq.' + entryId, 'PATCH', { shared: !!nextShared });
-    const idx = apprenticeJournal.findIndex(j => j.id === entryId);
+    const idx = apprenticeJournal.findIndex(j => String(j.id) === String(entryId));
     if (idx >= 0) apprenticeJournal[idx].shared = !!nextShared;
     showToast(nextShared ? 'Shared ✓' : 'Back to private ✓');
     if (activeApprenticeId) renderApprenticeProfile(activeApprenticeId);

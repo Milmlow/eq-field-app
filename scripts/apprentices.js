@@ -375,7 +375,7 @@ async function removeCustomCompetency(profileId, compId) {
   const profile = apprenticeProfiles.find(p => String(p.id) === String(profileId));
   if (!profile) return;
   const list = getCustomCompetencies(profile);
-  const entry = list.find(c => c.id === compId);
+  const entry = list.find(c => String(c.id) === String(compId));
   if (!entry) return;
   if (!confirm('Remove "' + entry.name + '" from this passport? Ratings for this skill will be cleared.')) return;
 
@@ -741,7 +741,7 @@ function renderInboundAsksCard() {
   inbox.forEach(req => {
     const when = new Date(req.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
     const promptPreview = req.prompt ? (req.prompt.length > 60 ? req.prompt.slice(0, 60) + '…' : req.prompt) : 'General check-in';
-    const profile = apprenticeProfiles.find(p => p.id === req.apprentice_id);
+    const profile = apprenticeProfiles.find(p => String(p.id) === String(req.apprentice_id));
     if (!profile) return;
     const name = getPersonNameById(profile.person_id);
     html += '<button onclick="openFeedbackForm(' + profile.id + ',\'' + esc(name) + '\',\'' + esc(req.id) + '\')" style="background:white;border:1px solid #C7D2FE;border-radius:10px;padding:10px 14px;text-align:left;cursor:pointer;font-family:inherit;min-width:220px;transition:transform .1s" onmouseover="this.style.transform=\'translateY(-1px)\'" onmouseout="this.style.transform=\'\'">';
@@ -1057,7 +1057,7 @@ async function resolveFollowUp(feedbackId, profileId) {
       resolved_by: currentManagerName || null,
     });
     // Update in-memory
-    const idx = feedbackEntries.findIndex(f => f.id === feedbackId);
+    const idx = feedbackEntries.findIndex(f => String(f.id) === String(feedbackId));
     if (idx >= 0) {
       feedbackEntries[idx].resolved_at = new Date().toISOString();
       feedbackEntries[idx].resolution_note = note && note.trim() ? note.trim() : null;
@@ -1341,7 +1341,7 @@ function renderFeedbackTab(profile, personName) {
     return html;
   }
   entries.forEach(entry => {
-    const comp = competencies.find(c => c.id === entry.competency_id);
+    const comp = competencies.find(c => String(c.id) === String(entry.competency_id));
     const dateStr = new Date(entry.feedback_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
     html += '<div class="roster-card" style="padding:16px 18px;margin-bottom:10px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">';
@@ -1799,7 +1799,7 @@ function openFeedbackForm(profileId, personName, requestId) {
   const bannerEl = document.getElementById('fb-request-banner');
   if (bannerEl) {
     if (requestId) {
-      const req = feedbackRequests.find(r => r.id === requestId);
+      const req = feedbackRequests.find(r => String(r.id) === String(requestId));
       if (req) {
         let banner = '<div style="background:#EEF2FF;border-left:4px solid var(--purple);padding:10px 12px;border-radius:4px;margin-bottom:12px">';
         banner += '<div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Requested by ' + esc(req.requested_by || 'apprentice') + '</div>';
@@ -2059,10 +2059,10 @@ async function handleFeedbackRequestDeepLink() {
       showToast('Unlock supervision to respond to this request');
       return;
     }
-    const req = (feedbackRequests || []).find(r => r.id === reqId);
+    const req = (feedbackRequests || []).find(r => String(r.id) === String(reqId));
     if (!req) { showToast('That feedback request is no longer available'); return; }
     if (req.completed_at) { showToast('Already completed — thanks 👍'); return; }
-    const profile = apprenticeProfiles.find(p => p.id === req.apprentice_id);
+    const profile = apprenticeProfiles.find(p => String(p.id) === String(req.apprentice_id));
     if (!profile) return;
     const personName = getPersonNameById(profile.person_id);
     activeApprenticeId = profile.id;
