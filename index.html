@@ -1117,7 +1117,8 @@
     <div class="filter-row">
       <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="contacts-search" placeholder="Search contacts…" oninput="renderContacts()"></div>
       <select class="filter-select" id="contacts-group" onchange="renderContacts()"><option value="">All Groups</option><option value="Direct">⚡ Direct</option><option value="Apprentice">🎓 Apprentice</option><option value="Labour Hire">🔧 Labour Hire</option></select>
-      <button class="btn btn-secondary btn-sm" onclick="exportContactsCSV()" style="margin-left:auto">↓ CSV</button>
+      <button class="btn btn-secondary btn-sm" onclick="openAddManager()" style="margin-left:auto">＋ Add Contact</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportContactsCSV()">↓ CSV</button>
     </div>
     <div id="contacts-content"></div>
   </div>
