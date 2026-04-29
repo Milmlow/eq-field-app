@@ -77,7 +77,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `index.html` polling / SW registration          | ✓    | Pass 2 — finding #9                     |
 | `supabase/functions/tafe-weekly-fill/index.ts`  | ✓    | Pass 4 — 4 findings (#13-16, all 🟡/🟢) |
 | `scripts/leave.js`                              | ✓    | Pass 5 — findings #17-19 (XSS gap fix)  |
-| `scripts/roster.js`                             |      |                                          |
+| `scripts/roster.js`                             | ✓    | Pass 6 — findings #20-21 (fillWeek fix) |
 | `scripts/people.js`                             |      |                                          |
 | `scripts/managers.js`                           |      |                                          |
 | `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
@@ -257,4 +257,24 @@ A user with the published anon key (visible in `scripts/app-state.js`) could ins
 ### 🟢 19. Email error toasts may leak the recipient address · 📝 documented
 **Where**: `scripts/leave.js` line 837: `showToast('Email failed: ' + (data.message || JSON.stringify(data)));`.
 **Symptom**: If the Resend / send-email function returns an error response containing the recipient email in the error body, the UI toast displays it. Information leak only at the supervisor's screen — they're allowed to see it. Cosmetic.
+
+
+---
+
+## Pass 6 — `scripts/roster.js` review (iteration 5)
+
+### 🟡 20. fillWeek diverged from updateCell on four post-write behaviours · 🔧 fixed in v3.4.52
+**Where**: `scripts/roster.js` `fillWeek` (line 298).
+**Symptom**: The "⇒wk" Fill Mon-Fri button creates a new schedule entry (when none exists for this person/week) and copies Monday's value across Tue-Fri. Compared to the cell-by-cell `updateCell` path:
+  1. **scheduleIndex not seeded** — new entries pushed to `STATE.schedule` but not added to `STATE.scheduleIndex`. The index is used elsewhere for O(1) lookups (e.g. realtime live-merge, presence rendering). Brand-new-person fillWeek would leave a `STATE.schedule` row that's invisible to index consumers until a full refresh.
+  2. **updateTopStats not called** — top-of-page badges (X active / Y on leave / Z total) go stale until next render trigger.
+  3. **No cross-page render** — editor → roster/dashboard navigation right after a fill shows yesterday's data until something else triggers a refresh.
+  4. **No auditLog entry** — manual cell edits get audited (`updateCell` line 382), but bulk fills weren't logged. Compliance/forensics gap.
+**Fix**: aligned fillWeek's post-write block with updateCell — seed scheduleIndex on new entries, call updateTopStats(), re-render roster/dashboard if currently visible, write an audit entry (`Filled Mon–Fri with "VAL"`, category=Roster), bump updateLastUpdated.
+**Behaviour preservation**: visual outcome is identical for the common case (user stays on editor after clicking Fill — editor re-renders the same way). Fixes only manifest when (a) it's a brand-new person without prior schedule, or (b) the user navigates away after the fill.
+
+### 🟢 21. Editor renderEditor: input attribute coupling between roster.js and presence.js · 📝 documented
+**Where**: `scripts/roster.js` `renderEditor` line 444+ (data attributes on `<input>`s); `scripts/presence.js` `_presenceRender` (CSS selector matching those attributes).
+**Symptom**: presence.js builds a CSS selector `#editor-content input[data-name="${CSS.escape(pName)}"][data-week="${CSS.escape(pWeek)}"][data-day="${pDay}"]` that depends on roster.js emitting matching `data-name`, `data-week`, `data-day` attributes. If roster.js's emitter changes (renames data attributes, drops one), presence breaks silently — outline stops appearing without any error. No type system to catch this; only e2e testing or visual check would notice.
+**Severity**: 🟢 cosmetic. Worth adding a comment in both files cross-referencing the contract, or extracting the attribute names to a shared const. Documented for future hardening.
 

@@ -194,8 +194,34 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.51
+  EQ Solves — Field  v3.4.52
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.52  (fillWeek consistency: scheduleIndex + UI refresh + audit)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 6 (iteration 5 of overnight loop). Reviewed
+    scripts/roster.js. fillWeek (the "⇒wk" Fill Mon-Fri button)
+    diverged from updateCell in three ways:
+      1. New entry pushed to STATE.schedule but NOT seeded into
+         STATE.scheduleIndex, breaking the O(1) lookups that
+         depend on the index for the brand-new-person case.
+      2. No updateTopStats() call after the fill, so the
+         top-of-page badges (X active / Y on leave / Z total)
+         go stale until the next render trigger.
+      3. No cross-page render — switching from editor to roster
+         or dashboard right after a fill showed yesterday's data
+         until something else triggered a refresh.
+      4. No auditLog entry for the action — manual cell edits
+         are audited but bulk fills weren't.
+  • Fix: aligned fillWeek with updateCell's post-write pattern —
+    seeds scheduleIndex on new entries, calls updateTopStats(),
+    re-renders the roster/dashboard if currently visible, writes
+    an audit entry, and bumps updateLastUpdated. Behaviour-
+    preserving for the common case (Mon already entered, page
+    stays on editor — visual outcome identical), but fixes the
+    edge cases where the user navigates away or where the
+    scheduleIndex matters.
+  • Demo only.
 
   CHANGES IN v3.4.51  (leave email: defensive HTML escaping for record fields)
   ────────────────────────────────────────────────────────────
