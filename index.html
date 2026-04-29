@@ -194,8 +194,32 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.56
+  EQ Solves — Field  v3.4.57
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.57  (digest toggle: kill the optimistic-render race)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 11 (iteration 10 of overnight loop). Reviewed
+    scripts/digest-settings.js. toggleDigest had a subtle UX race:
+    after the user clicks a checkbox, code did:
+      1. mgr.digest_opt_in = nextVal  (optimistic STATE update)
+      2. renderDigestPanel()          (re-paint, fires fresh DB fetch)
+      3. await sbFetch PATCH          (commit to DB)
+    Step 2's fresh fetch could return BEFORE step 3's PATCH committed,
+    so the panel re-painted with stale "previous" data and the
+    checkbox visibly UNCHECKED for ~50-200ms before the next render
+    caught up. On flaky connections this could persist longer.
+  • The native <input type="checkbox"> already shows the new state
+    after the user clicks it (HTML default behaviour) — the
+    immediate renderDigestPanel call was REDUNDANT for the success
+    case. Now we only re-render in the catch block (rollback path)
+    to fix the checkbox state when the PATCH fails. Success path
+    leaves the native checkbox alone — no race, no flicker.
+  • Three other findings documented but not fixed (silent catch on
+    hydration, silent degradation if installWrap polling never
+    succeeds, defensive-XSS hardening on the m.id in onchange
+    handler — all 🟢 for current scale).
+  • Demo only.
 
   CHANGES IN v3.4.56  (audit.js: visible write failures + portable CSV export)
   ────────────────────────────────────────────────────────────
