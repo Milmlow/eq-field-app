@@ -190,8 +190,29 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.48
+  EQ Solves — Field  v3.4.49
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.49  (EQ tenant sync was completely broken — fix polling gate)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 2 finding. The EQ tenant had BOTH realtime
+    AND polling gated off, so two EQ supervisors editing the
+    same week would never see each other's changes until a page
+    reload. Realtime was un-gated in v3.4.47 but its postgres
+    publication was incomplete (see migrations/2026-04-30_eq_
+    realtime_publication.sql — additive migration committed but
+    NOT yet applied; Royce reviews on return). Polling was the
+    silent second half of the bug — `if (TENANT.ORG_SLUG ===
+    'eq' || TENANT.ORG_SLUG === 'demo') return;` in startPolling.
+    Both halves of the sync mechanism turned off for the same
+    tenant. Single-user demo never noticed.
+  • Fix: drop 'eq' from the polling gate; keep 'demo' (which
+    legitimately has no Supabase). Once Royce applies the
+    realtime publication migration, EQ has live updates AND
+    redundant 30s polling — belt and braces. If realtime has
+    issues, polling still catches up.
+  • Demo only. SKS prod's polling is correctly enabled
+    (TENANT.ORG_SLUG === 'sks' was never in the gate).
 
   CHANGES IN v3.4.48  (presence: fix focus/blur race + drop dead sendBeacon — DEMO ONLY)
   ────────────────────────────────────────────────────────────
