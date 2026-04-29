@@ -189,8 +189,30 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.42
+  EQ Solves — Field  v3.4.43
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.43  (Supervision: stop silently hiding unknown categories)
+  ────────────────────────────────────────────────────────────
+  • scripts/managers.js renderManagers: previous code did
+    `cats = catOrder.filter(cat => grouped[cat])`, which dropped
+    every supervisor whose category value wasn't in the predefined
+    catOrder list. Symptom on SKS prod: David Boyd (category =
+    something not in catOrder, e.g. 'Executive' typed before that
+    label was added in v3.4.42, or 'Director'/'GM'/etc.) appeared
+    in the Friday digest opt-in panel — which does its own fresh
+    DB fetch with no category filter — but was missing from the
+    main supervisors table directly below it. The bug class is
+    "filter-by-inclusion silently hides data": any new category
+    label added in the DB before catOrder was updated would vanish.
+  • Fix: render known categories in catOrder, then append any
+    unknown categories alphabetically at the end. Unknown bands
+    use the existing catColors fallback (#8494A7 grey) until the
+    next version adds a proper colour. No DB migration needed.
+  • This unblocks SKS — David Boyd will reappear immediately on
+    the next page load, in his own category band at the bottom,
+    so Royce can see his current category value and decide whether
+    to leave it or move him to Executive.
 
   CHANGES IN v3.4.42  (Supervision: Executive category)
   ────────────────────────────────────────────────────────────
