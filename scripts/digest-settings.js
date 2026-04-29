@@ -49,7 +49,13 @@
     }
     const prev = mgr.digest_opt_in;
     mgr.digest_opt_in = nextVal;          // optimistic
-    renderDigestPanel();                  // reflect immediately
+    // v3.4.57: removed the immediate renderDigestPanel() call here. The
+    // user's click already toggled the native <input type="checkbox">
+    // visually — re-rendering the whole panel was redundant for the
+    // success case AND raced the PATCH (renderDigestPanel does a fresh
+    // sbFetch; if that fetch returned BEFORE the PATCH committed, the
+    // checkbox visibly UNCHECKED for ~50-200ms). On failure path below
+    // we DO re-render to surface the rollback.
     try {
       await sbFetch(`managers?id=eq.${encodeURIComponent(idStr)}`, 'PATCH', { digest_opt_in: nextVal });
       if (typeof showToast === 'function') {
@@ -62,7 +68,7 @@
     } catch (e) {
       console.error('toggleDigest failed:', e);
       mgr.digest_opt_in = prev;
-      renderDigestPanel();
+      renderDigestPanel();              // re-render: native checkbox stuck on the wrong value, fix it
       if (typeof showToast === 'function') {
         showToast('Digest toggle failed — check that the digest migration has been applied.');
       }

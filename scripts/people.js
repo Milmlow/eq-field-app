@@ -278,7 +278,17 @@ function confirmRemove(id, name) {
 
 function removePerson(id, name) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  STATE.people   = STATE.people.filter(p => p.id !== id);
+  // v3.4.55: idempotency + id-coercion fix.
+  // — Early-return if the person is already gone from STATE.people. This
+  //   makes a double-tap on ✕ a no-op for the second click instead of firing
+  //   duplicate auditLog / showToast / deletePersonFromSB. Same bug class
+  //   as the leave-handlers in v3.4.54 (#24) and managers.removeManager in
+  //   v3.4.53 (#22).
+  // — String() coercion on both sides of the filter — managers.js had the
+  //   same bug pre-v3.4.53 where SKS bigint ids returned as strings made
+  //   the strict `!==` always true and the row lingered locally.
+  if (!STATE.people.some(p => String(p.id) === String(id))) return;
+  STATE.people   = STATE.people.filter(p => String(p.id) !== String(id));
   STATE.schedule = STATE.schedule.filter(s => s.name !== name);
 
   // BUG-003 FIX: Clear schedule index for this person
@@ -302,6 +312,32 @@ function removePerson(id, name) {
 }
 
 // ── Contacts render ───────────────────────────────────────────
+
+// v3.4.46: shared cell helpers used by both renderContacts() branches
+// (mobile cards + desktop table). Adding/changing an action button or
+// the no-phone fallback styling now updates one place instead of two.
+function _personActions(p) {
+  return `<button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
+    <button class="btn-icon" style="color:var(--red)" title="Remove"
+      data-pid="${p.id}" data-pname="${esc(p.name)}"
+      onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>`;
+}
+function _personPhone(p, size) {
+  if (!p.phone) {
+    return size === 'mobile'
+      ? '<span style="color:#EF4444;font-size:12px">No phone</span>'
+      : '<span style="color:#EF4444;font-size:11px">No phone</span>';
+  }
+  return size === 'mobile'
+    ? `<a href="tel:${esc(p.phone)}" style="color:var(--purple);font-weight:600;text-decoration:none;font-size:14px">${esc(p.phone)}</a>`
+    : `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>`;
+}
+function _personEmail(p, size) {
+  if (!p.email) return size === 'mobile' ? '' : '—';
+  return size === 'mobile'
+    ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(p.email)}</a>`
+    : `<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>`;
+}
 
 function setContactsSort(col) {
   if (contactsSort.col === col) {
@@ -383,23 +419,17 @@ function renderContacts() {
       if (!gp.length) return;
       html += `<div style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${gColors[g]};padding:10px 4px 6px">${g} (${gp.length})</div>`;
       gp.forEach(p => {
-        const phoneHtml = p.phone
-          ? `<a href="tel:${esc(p.phone)}" style="color:var(--purple);font-weight:600;text-decoration:none;font-size:14px">${esc(p.phone)}</a>`
-          : '<span style="color:#EF4444;font-size:12px">No phone</span>';
         html += `<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:4px">${esc(p.name)}${yearPill(p)}${todayBadges(p)}</div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              ${phoneHtml}
-              ${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(p.email)}</a>` : ''}
+              ${_personPhone(p, 'mobile')}
+              ${_personEmail(p, 'mobile')}
               ${p.agency ? `<span style="color:var(--ink-3);font-size:11px">· ${esc(p.agency)}</span>` : ''}
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
-            <button class="btn-icon" style="color:var(--red)" title="Remove"
-              data-pid="${p.id}" data-pname="${esc(p.name)}"
-              onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>
+            ${_personActions(p)}
           </div>
         </div>`;
       });
@@ -420,15 +450,10 @@ function renderContacts() {
       <tr>
         <td class="name-col">${esc(p.name)}</td>
         <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}${todayBadges(p)}</td>
-        <td class="phone-col">${p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : '<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
-        <td class="meta-col">${p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--purple);text-decoration:none">${esc(p.email)}</a>` : '—'}</td>
+        <td class="phone-col">${_personPhone(p, 'desktop')}</td>
+        <td class="meta-col">${_personEmail(p, 'desktop')}</td>
         <td class="meta-col">${p.agency || '—'}</td>
-        <td class="center" style="white-space:nowrap">
-          <button class="btn-icon" title="Edit" onclick="editPerson('${p.id}')">✎</button>
-          <button class="btn-icon" style="color:var(--red)" title="Remove"
-            data-pid="${p.id}" data-pname="${esc(p.name)}"
-            onclick="confirmRemove(this.dataset.pid, this.dataset.pname)">✕</button>
-        </td>
+        <td class="center" style="white-space:nowrap">${_personActions(p)}</td>
       </tr>`).join('')}
     </tbody>
   </table></div></div>`;

@@ -262,7 +262,16 @@ function updateOnlineStatus(forceOffline) {
   if (!banner) return;
   const offline = forceOffline === true || !navigator.onLine || !_sbOnline;
   if (offline) {
-    if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
+    // v3.4.50 — 'eq' lifted from this gate. The 'demo' tenant
+    // legitimately has no Supabase to be offline FROM (in-memory
+    // tenant short-circuits in loadTenantConfig), but the EQ tenant
+    // DOES write to Supabase (audit log, presence, schedule, leave
+    // requests) — those writes silently failing without a banner is
+    // the same class of bug as v3.4.49's polling gate. EQ users
+    // editing offline now see "⚠ No internet connection — changes
+    // are queued locally" so they know their edits will sync once
+    // the connection's back.
+    if (TENANT.ORG_SLUG === 'demo') {
       banner.classList.remove('show');
       return;
     }
