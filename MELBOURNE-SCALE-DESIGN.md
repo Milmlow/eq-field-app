@@ -241,4 +241,252 @@ Total: ~2 weeks of focused engineering for the schema migration alone. UI work t
 
 ---
 
-(Sections 2-7 added in subsequent loop iterations.)
+## Section 2 — Forecast view design
+
+### Why this is the headline feature
+
+Today EQ Field answers "where are my people THIS week?". Melbourne's spreadsheet (per the Reference table in BATTLE-TEST-2026-04-29.md) answers "where will my 577 people be deployed across 12+ projects over the next 12 months?". That's not a bigger version of the roster — it's a different shape of product. Adding the data-model from Section 1 without exposing it via a forecast UI gets you compliance gains (apprentice ratios) and that's it. The forecast view IS what makes the schema change earn its keep.
+
+### Wireframe (boxes-and-arrows, ASCII)
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Forecast · VIC Construction · 52 weeks ahead          [⇐ This week] [⇒ Roster]│
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Region [VIC ▼]  Status [Active ▼]  Employment [All ▼]  ⏳ Showing wks 18-30  │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Project              │ Wk18 │ Wk19 │ Wk20 │ Wk21 │ Wk22 │ Wk23 │ Wk24 │ … │
+│                      │ 04/05│ 11/05│ 18/05│ 25/05│ 01/06│ 08/06│ 15/06│   │
+├──────────────────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼───┤
+│ ▶ Airtrunk Shell L   │ 283  │ 305  │ 322  │ 322  │ 330  │ 345  │ 359  │ … │
+│    target            │ 300  │ 300  │ 330  │ 340  │ 340  │ 350  │ 360  │ … │
+│    delta             │ ⚠-17 │  +5  │  -8  │ ⚠-18 │ -10  │  -5  │  -1  │ … │
+├──────────────────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼───┤
+│ ▶ NEXTDC M3S4        │   0  │   0  │   0  │   0  │   0  │  12  │  18  │ … │
+│ ▶ MEL02 STACK        │  20  │  20  │  20  │  20  │  25  │  25  │  25  │ … │
+│ ▶ Darwin DC1 (D1S2)  │   0  │   0  │   8  │  15  │  20  │  20  │  20  │ … │
+│ ▶ DES (Design Office)│  15  │  15  │  16  │  16  │  16  │  16  │  18  │ … │
+├──────────────────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼───┤
+│ TOTAL deployed       │ 318  │ 340  │ 366  │ 373  │ 391  │ 418  │ 440  │ … │
+│ Total target         │ 350  │ 350  │ 380  │ 395  │ 395  │ 425  │ 450  │ … │
+│ Available pool       │ 410  │ 410  │ 410  │ 410  │ 410  │ 415  │ 415  │ … │
+│ Apprentice ratio     │ 3.4  │ 3.5  │ 3.6  │ 3.6  │ 3.5  │ 3.5  │ 3.4  │ … │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key elements**:
+
+- **Top bar** — region / status / employment filters (multi-select), week range nav (default: current + 12 ahead, expand on demand to 52).
+- **Project rows** with collapsed/expanded state. Expanded reveals `target` row (editable inline) and `delta` row (computed). Sites under each project nest inside the expand — clicking ▶ on Airtrunk shows its constituent sites (AIRTL-DC1, AIRTL-DC2, …).
+- **Cells** are the actual deployed headcount derived from `schedule` rows (count of distinct `person_id` whose schedule cell for the week names a site that belongs to this project).
+- **Delta row** highlights gaps with ⚠ when |delta| ≥ 10% of target — these are the "you'll be short next week" signals.
+- **Bottom rail** — TOTAL deployed, TOTAL target, available pool (people whose `employment_type` allows them to be deployed but who are not assigned this week), apprentice ratio (compliance number, surfaces here as well as on its own dashboard).
+- **Top right buttons** — "⇐ This week" jumps back to the current-week roster editor; "⇒ Roster" stays on a project to show its current-week roster filtered to that project's sites only.
+
+### Aggregation queries
+
+#### Actuals: project × week → headcount
+
+The schedule cells store a SITE abbreviation per day (e.g. `AIRT` in mon column means "this person is on Airtrunk on Monday"). A person is "deployed to a project this week" if ANY of their mon-fri cells reference a site that belongs to that project. Implemented as a CTE:
+
+```sql
+-- Helper view: unnest the 5-day cell array into one row per (person, week, day, site_abbr).
+-- Materialise this if the un-cached query is slow at scale; refresh on schedule writes.
+CREATE OR REPLACE VIEW v_schedule_cells AS
+  SELECT s.org_id, s.person_id, s.name, s.week,
+         day, abbr
+    FROM public.schedule s,
+         LATERAL (VALUES
+           ('mon', s.mon), ('tue', s.tue), ('wed', s.wed),
+           ('thu', s.thu), ('fri', s.fri))
+         AS d(day, abbr)
+   WHERE s.deleted_at IS NULL
+     AND abbr IS NOT NULL
+     AND abbr <> '';
+
+-- Forecast: project × week → distinct headcount
+SELECT
+  c.week,
+  p.id        AS project_id,
+  p.name      AS project_name,
+  count(DISTINCT c.person_id) AS actual_headcount
+FROM v_schedule_cells c
+JOIN public.sites si
+  ON si.org_id = c.org_id AND si.abbr = c.abbr AND si.deleted_at IS NULL
+JOIN public.projects p
+  ON p.id = si.project_id AND p.deleted_at IS NULL
+WHERE c.org_id = $1
+  AND c.week = ANY($2)              -- array of week keys e.g. ARRAY['04.05.26','11.05.26',…]
+GROUP BY 1, 2, 3
+ORDER BY p.name, c.week;
+```
+
+At Melbourne scale (~577 people × 52 weeks × ~12 projects) the un-cached query touches ~150k cell rows — fast (<200ms) on indexed columns, but every page load doing this is wasteful. Materialise:
+
+```sql
+CREATE MATERIALIZED VIEW mv_project_week_actuals AS
+  SELECT … (same SELECT as above without WHERE org_id) …;
+CREATE INDEX ON mv_project_week_actuals (org_id, week, project_id);
+
+-- Refresh after schedule writes via trigger OR every 5 min via pg_cron.
+-- Trigger is more responsive but expensive at write scale; cron is simpler.
+SELECT cron.schedule('refresh_project_week_actuals', '*/5 * * * *',
+  $$REFRESH MATERIALIZED VIEW CONCURRENTLY mv_project_week_actuals;$$);
+```
+
+#### Targets: new table
+
+Forecast targets per project per week are user input (project manager sets them); they're not derived. New table:
+
+```sql
+CREATE TABLE public.project_targets (
+  project_id     uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  week           text NOT NULL,                  -- 'DD.MM.YY' to match schedule.week
+  target_headcount integer NOT NULL CHECK (target_headcount >= 0),
+  notes          text,
+  set_by         text,                           -- manager_name who entered it
+  set_at         timestamptz DEFAULT now(),
+  PRIMARY KEY (project_id, week)
+);
+
+-- RLS: same shape as schedule — anon role read/write within own org.
+ALTER TABLE public.project_targets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "targets_select_org" ON public.project_targets
+  FOR SELECT USING (project_id IN (SELECT id FROM public.projects WHERE org_id = current_setting('request.jwt.claim.org_id', true)::uuid));
+-- (similar for INSERT/UPDATE/DELETE — see §3 for the org-scoping pattern)
+```
+
+#### The forecast cell value (target + actual + delta)
+
+Combined in one query for the UI:
+
+```sql
+SELECT
+  p.id                                 AS project_id,
+  p.name                               AS project_name,
+  weeks.week                           AS week,
+  COALESCE(a.actual_headcount, 0)      AS actual,
+  COALESCE(t.target_headcount, NULL)   AS target,
+  CASE WHEN t.target_headcount IS NULL THEN NULL
+       ELSE COALESCE(a.actual_headcount, 0) - t.target_headcount
+  END                                  AS delta
+FROM public.projects p
+CROSS JOIN unnest($2::text[]) AS weeks(week)        -- e.g. ARRAY['04.05.26','11.05.26',…]
+LEFT JOIN mv_project_week_actuals a
+       ON a.project_id = p.id AND a.week = weeks.week AND a.org_id = $1
+LEFT JOIN public.project_targets t
+       ON t.project_id = p.id AND t.week = weeks.week
+WHERE p.org_id = $1
+  AND p.status IN ('Active','Won','Tendering')
+  AND p.deleted_at IS NULL
+ORDER BY p.name, weeks.week;
+```
+
+Returns a row per (project, week) with NULL targets where none have been entered yet.
+
+### Empty-state UX
+
+A starter / SMB tenant just installing the upgrade will have:
+- 0 projects (haven't created any)
+- 0 targets
+
+Forecast view should NOT show an empty grid — that's user-hostile. Instead:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Forecast — get a 52-week view of your labour deployment                     │
+│                                                                              │
+│   Step 1: Create your first project                          [+ New project]│
+│   Step 2: Group your sites under a project                                  │
+│   Step 3: Set headcount targets for the next 12 weeks                       │
+│                                                                              │
+│   Why use this? Your roster shows "this week"; the forecast shows           │
+│   "where will I need 50 people in 6 months." Useful when you're tendering   │
+│   for a project that needs 30 sparkies in August — does my pool have that?  │
+│                                                                              │
+│  [Watch 90-second walkthrough]   [Skip — I'll do this later]                │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+After Step 1 (one project exists), the forecast grid renders with that project as the only row. After Step 3 (targets entered), the grid is fully populated. Each step removes itself from the empty-state checklist as it completes.
+
+### Navigation between current-week roster and forecast
+
+Today: roster page IS the current-week editor. There's no "future weeks" affordance beyond clicking ⟨ ⟩ to step a week at a time.
+
+After this lands, navigation looks like:
+
+```
+   Sidebar                     Current view
+   ┌────────────┐              ┌──────────────────────────┐
+   │ Dashboard  │              │ ROSTER                   │
+   │ My Schedule│              │ (week-by-week editor)    │
+   │ Calendar   │              │ ⟨ ⟩ to step weeks         │
+   │ Forecast ✨│ ─── click ──> [⇒ Forecast] zooms out    │
+   │ Contacts   │              └──────────────────────────┘
+   │ Supervision│                            ↑
+   │ Sites      │                            │ click a project row
+   │ Roster     │                            │
+   │ Timesheets │              ┌──────────────────────────┐
+   │ …          │              │ FORECAST                 │
+   └────────────┘              │ (project × week grid)    │
+                               │ filters, totals,         │
+                               │ apprentice ratio         │
+                               │ [⇐ This week] zooms back │
+                               └──────────────────────────┘
+```
+
+- New "Forecast" sidebar entry; ✨ badge on first introduction (clear after first visit).
+- Bidirectional zoom: ⇒ Forecast zooms out from current week, ⇐ This week zooms in.
+- Project row click → "current-week roster filtered to this project's sites" — same roster page, narrowed lens.
+- Cell click → drill-down panel showing the actual people deployed that week to that project.
+
+### Editing forecast targets inline
+
+Cells in the `target` row are editable:
+
+- Click cell → number input replaces the value.
+- Enter / blur → save target via PATCH on `project_targets`.
+- Tab → move to next week's target on the same project.
+- Shift+click range → "fill range with this value".
+- Right-click cell → context menu: "copy to all weeks", "extrapolate from last 4 weeks" (linear), "lock target" (prevents future edits without unlocking — nice for finalised contracts).
+
+### Mobile
+
+The 52-week grid does not fit on mobile. Mobile forecast view collapses to:
+
+```
+┌──────────────────────┐
+│ Forecast · VIC       │
+│ ⇄ Wk24 (15/06)       │ ← swipe left/right to change week
+├──────────────────────┤
+│ Airtrunk Shell L     │
+│   359 / target 360   │ ← red if delta ≥ 10%
+│   ─1                 │
+├──────────────────────┤
+│ NEXTDC M3S4          │
+│   18 / target 25     │
+│   ⚠ -7               │
+├──────────────────────┤
+│ TOTAL  402 / 425     │
+│ Apprentice ratio 3.4 │
+└──────────────────────┘
+```
+
+One week at a time, swipe to navigate. Same data, mobile-friendly density. Project supervisors on iPad / phone get the headline picture without horizontal scroll.
+
+### Effort
+
+| Step | Effort | Risk |
+|---|---|---|
+| `v_schedule_cells` view + `mv_project_week_actuals` | S | Low — one query, indexed |
+| `project_targets` table + RLS | S | Low — additive |
+| Forecast page React-equivalent (vanilla JS in this stack) | L | Medium — new render path, edit interactions |
+| Aggregation refresh strategy (cron vs trigger) | S | Low — cron simpler, latency 5 min |
+| Mobile layout | M | Low — separate small renderer |
+| Empty-state walkthrough | S | Low — static content |
+| Sidebar entry + navigation wiring | S | Low — additive |
+
+Total Section 2 surface: ~1-2 weeks of UI work + a few hours of SQL + materialised view setup.
+
+
