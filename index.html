@@ -189,8 +189,19 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.39
+  EQ Solves — Field  v3.4.40
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.40  (leave CC list — fix silent save no-op)
+  ────────────────────────────────────────────────────────────
+  • scripts/leave.js saveLeaveCCList: PATCH on a non-existent
+    app_config row returns 204 No Content with `return=minimal` —
+    not an error — so the previous catch-only localStorage fallback
+    never fired. Result: adding a CC recipient appeared to work in
+    the modal but reset to empty on the next page load. Now mirrors
+    the PATCH-then-POST pattern already used by saveTafeHolidays in
+    scripts/tafe.js, plus a localStorage cache mirror so a Supabase
+    blip can't drop an in-session list either.
 
   CHANGES IN v3.4.39  (id-coercion sweep + EMAIL_FROM wired up)
   ────────────────────────────────────────────────────────────

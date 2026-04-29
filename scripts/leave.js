@@ -43,10 +43,21 @@ async function loadLeaveCCList() {
 }
 
 async function saveLeaveCCList() {
+  // v3.4.40: PATCH on a non-existent app_config row returns 204 No Content
+  // (not an error) — the previous catch-only fallback meant the save
+  // silently no-op'd and the CC list reset on next page load. Mirror the
+  // PATCH-then-POST pattern from scripts/tafe.js saveTafeHolidays.
+  // NOTE: stored key is the literal 'leave_cc_list' — the 'eq.' in the
+  // PATCH query string is a PostgREST filter operator, not a namespace.
+  const payload = JSON.stringify(leaveCCList);
   try {
-    await sbFetch('app_config?key=eq.leave_cc_list', 'PATCH', { value: JSON.stringify(leaveCCList) });
+    const res = await sbFetch('app_config?key=eq.leave_cc_list', 'PATCH', { value: payload });
+    if (!res || (Array.isArray(res) && res.length === 0)) {
+      await sbFetch('app_config', 'POST', { key: 'leave_cc_list', value: payload });
+    }
+    try { localStorage.setItem('eq_leave_cc', payload); } catch (e) {}
   } catch (e) {
-    localStorage.setItem('eq_leave_cc', JSON.stringify(leaveCCList));
+    try { localStorage.setItem('eq_leave_cc', payload); } catch (e2) {}
   }
 }
 
