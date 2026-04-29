@@ -193,8 +193,24 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.44
+  EQ Solves — Field  v3.4.45
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.45  (single-source the version, add release script)
+  ────────────────────────────────────────────────────────────
+  • Sidebar version badge is now derived from APP_VERSION at
+    runtime instead of being a hard-coded literal — kills the
+    "I bumped the banner but forgot the badge" failure mode
+    that produced v3.4.44 as a follow-up commit.
+  • New scripts/release.mjs: `node scripts/release.mjs 3.4.45`
+    bumps APP_VERSION (scripts/app-state.js) AND CACHE (sw.js)
+    atomically. The SW cache name still has to live as a
+    literal in sw.js itself (importScripts has known SW-update
+    detection issues without a build step), but a script-driven
+    bump means the two refs can't drift again.
+  • What still needs manual editing per release: the CHANGES
+    block in this comment header. That's the changelog —
+    you write it with what's actually in the release.
 
   CHANGES IN v3.4.44  (sync the version refs v3.4.40-43 missed)
   ────────────────────────────────────────────────────────────
@@ -1112,7 +1128,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.44</span><br>
+      <span id="app-version-badge" style="color:rgba(255,255,255,.4);font-size:9px"></span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
@@ -2109,6 +2125,15 @@ function startPolling() {
 function stopPolling() {
   if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
 }
+
+// ── Version badge (single-sourced from APP_VERSION in app-state.js) ───
+// v3.4.45: sidebar version is now derived from APP_VERSION so the only
+// in-app constant to bump on release is the one in scripts/app-state.js
+// (plus sw.js CACHE — handled atomically by scripts/release.mjs).
+(function paintVersionBadge() {
+  const el = document.getElementById('app-version-badge');
+  if (el && typeof APP_VERSION !== 'undefined') el.textContent = 'v' + APP_VERSION;
+})();
 
 // ── Service worker ────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
