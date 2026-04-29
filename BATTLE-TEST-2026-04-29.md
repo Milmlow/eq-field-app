@@ -82,7 +82,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/managers.js`                           | ✓    | Pass 7 — findings #22 (id-coercion fix), #23 |
 | `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
 | `scripts/audit.js`                              | ✓    | Pass 10 — findings #30-35 (forensics gaps) |
-| `scripts/digest-settings.js`                    |      |                                          |
+| `scripts/digest-settings.js`                    | ✓    | Pass 11 — findings #36-39 (race fix)    |
 | `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
 | `scripts/auth.js` (PIN flow, session token)     |      |                                          |
 | Supabase MCP runtime sweep — `roster_presence`  | ✓    | Pass 8 — clean (0 rows, finding #26)    |
