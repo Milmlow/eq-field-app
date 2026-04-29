@@ -489,4 +489,183 @@ One week at a time, swipe to navigate. Same data, mobile-friendly density. Proje
 
 Total Section 2 surface: ~1-2 weeks of UI work + a few hours of SQL + materialised view setup.
 
+---
+
+## Section 3 — Migration path
+
+### Principles
+
+1. **Every step is reversible until the last one.** Each migration ships with a `down` script. The "last one" is the deprecation of `schedule.name` (denormalised name column) — that's the only irreversible step, and it comes after months of dual-write validation.
+2. **Additive before destructive.** All schema changes are NEW columns / NEW tables / NEW indexes for the first 3 phases. Drop / rename steps are deferred to phase 4 once the new shape has bedded in.
+3. **EQ Supabase first, SKS Supabase second.** Always. EQ is in SEED-demo mode (per finding #11), so changes there have zero user impact — perfect for canary. SKS gets the migration only after EQ has run a full week without issues.
+4. **Per-tenant feature flag gates the UI.** Schema changes don't change UI by themselves. Each tenant's `organisations.tier` field controls which UI surface is visible. Schema can land in production weeks before the UI is enabled for any paying tenant.
+5. **Backfills run in batches with `LIMIT 1000` cursors**, not as a single statement, so a long-running backfill doesn't lock writes.
+
+### Migration order (chronological)
+
+#### Phase A — Foundations (week 1)
+
+These are pure additives. No backfills. No code changes required. No UI changes. EQ + SKS get them on the same day.
+
+```
+A1. CREATE TABLE regions  — new table, no FK from anything yet
+A2. CREATE TABLE projects — new table, no FK from anything yet
+A3. ALTER TABLE organisations ADD is_seed_demo, tier
+    UPDATE organisations SET is_seed_demo='true', tier='Starter' WHERE slug='eq';
+    UPDATE organisations SET is_seed_demo='false', tier='SMB'    WHERE slug='sks';
+A4. ALTER TABLE projects, sites, people ADD region_id (nullable, no FK enforced yet)
+A5. ALTER TABLE sites ADD project_id (nullable, no FK enforced yet)
+A6. CREATE INDEX on each new FK column WHERE col IS NOT NULL
+```
+
+**Rollback**: each table / column drops cleanly. Five `DROP TABLE` / `DROP COLUMN` statements. ~30 seconds.
+
+**Verification**: `SELECT count(*) FROM information_schema.columns WHERE table_name IN ('projects','regions','organisations') AND column_name IN ('id','region_id','project_id','tier','is_seed_demo')` returns the expected count on both Supabase projects.
+
+**Why no FK enforcement yet**: existing rows have NULL region_id / project_id. Enforcing the FK would require backfilling all rows first, which is Phase B. Splitting the schema add from the FK enforcement keeps each migration small + reversible.
+
+#### Phase B — Backfill (week 2)
+
+Now the new columns get populated. Code is still operating on the OLD shape — these backfills are invisible to users.
+
+```
+B1. INSERT regions for each existing tenant
+    -- e.g. for SKS: INSERT INTO regions (org_id, code, name, timezone)
+    --                VALUES (sks_org_id, 'NSW', 'New South Wales', 'Australia/Sydney');
+B2. UPDATE people SET region_id = (SELECT id FROM regions WHERE code='NSW' AND org_id=people.org_id)
+    WHERE org_id = sks_org_id AND region_id IS NULL;
+    -- (run in 1000-row batches if people > 5000 rows; here SKS has ~50 so trivial)
+B3. UPDATE sites SET region_id = … same pattern …
+B4. CREATE a "Default Project" per tenant for sites that don't have one
+    INSERT INTO projects (org_id, region_id, name, abbr, status)
+    VALUES (sks_org_id, nsw_region_id, 'Default Project', 'DEFAULT', 'Active');
+B5. UPDATE sites SET project_id = default_project_id WHERE project_id IS NULL;
+B6. ALTER TABLE people    ADD employment_type text DEFAULT 'FT';
+B7. UPDATE people SET employment_type = CASE … WHEN group='Apprentice' AND agency IS NOT NULL THEN 'LHApprentice' … END;
+B8. ALTER TABLE people    ADD rto text, ADD hire_company text;
+B9. UPDATE people SET hire_company = agency WHERE agency IS NOT NULL;
+B10. UPDATE schedule SET person_id = … (Section 1 §5 backfill query) …
+```
+
+**Rollback for Phase B**: each step is data-only. Reverting means setting the new columns back to NULL or dropping the seeded rows. Two-step rollback:
+```
+DELETE FROM projects WHERE name = 'Default Project';
+UPDATE sites SET project_id = NULL, region_id = NULL;
+UPDATE people SET region_id = NULL, employment_type = NULL, rto = NULL, hire_company = NULL;
+UPDATE schedule SET person_id = NULL;
+DELETE FROM regions;
+-- then Phase A's drops if needed
+```
+
+**Verification**: `SELECT count(*) FROM people WHERE region_id IS NULL` returns 0 for tenants that have been backfilled. Spot-check ~5 random rows — `region_id`, `employment_type`, `hire_company` all populated correctly.
+
+**Code state during Phase B**: app continues to read/write the OLD shape. The new columns are populated but ignored. This is the safe-rollback window — if anything goes wrong, drop the new columns and the app keeps working.
+
+#### Phase C — FK enforcement + dual-write (week 3-4)
+
+Now the code starts USING the new columns. But it doesn't STOP using the old ones. Both are written; only the old is read by default.
+
+```
+C1. ALTER TABLE sites ALTER COLUMN region_id SET NOT NULL;
+    -- (only safe after Phase B verified region_id is populated everywhere)
+C2. ALTER TABLE sites ADD CONSTRAINT sites_region_fk
+    FOREIGN KEY (region_id) REFERENCES regions(id);
+C3. (similar for sites.project_id, people.region_id)
+C4. CODE ROLLOUT: saveCellToSB / savePersonToSB / saveSiteToSB now write the new columns
+    on every UPDATE/INSERT. Existing data already populated by Phase B; new data writes
+    through both old and new columns simultaneously.
+C5. CODE ROLLOUT: schedule.person_id is now written on every saveCellToSB call. The old
+    schedule.name column is ALSO still written (denormalised). Both kept in sync.
+```
+
+**Rollback for Phase C**: drop the FK constraints (one ALTER per FK). Code rollout rollback is a deploy of the previous version. If a bug surfaces in the new column writes, OLD column reads still work — feature is invisible to users.
+
+**Verification**: after C4 deploy, check `SELECT count(*) FROM schedule WHERE person_id IS NULL AND created_at > '2026-04-30'` — should be 0 (all new schedule rows written by the new code have person_id populated).
+
+#### Phase D — Switch reads + drop denormalised columns (week 5+)
+
+After 1-2 weeks of dual-write at C5, confidence is high. Time to flip:
+
+```
+D1. CODE ROLLOUT: queries that previously used schedule.name + sites.abbr text matching
+    now use schedule.person_id + sites.project_id JOINs. UI starts showing the new shape
+    (forecast view goes live behind tier='Enterprise' flag).
+D2. CODE ROLLOUT: stop writing the OLD denormalised schedule.name on saves (still readable
+    for backward compat).
+D3. (After 1 more week with no rollback) ALTER TABLE schedule DROP COLUMN name;
+    -- THE ONLY IRREVERSIBLE STEP. Defer until you have backups + are sure.
+D4. (After people.agency → people.hire_company rename has settled, ~2 weeks)
+    ALTER TABLE people DROP COLUMN agency;
+    -- Also irreversible; rename has been live as both columns for the dual-write period.
+```
+
+**Rollback for D1-D2**: deploy previous version. Old columns still in DB.
+
+**Rollback for D3-D4**: there isn't one without restoring from backup. That's why these come last and only after verification windows.
+
+### EQ first, SKS second — concrete sequence
+
+```
+Day 0    Apply Phase A to EQ Supabase (project ktmjmdzqrogauaevbktn)
+         Smoke test: presence still works, schedule still reads, no console errors.
+         Run for 24h.
+
+Day 1    Apply Phase A to SKS Supabase (project nspbmirochztcjijmcrx)
+         Smoke test on sks-nsw-labour.netlify.app for 24h.
+
+Day 7    Apply Phase B (backfill) to EQ. Inspection. Reversal-test on a copy.
+Day 9    Apply Phase B to SKS.
+
+Day 14   Phase C1-C3 (FK constraints) on EQ.
+Day 14   Code deploy to demo branch with C4-C5 dual-write.
+Day 15   Same to main branch (SKS production).
+
+Day 28   Phase D1 — code deploy that READS new columns. EQ first (demo branch).
+Day 30   D1 → SKS (main branch). Forecast UI feature-flagged behind tier='Enterprise'.
+
+Day 42   Phase D2 — stop writing old denormalised columns. Both tenants.
+Day 56   Phase D3-D4 — DROP COLUMN. Both tenants. Backups taken first.
+```
+
+Total: ~8 weeks from kick-off to fully cleaned-up schema. Most of that is verification windows, not engineering time.
+
+### Backup strategy
+
+Supabase has automatic daily backups by default. Before each phase:
+
+1. **Phase A (additive)** — no backup needed, fully reversible by ALTER TABLE DROP.
+2. **Phase B (backfill)** — take a manual `pg_dump --schema-only` of the affected tables, store in the project's GitHub repo under `migrations/snapshots/`. Backfill is reversible by setting NEW columns to NULL.
+3. **Phase C (FK enforcement)** — full Supabase point-in-time backup before running. Takes ~2 minutes for the project size.
+4. **Phase D (DROP COLUMN)** — full Supabase backup + a `pg_dump --data-only` of the column being dropped, stored offline. The column is gone from the live DB but recoverable from the dump if needed within 90 days.
+
+### Risk list
+
+| Risk | Mitigation |
+|---|---|
+| Phase B backfill takes longer than expected at scale | Run on EQ first (small data), measure, extrapolate. Use 1000-row LIMIT cursors so writes can interleave. |
+| Code rollout in Phase C breaks something subtle | Deploy to demo first, observe for 24h. Demo-tenant SEED short-circuit means EQ users don't see the change until tier flag flips, so a buggy Phase C code on demo affects ~0 paying users. |
+| Schema FK constraint added on a table with NULL rows | C1 explicitly checks `count(*) WHERE col IS NULL = 0` before running ALTER. If non-zero, halt and re-run B. |
+| Forecast view exposes data the user shouldn't see (RLS gap) | RLS on `projects` mirrors `sites`: `org_id = current_setting('jwt.claim.org_id')`. Verified by querying as anon role pre-launch. |
+| User has the OLD app cached and writes via OLD code path during Phase D | Service worker cache key includes APP_VERSION (per v3.4.45+ pattern). Phase D's deploy bumps version → SW invalidates → user gets new code on next page load. |
+
+### What actually goes into source control
+
+- 6 new migration files in `migrations/` (one per phase step that touches schema):
+  - `2026-MM-DD_phase_a1_create_regions.sql`
+  - `2026-MM-DD_phase_a2_create_projects.sql`
+  - … etc
+- Each migration file has a header noting `Applied: EQ ✓ DD/MM/YYYY · SKS ✓ DD/MM/YYYY` (matching the existing convention from `2026-04-16_tafe_day_and_holidays.sql`).
+- Code rollouts ride normal release versions (v3.5.0 for Phase C feature flag, v3.5.1 for D1 read switchover, etc).
+
+### Effort
+
+| Phase | Engineering | Verification | Calendar |
+|---|---|---|---|
+| A — additive schema | 4h | 1 day | Day 0-1 |
+| B — backfill | 6h | 1 week | Day 7-14 |
+| C — FK + dual-write code | 1 week | 2 weeks | Day 14-28 |
+| D — read switch + cleanup | 1 week | 2 weeks | Day 28-56 |
+
+Total wall-clock: ~8 weeks. Total engineering: ~3 weeks of focused work, the rest is verification windows.
+
 
