@@ -63,3 +63,147 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.leave_requests;
 **Fix**: Drop `'eq'` from the polling gate; keep `'demo'`. Polling is now active for EQ tenant. After the realtime publication migration (#6) is applied, polling becomes mostly redundant for EQ but stays harmless — it only fires when no one's editing and silently refreshes data.
 
 
+
+---
+
+## Coverage matrix
+
+Tick rotation slots as they're reviewed so the loop spreads attention systematically rather than randomly. ✓ = at least one iteration spent on it.
+
+| Slot                                            | Iter | Result                                  |
+|-------------------------------------------------|------|------------------------------------------|
+| `scripts/presence.js`                           | ✓    | Pass 1 — 5 findings (#1-5)              |
+| `scripts/realtime.js`                           | ✓    | Pass 2 — 3 findings (#6, #7, #8)        |
+| `index.html` polling / SW registration          | ✓    | Pass 2 — finding #9                     |
+| `supabase/functions/tafe-weekly-fill/index.ts`  |      |                                          |
+| `scripts/leave.js`                              |      |                                          |
+| `scripts/roster.js`                             |      |                                          |
+| `scripts/people.js`                             |      |                                          |
+| `scripts/managers.js`                           |      |                                          |
+| `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
+| `scripts/audit.js`                              |      |                                          |
+| `scripts/digest-settings.js`                    |      |                                          |
+| `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
+| `scripts/auth.js` (PIN flow, session token)     |      |                                          |
+| Supabase MCP runtime sweep — `roster_presence`  |      |                                          |
+| Supabase MCP runtime sweep — `audit_log`        |      |                                          |
+| Edge-case probe — DST / timezone boundaries     |      |                                          |
+| Edge-case probe — long names / special chars    |      |                                          |
+| Edge-case probe — memory/timer leaks            |      |                                          |
+| Edge-case probe — offline / queue replay        |      |                                          |
+| `scripts/release.mjs` regex robustness          |      |                                          |
+
+---
+
+## Tier analysis
+
+Strategic findings: features (or absences) that affect which tier of customer the app appeals to. Track separately from bugs so Royce's morning skim can read this section as a roadmap, not a bug list.
+
+Format per entry: **Tier · Effort (S/M/L) · Title** — one-line rationale.
+
+(populated as iterations discover gaps)
+
+---
+
+## Process notes (loop self-improvement)
+
+Captured as the loop matures — not directives for the next iteration (those live in the prompt), but lessons learned worth carrying forward.
+
+- **Smoke-test preflight** added between iterations 1 and 2: ~30s `curl` of the live demo to confirm 200 + latest version banner before drilling into code. Catches deploy regressions before they compound across iterations.
+- **Coverage matrix** added between iterations 1 and 2: rotation slot picking is now matrix-driven (prefer un-covered slots) rather than random.
+- **Stop condition refined** between iterations 1 and 2: was "last 2 iterations with no findings"; now "every rotation slot covered at least once AND last 3 iterations produced no new findings." Less trigger-happy.
+- **Iteration cap dropped** between iterations 1 and 2 (was ~12). Royce explicitly asked for "go as long as needed until you've improved everything as much as possible."
+
+---
+
+## Reference: Melbourne VIC labour program
+
+Royce shared `2025 VIC Construction  Labour Program V1 .xlsm` as the upper-scale reference point — "about as large as we could ever hope to facilitate a solution for." Key data extracted (read-only inspection, no edits):
+
+| Metric | Value |
+|---|---|
+| Total people in VIC ele construction | ~577 |
+| Direct employees | ~350 |
+| FT tradespeople | 398 |
+| FT apprentices | 52 |
+| Labour Hire apprentices | 116 |
+| Forward forecast horizon | ~52 weeks (weekly columns) |
+| Largest single-project headcount | 345 (Airtrunk Shell) |
+| Apprentice year levels tracked | 1st–6th (not 1st–4th) |
+| Apprentice training orgs | 7+ (NECA, Yanda, AGA, MAG, G-Force, MAXIM, Frontline) |
+| Employment-type variants | 7+ (FT, PT, Casual, FT Apprentice, LH Apprentice, FT Apprentice On Loan, LH) |
+| Master sheet dimensions | 660 rows × 614 cols (project × week × type matrix) |
+
+**Pattern**: Melbourne treats labour as a **forecast problem**, not just a current-week roster problem. Their primary view is "where will my 577 people be deployed across 12 active projects over the next 12 months?" — EQ Field today answers "where are they this week?". That gap (forecast horizon, project hierarchy above sites, headcount roll-ups) is the single biggest enterprise feature missing.
+
+
+## Tier analysis — initial entries (informed by Melbourne reference)
+
+Format: **Tier · Effort · Title** — rationale.
+
+### Enterprise (200–600 people, multi-project, multi-region)
+
+- **Enterprise · L · Project hierarchy above sites** — Melbourne tracks per-project headcount across 52 weeks; EQ Field has flat site abbreviations. A `project` entity that groups sites + carries weekly headcount targets is the centre of gravity for enterprise. Without it the forecast view has no "what should this look like" anchor.
+- **Enterprise · L · 52-week forward forecast view** — Melbourne's VIC LABOUR FORECAST sheet is project × week → required headcount, 52 weeks wide. The current EQ Field weekly editor doesn't compose into a horizon view. Needs a new screen + aggregation queries (weekly totals per project per state).
+- **Enterprise · M · Employment-type modelling beyond `group`** — today `people.group` is one of Direct/Apprentice/Labour Hire (3 values). Melbourne uses 7+ types (FT, PT, Casual, FT Apprentice, LH Apprentice, FT Apprentice On Loan, LH). Add `employment_type` as a separate column from group; group becomes "what they do" and employment_type becomes "how they're engaged".
+- **Enterprise · S · Apprentice training org (GTO/RTO) field** — Melbourne tracks NECA / Yanda / AGA / G-Force / MAG / MAXIM / Frontline per apprentice (the WORKING SHEET RTO column). One nullable text/enum field on `people`. Compliance reporting needs it.
+- **Enterprise · M · Apprentice ratio compliance widget** — APP NO's sheet tracks weekly apprentice-to-tradesperson ratio (e.g. 3.5:1 means 3.5 trades per apprentice — well within Australian state rules). State rules vary (typically 1:3 in NSW for electrical). Needs a per-week, per-region computation + alert when below threshold.
+- **Enterprise · M · Aggregate roll-up dashboards** — VIC ELE sheet has a left-rail "totals" stack (398 FT, 52 FT App, etc.). EQ Field has the dashboard but not these specific roll-ups. Add: totals by employment type × week, totals by project × week.
+- **Enterprise · L · Multi-region within one tenant** — Melbourne is one state. SKS has NSW, VIC, presumably others. Today: separate Supabase project per tenant. Enterprise wants regions WITHIN a tenant (NSW + VIC + QLD as siblings under one SKS Group org). Schema: add `region_id` FK on `people` + `sites`; RLS policies extended; UI for region switcher. Big change.
+- **Enterprise · M · Render performance at 500+ people** — current editor grid renders one row per person × 7 days. At 577 people that's ~4,000 cells in DOM at once. Slow on Safari/iPad. Needs virtual scrolling or pagination by group/site.
+- **Enterprise · M · Print/PDF labour program export** — Melbourne distributes the program as a printed sheet. EQ has print CSS for the roster but not a multi-page labour-program layout.
+
+### Mid-market bridge (50–200 people)
+
+- **Mid · M · Filtering UX on the editor** — at 50+ people the editor scroll gets long. Needs persistent group/site filters up top + a search box that highlights matching rows. Not a new feature so much as a UX polish on existing data.
+- **Mid · S · "Hire Company" as a first-class field** — today `people.agency` exists but is free-text. Melbourne's matrix has dedicated Hire Company columns. Promote agency from free-text to enum-with-typeahead so labour-hire reporting groups cleanly.
+- **Mid · S · Roster bulk-paste from clipboard** — Melbourne workflow includes copying blocks from one week to another via Excel. EQ has "Copy Last Week" but not arbitrary bulk paste from clipboard. Useful at any size; matters more at 100+.
+
+### SMB (5–50, EQ Field's current sweet spot)
+
+- **SMB · S · Top-of-page "supervisors editing this week" indicator** — pairs with v3.4.47 presence. Shows you the count + names of other supervisors actively editing the current week without having to spot the cell-level outlines. Cheap addition.
+- **SMB · M · "Save week as template" / "apply template"** — extends Copy Last Week. For repeating site assignments (e.g. "this is a NEXTDC week, fill from the NEXTDC template"). Tier-agnostic but earns its keep at 30+ people.
+
+### Starter (1–10 people)
+
+- **Starter · M · Self-serve onboarding** — today setting up a tenant requires manual Supabase project creation. Starter tier needs a sign-up flow that provisions per-tenant Supabase storage automatically. Without this, Starter pricing isn't viable.
+- **Starter · S · Hide BETA / DO NOT USE tabs by default** — small teams shouldn't see Apprentices BETA, Job Numbers BETA, Trial Dashboard NEW. Behind a Settings → Advanced toggle.
+- **Starter · S · Default-collapsed Leave/Timesheets** — first-load surface should be Roster + Contacts + Sites only. Leave/Timesheets surface when explicitly enabled. Reduces "what does all this do" friction for solo operators.
+
+### Cross-cutting (any tier — bridge features)
+
+- **Any · M · Magic-link approve from email** — already chipped in `mcp__ccd_session__spawn_task`. Removes the "open the app to approve a leave request" friction. Auth-surface change → needs Royce sign-off before deploying to either tenant.
+- **Any · S · Realtime reconnect jitter (finding #7)** — latent at SMB scale, real at enterprise. Math.random() * delay * 0.3 in `_rtScheduleReconnect`.
+
+
+---
+
+## Pass 3 — `scripts/supabase.js` review (iteration 2 of loop)
+
+### 🔴 10. Offline banner suppressed for EQ tenant · 🔧 fixed in v3.4.50
+**Where**: `scripts/supabase.js` `updateOnlineStatus` line 265.
+**Symptom**: Same gate-class as #9. `if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') { banner.classList.remove('show'); return; }`. EQ tenant DOES write to Supabase (audit log, presence, schedule, leave requests via saveCellToSB) — those writes silently failing without a banner means an EQ user editing offline has no idea their queue is filling up.
+**Fix**: Drop `'eq'` from the gate; keep `'demo'` (genuinely has no Supabase per the loadTenantConfig short-circuit).
+
+### 🟠 11. META-FINDING: EQ tenant is a SEED-demo, not a Supabase-backed tenant · 📝 surfaced for design doc
+**Where**: `index.html:1810` (`loadFromSupabase` short-circuit), `scripts/auth.js:23,245,454` (auth gates), `scripts/digest-settings.js:129` (digest fresh-fetch skip), historic gates we've already lifted (`startRealtime` v3.4.47, `startPolling` v3.4.49, `updateOnlineStatus` v3.4.50).
+**What's actually happening**: The EQ tenant has a configured Supabase project (`ktmjmdzqrogauaevbktn`), and writes DO go there (saveCellToSB, presence upserts, audit_log inserts). But the main READ path — `loadFromSupabase` at `index.html:1810` — short-circuits to in-memory `SEED.people / SEED.sites / SEED.schedule / SEED.managers` for both 'eq' AND 'demo' tenants. So EQ tenant users see the same fixed cast every page load, regardless of what's stored. EQ Supabase is effectively a write-only sink: data goes in, nobody reads it back.
+**Why it works as a "live demo"**: Presence (v3.4.47) and audit logging still function because they operate ON TOP OF the SEED render — two prospects loading the same SEED simultaneously share cell coordinates, so presence outlines render correctly. The audit log captures "who did what" even though the data they touched gets re-seeded on next load.
+**Implication for v3.4.49 (polling fix)**: lifting `'eq'` from the polling gate causes `refreshData(true)` → `loadFromSupabase` → SEED re-map → `renderCurrentPage` every 30s. Idempotent — no flicker, no data change — just wasted CPU on idle EQ tabs. NOT reverting because if EQ ever transitions to a real Supabase-backed tenant, polling becomes useful immediately. Forward-compatible cost.
+**Implication for v3.4.49 migration**: `migrations/2026-04-30_eq_realtime_publication.sql` is also moot for the EQ tenant in its current SEED-demo shape — adding `schedule` + `leave_requests` to the publication doesn't help if EQ doesn't load schedule/leave_requests from Supabase. But the migration is still RIGHT — when EQ transitions to real-data, those tables need to be in the publication. Apply it on return; leave the gate-lift in place.
+**The design question** (for tomorrow's design doc): Is the EQ tenant intentionally a SEED demo (Starter-tier "try it now" front-door, no real persistence required), or is it transitional state meant to become a real Supabase-backed tenant? That decision shapes:
+  - Whether the Starter tier IS this SEED-demo model (just rebrand it as "Starter")
+  - Whether to add a "Promote to real tenant" flow that flips the SEED short-circuit off and migrates writes
+  - Whether to keep 6+ EQ-specific gates scattered across the codebase (auth, gate dropdown, digest, load path) or consolidate them behind a single `TENANT.IS_SEED_DEMO` flag
+
+This is the highest-leverage open question for the morning. Adding to the design doc Section 7 (Open questions).
+
+### 🟢 12. Six places treat 'eq' as 'demo' — pattern, not always a bug · 📝 documented
+**Locations**: `scripts/auth.js:23` (gate dropdown source), `scripts/auth.js:245` (login flow accepts 'demo'/'demo1234' for both tenants), `scripts/auth.js:454` (`isDemo = eq || demo` for manager-password short-circuit), `scripts/digest-settings.js:129` (skip fresh fetch), `index.html:1810` (loadFromSupabase short-circuit), and the three we've already lifted.
+**Audit verdict**:
+  - `auth.js:23, 245, 454` — INTENTIONAL given EQ's SEED-demo nature. Lifting these would break the "anyone can try the demo with PIN 'demo'/'demo1234'" front-door.
+  - `digest-settings.js:129` — INTENTIONAL. SEED `STATE.managers` IS the truth for EQ; fresh fetch from Supabase would surface stale write-only-sink data.
+  - `index.html:1810` — INTENTIONAL by design. This is the SEED short-circuit itself.
+  - Already-lifted gates: `startRealtime` (v3.4.47), `startPolling` (v3.4.49), `updateOnlineStatus` (v3.4.50) — all CORRECT to lift, since presence/polling/offline-warning work even on a SEED demo when writes go to a real Supabase.
+
+So the codebase pattern is healthier than it looked at first read — there ARE intentional gates for the SEED-demo behaviour and there ARE accidentally-extended gates for things like polling/realtime/offline that should never have been gated. The remaining 4 gates (auth + digest + loadFromSupabase) are intentional and should stay until/unless Royce decides EQ transitions to a real tenant.
