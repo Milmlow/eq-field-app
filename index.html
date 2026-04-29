@@ -189,8 +189,36 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.40
+  EQ Solves — Field  v3.4.41
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.41  (TAFE auto-fill — Sunday cron via Edge Function)
+  ────────────────────────────────────────────────────────────
+  • New Supabase Edge Function: supabase/functions/tafe-weekly-fill.
+    Mirrors the manual "🎓 Apply TAFE Day" button (scripts/tafe.js)
+    but runs server-side every Sunday 06:00 UTC (= 16:00 AEST /
+    17:00 AEDT) regardless of whether a manager has the app open.
+    Walks every apprentice with a nominated tafe_day, computes
+    next Monday's date for that weekday, skips holiday ranges from
+    app_config.tafe_holidays, and writes 'TAFE' into the schedule
+    only if the cell is still empty (compare-and-swap on `is.null`
+    so concurrent manual writes always win). Audit log entries are
+    written under manager_name='TAFE Auto-Fill'.
+  • New migration: migrations/2026-04-29_tafe_weekly_cron.sql.
+    Same pattern as 2026-04-19_digest_cron_schedule.sql — pg_cron
+    fires net.http_post against the function URL stored in
+    app_config.tafe_fn_url with bearer from app_config.tafe_fn_token.
+    Includes public.trigger_tafe_weekly_fill(p_dry_run, p_week,
+    p_org_id) for manual SQL invocation/preview.
+  • Apply order per tenant Supabase project:
+    1. supabase functions deploy tafe-weekly-fill
+    2. INSERT app_config rows tafe_fn_url + tafe_fn_token
+    3. Apply migrations/2026-04-29_tafe_weekly_cron.sql
+    4. Smoke-test:
+       SELECT public.trigger_tafe_weekly_fill(p_dry_run := true);
+    Both EQ demo and SKS prod need the same three steps in their
+    own Supabase project — function code is tenant-agnostic and
+    iterates organisations.id, so no per-tenant code fork.
 
   CHANGES IN v3.4.40  (leave CC list — fix silent save no-op)
   ────────────────────────────────────────────────────────────
