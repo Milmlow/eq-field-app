@@ -818,4 +818,269 @@ Total to fully deliver Enterprise: ~6 months, 1 engineer. Faster with parallel t
 
 **The single most important sentence in this section**: Wave 1 ships first. Don't try to design or build Wave 2-4 before Wave 1 is in production and validated. Every wave-1 lesson (UI nits, RLS fights, perf surprises) compounds into better Wave 2-4 delivery. Resist the temptation to pre-build.
 
+---
+
+## Section 5 — UI shape
+
+### Principle: progressive disclosure
+
+The same codebase serves a 5-person Starter tenant and a 600-person Enterprise tenant. The Starter tenant should NOT see Projects, Forecast, Regions, employment_type filters, RTO field, or any of the Enterprise-tier surfaces — they'd be overwhelming and pointless at 5 people.
+
+The Enterprise tenant should NOT see "Hide BETA tabs" toggles or simplified empty-state walkthroughs designed for a one-person electrical contractor — those are training wheels they don't need.
+
+**Tier-driven feature flags** at the `organisations` row determine what the user sees. Three switches today, more added per Section 4 wave:
+
+```sql
+-- Already in the schema diff (Section 1)
+-- organisations.tier text NOT NULL DEFAULT 'Starter'
+--   CHECK (tier IN ('Starter','SMB','Enterprise'))
+
+-- Added per wave:
+ALTER TABLE public.organisations ADD COLUMN feature_projects_enabled boolean DEFAULT false;
+ALTER TABLE public.organisations ADD COLUMN feature_forecast_enabled boolean DEFAULT false;
+ALTER TABLE public.organisations ADD COLUMN feature_employment_type_enabled boolean DEFAULT false;
+ALTER TABLE public.organisations ADD COLUMN feature_multi_region_enabled boolean DEFAULT false;
+```
+
+Two sources of truth: `tier` is the customer-facing pricing band (Starter / SMB / Enterprise); `feature_*_enabled` are individual toggles for rollout / per-tenant overrides. Default mapping:
+
+| Tier | projects | forecast | employment_type | multi_region |
+|---|---|---|---|---|
+| Starter | off | off | off | off |
+| SMB | on | off | on | off |
+| Enterprise | on | on | on | on |
+
+Per-tenant overrides (e.g. SKS asks for forecast preview before Enterprise upgrade) flip the individual flag without changing tier.
+
+### What each tier sees
+
+#### Starter (1-10 people, EQ today, the SEED-demo tier)
+
+Sidebar is **minimal**:
+
+```
+┌──────────────┐
+│  EQ Solves   │
+│  Field       │
+├──────────────┤
+│ FORECAST     │
+│ ◇ Dashboard  │
+│ 🕐 My Schedule│
+│ 📅 Calendar  │
+│ ☎ Contacts   │  (50)
+│ 🏠 Sites     │
+│ 📋 Roster    │
+│              │
+│ MANAGE       │
+│ ＋ Add Person │
+│ ⇆ Import/Exp │
+│ ❓ Help      │
+└──────────────┘
+```
+
+Hidden vs SMB+: no Supervision panel, no Timesheets, no Apprentices, no BETA tabs, no Projects, no Forecast, no Region picker.
+
+Default-collapsed sections in the navbar (already a tier-analysis entry — "Starter · S · Default-collapsed Leave/Timesheets"). The simplest possible "track 5 people on a roster" front door.
+
+Settings → Advanced: shows a "Upgrade to SMB to unlock supervision, leave management, and project hierarchy" panel with a CTA button. Click → tenant tier is updated (manually for now, self-serve in Wave 5 hosted-onboarding).
+
+#### SMB (10-50, SKS today)
+
+Sidebar is **today's SKS sidebar** plus a new "Projects" entry below "Sites":
+
+```
+┌──────────────┐
+│  SKS         │
+├──────────────┤
+│ FORECAST     │
+│ ◇ Dashboard  │
+│ 🕐 My Schedule│
+│ 📅 Calendar  │
+│ ☎ Contacts   │  (50)
+│ 👥 Supervision│ (17)
+│ 🏠 Sites     │
+│ 📋 Projects  │ ← new in Wave 1
+│ 📋 Roster    │
+│ 📋 Weekly Roster
+│ 📋 Timesheets │
+│              │
+│ MANAGE       │
+│ ＋ Add Person │
+│ ⇆ Import/Exp │
+│ ❓ Help      │
+│              │
+│ TESTING      │
+│ 🔢 Job Numbers BETA
+│ 🏖 Leave BETA   │
+│ 🎓 Apprentices BETA
+│ 🆕 Trial Dashboard NEW
+└──────────────┘
+```
+
+Same as today plus Projects, plus the Apprentice-ratio dashboard widget on Dashboard (Wave 3), plus employment_type filter on Roster + Contacts pages (Wave 3). No Forecast (Enterprise gate), no Regions picker (Enterprise gate).
+
+#### Enterprise (50-500+, Melbourne size)
+
+Adds **two more sidebar items** (Forecast, region picker) and exposes the full settings panel:
+
+```
+┌──────────────────┐
+│ SKS Group        │
+│ [Region: VIC ▼]  │ ← new
+├──────────────────┤
+│ FORECAST         │
+│ ◇ Dashboard      │
+│ 🕐 My Schedule   │
+│ 📅 Calendar      │
+│ ☎ Contacts       │  (350+)
+│ 👥 Supervision   │
+│ 🏠 Sites         │
+│ 📋 Projects      │
+│ 📋 Roster        │
+│ 📈 Forecast      │ ← new in Wave 2
+│ 📋 Weekly Roster │
+│ 📋 Timesheets    │
+│                  │
+│ ANALYTICS        │ ← new section, Enterprise only
+│ 📊 Apprentice Ratio
+│ 📊 Compliance    │
+│                  │
+│ MANAGE           │
+│ ＋ Add Person     │
+│ 🌏 Regions       │ ← Enterprise admin
+│ ⚙ Settings       │
+└──────────────────┘
+```
+
+### Implementation pattern
+
+In the existing vanilla-JS shape, gating happens in two places:
+
+**1. Sidebar render** — `index.html` has the sidebar markup hardcoded today. Replace the Projects / Forecast / Regions / Analytics entries with conditional renders:
+
+```js
+// scripts/sidebar.js (new) — runs after loadTenantConfig populates TENANT
+function renderSidebar() {
+  const tier = TENANT.tier || 'Starter';
+  const features = TENANT.features || {};
+
+  const items = [
+    { id: 'dashboard',     label: '◇ Dashboard',     visible: true },
+    { id: 'my-schedule',   label: '🕐 My Schedule',  visible: true },
+    { id: 'calendar',      label: '📅 Calendar',     visible: true },
+    { id: 'contacts',      label: '☎ Contacts',      visible: true },
+    { id: 'supervision',   label: '👥 Supervision',  visible: tier !== 'Starter' },
+    { id: 'sites',         label: '🏠 Sites',        visible: true },
+    { id: 'projects',      label: '📋 Projects',     visible: features.projects_enabled === true },
+    { id: 'roster',        label: '📋 Roster',       visible: true },
+    { id: 'forecast',      label: '📈 Forecast',     visible: features.forecast_enabled === true },
+    { id: 'timesheets',    label: '📋 Timesheets',   visible: tier !== 'Starter' },
+    // …
+  ];
+
+  document.getElementById('sidebar-nav').innerHTML = items
+    .filter(i => i.visible)
+    .map(i => `<a class="nav-item" data-page="${i.id}">${i.label}</a>`)
+    .join('');
+}
+```
+
+**2. Page-level guards** — every page's render function checks the feature flag at top:
+
+```js
+function renderForecast() {
+  if (!TENANT.features?.forecast_enabled) {
+    document.getElementById('forecast-content').innerHTML =
+      `<div class="empty">
+         <div class="empty-icon">📈</div>
+         <p>Forecast is an Enterprise tier feature.</p>
+         <p style="font-size:12px;color:var(--ink-3)">
+           Talk to Royce about upgrading.
+         </p>
+       </div>`;
+    return;
+  }
+  // … real forecast render …
+}
+```
+
+This handles direct URL navigation (e.g. someone bookmarks `/#forecast` from when they were trial-Enterprise; tier downgrades; they get a friendly empty-state instead of a broken page).
+
+### Settings panel
+
+A new modal at Settings → Tier & Features (visible to tenant admins only) shows:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Tier & Features                                       [✕]  │
+├─────────────────────────────────────────────────────────────┤
+│ Current tier: SMB                          [Upgrade to ENT]│
+├─────────────────────────────────────────────────────────────┤
+│ Features                                                    │
+│   ☑ Project hierarchy           (SMB+)                     │
+│   ☐ 52-week forecast view       (Enterprise) [Try preview] │
+│   ☑ Employment-type filtering   (SMB+)                     │
+│   ☐ Multi-region                (Enterprise) [Try preview] │
+│   ☑ Apprentice ratio compliance (SMB+)                     │
+│                                                             │
+│ Tip: previews give you 14 days to evaluate at no charge.   │
+│      Click "Try preview" — Royce gets pinged + flag flips. │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Disabled checkboxes for unavailable features show a "(Enterprise)" tag and a `[Try preview]` button that opens a server endpoint to flip the feature flag for 14 days. Royce gets emailed on every preview activation so he can follow up with the tenant about a real upgrade.
+
+### Default-collapsed sections (Starter polish)
+
+Tier-analysis entry already noted this for Starter: first-load surface should be Roster + Contacts only; Leave / Timesheets / Apprentices appear collapsed under a "Show more →" sidebar control. Click expand → those sections render. Reduces "what does all this do" friction for solo operators.
+
+For SMB and Enterprise, expanded by default (today's behaviour).
+
+```js
+// In the sidebar items, add a 'collapsed_in_starter' flag:
+{ id: 'leave',       label: '🏖 Leave',     visible: tier !== 'Starter', collapsed_in_starter: true }
+```
+
+Tenant admins can override per-tenant (Settings → Layout → "Show all sections by default").
+
+### Region picker (Enterprise)
+
+When `feature_multi_region_enabled = true` AND there's more than one region in the tenant, a region picker appears in the sidebar header:
+
+- Default selection: user's home region (from `users.region_id` if added in Wave 4, or the first region for the tenant).
+- Switching region: re-runs `loadFromSupabase` filtered to that region, repaints all pages.
+- "All regions" option: cross-region admin view (audit log shows everything; roster aggregates).
+- Picker is hidden entirely if the tenant has 0 or 1 regions (no point showing it).
+
+Region scoping respects RLS: a user with `users.region_id = vic_id` and not flagged as cross-region admin literally cannot see NSW data — the SELECT returns nothing. UI hides the picker for those users.
+
+### "Show all features" admin override
+
+There's always a per-tenant admin who needs to see EVERYTHING for support / debugging — Royce on SKS today, eventually a Customer Success manager per Enterprise customer. Add a `users.is_super_admin` boolean (Wave 4 alongside multi-region):
+
+```sql
+ALTER TABLE public.users  -- assuming a users table by then
+  ADD COLUMN is_super_admin boolean DEFAULT false;
+```
+
+Super-admins see all sections regardless of tier flags + a "Tier override (debug)" picker in the sidebar that lets them simulate a Starter tenant view, etc. Useful for diagnosing UI complaints from real customers. Hidden from non-super-admins entirely.
+
+### Mobile
+
+Sidebar collapses to a bottom-tab bar on mobile (already current behaviour). Same gating logic — invisible items just don't appear in the tab bar. Forecast view shows the mobile collapsed layout from Section 2.
+
+### Effort
+
+| Surface | Engineering | Risk |
+|---|---|---|
+| sidebar.js + renderSidebar conditional | M | Low — additive, replaces hardcoded markup |
+| Page-level guards (per page) | S × ~5 pages | Low |
+| Tier & Features settings modal | M | Low — standard form modal pattern |
+| `[Try preview]` 14-day feature flag flip | M | Medium — needs an admin endpoint, audit log entry |
+| Default-collapsed sections for Starter | S | Low |
+| Region picker (Enterprise, Wave 4) | M | Medium — affects every page's data load |
+| Super-admin tier-override picker | S | Low — power-user feature only |
+
+Total: ~2-3 weeks of UI work, spread across waves. Each wave's engineering effort already includes its own page-level guards.
+
 
