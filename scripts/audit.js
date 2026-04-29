@@ -18,8 +18,14 @@ function auditLog(action, category, detail, week) {
     detail: detail || null,
     week:   week   || STATE.currentWeek || null
   };
-  // Fire-and-forget — never block UI on audit writes
-  sbFetch('audit_log', 'POST', entry, 'return=minimal').catch(() => {});
+  // Fire-and-forget — never block UI on audit writes — but DON'T swallow
+  // errors silently. v3.4.56: switched the no-op catch to a console.warn
+  // so RLS / schema drift / validation rejections are visible in DevTools.
+  // Audit logging is forensics-load-bearing; "we logged everything" can
+  // only be claimed if the failure mode is observable.
+  sbFetch('audit_log', 'POST', entry, 'return=minimal').catch(e => {
+    console.warn('EQ[audit] write failed:', e && e.message || e);
+  });
 }
 
 // ── Open modal ────────────────────────────────────────────────
@@ -110,10 +116,16 @@ function renderAuditLog() {
 
 function exportAuditCSV() {
   if (!auditCache.length) { showToast('No entries to export'); return; }
-  const header = 'Date/Time,Manager,Category,Action,Detail,Week';
+  // v3.4.56: ISO 8601 timestamps + row id in the export. Auditors and
+  // payroll integrators want machine-readable timestamps (UTC, ISO) so
+  // they can sort and join across tools. The previous toLocaleString
+  // output was viewer-locale dependent (DD/MM/YYYY vs MM/DD/YYYY) and
+  // ambiguous. The id column makes any row in the CSV findable in the
+  // DB if a question comes up later.
+  const header = 'ID,Created At (UTC ISO),Manager,Category,Action,Detail,Week';
   const lines  = auditCache.map(r => {
-    const d = new Date(r.created_at).toLocaleString('en-AU');
-    return [d, r.manager_name, r.category, r.action, r.detail || '', r.week || '']
+    const ts = r.created_at ? new Date(r.created_at).toISOString() : '';
+    return [r.id || '', ts, r.manager_name, r.category, r.action, r.detail || '', r.week || '']
       .map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',');
   });
   downloadCSV(header + '\n' + lines.join('\n'), 'EQ_Audit_Log.csv');

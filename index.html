@@ -190,8 +190,39 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.55
+  EQ Solves — Field  v3.4.56
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.56  (audit.js: visible write failures + portable CSV export)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 10 (iteration 9 of overnight loop). Reviewed
+    scripts/audit.js. Two fixes for forensics quality, three
+    other findings documented for later.
+  • #30 (FIXED) — auditLog write was `.catch(() => {})`. If RLS
+    or schema drifted, audit entries silently stopped recording
+    with no indication. For a forensics-load-bearing log that's
+    dangerous: "we logged everything" can only be claimed if the
+    failure mode is observable. Now `.catch(e => console.warn
+    ('EQ[audit] write failed:', e))` — still non-blocking, still
+    fire-and-forget, but failures show in DevTools where they
+    can be triaged.
+  • #33+#35 (FIXED) — CSV export now uses ISO 8601 (UTC) for the
+    Created At column and includes the row ID. Auditors and
+    payroll integrators want machine-readable timestamps that
+    sort correctly and aren't viewer-locale dependent (the prior
+    "29/04/2026, 11:03:08 PM" was ambiguous DD/MM/YYYY vs MM/DD
+    /YYYY). The ID column lets any CSV row be located in the DB.
+  • Documented (not fixed):
+    #31 — hard 500-row read limit on the modal load. SMB scale
+       fine, enterprise scale (Melbourne 577 people) might burn
+       through 500 entries in a morning. Pagination needed.
+    #32 — toLocaleDateString grouping in the modal uses the
+       browser's locale, not the tenant's timezone. Two users
+       in different states could see the same audit entry under
+       different dates near midnight.
+    #34 — same locale issue affects the modal display (already
+       counted under #32; export side now fixed via #33).
+  • Demo only.
 
   CHANGES IN v3.4.55  (people.js removePerson: id-coercion + idempotency)
   ────────────────────────────────────────────────────────────
