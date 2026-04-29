@@ -190,8 +190,34 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.50
+  EQ Solves — Field  v3.4.51
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.51  (leave email: defensive HTML escaping for record fields)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 5 (iteration 4 of overnight loop). Reviewed
+    scripts/leave.js triggerLeaveEmail. The HTML email body had
+    three places where user-controlled DB fields flowed into the
+    template raw:
+      ${typeLabels[record.leave_type] || record.leave_type}  (×3)
+      ${record.status}                                       (×1)
+      ${record.status.toLowerCase()}                         (×1)
+    typeLabels[...] is hardcoded ('Annual Leave', 'Unpaid Leave',
+    'RDO') and safe by construction — but the `|| raw` fallback
+    and the status fields are user-shaped data. An attacker with
+    the published anon key could insert a leave request with
+    leave_type = '<img onerror="...">' and the supervisor's email
+    client could render it. Modern clients strip <script> but
+    not all on* handlers. Defensive XSS gap.
+  • Fix: define three local-helper escaped values at the top of
+    triggerLeaveEmail (safeTypeFallback, safeStatus,
+    safeStatusLower) and substitute them in the HTML template.
+    Subjects stay plaintext — Resend handles MIME header encoding,
+    and escaping subject would visibly mangle legitimate '&' etc.
+  • Behaviour-preserving for all legitimate inputs (the typeLabels
+    lookup hits in 99.9% of cases). Only the rare malformed-input
+    path is now safe instead of dangerous.
+  • Demo only.
 
   CHANGES IN v3.4.50  (offline banner gate; surface EQ-as-SEED-demo finding)
   ────────────────────────────────────────────────────────────

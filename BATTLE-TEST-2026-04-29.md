@@ -76,7 +76,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/realtime.js`                           | ✓    | Pass 2 — 3 findings (#6, #7, #8)        |
 | `index.html` polling / SW registration          | ✓    | Pass 2 — finding #9                     |
 | `supabase/functions/tafe-weekly-fill/index.ts`  | ✓    | Pass 4 — 4 findings (#13-16, all 🟡/🟢) |
-| `scripts/leave.js`                              |      |                                          |
+| `scripts/leave.js`                              | ✓    | Pass 5 — findings #17-19 (XSS gap fix)  |
 | `scripts/roster.js`                             |      |                                          |
 | `scripts/people.js`                             |      |                                          |
 | `scripts/managers.js`                           |      |                                          |
@@ -232,4 +232,29 @@ So the codebase pattern is healthier than it looked at first read — there ARE 
 ### 🟢 16. EQ Supabase will run the cron against a SEED-demo sink · 📝 documented
 **Where**: pg_cron schedule on EQ Supabase project `ktmjmdzqrogauaevbktn`.
 **Symptom**: Every Sunday 06:00 UTC, EQ's pg_cron will fire the Edge Function which writes TAFE rows + audit_log entries that nobody reads (per finding #11). Wasted cycles but harmless. Could disable the cron on EQ Supabase but the cost is negligible (~5 row writes / week / 0 reads). Decision tied to #11 — if EQ stays a SEED demo, disable the EQ cron; if EQ transitions to a real tenant, leave it on and seed `tafe_holidays`.
+
+
+---
+
+## Pass 5 — `scripts/leave.js` triggerLeaveEmail review (iteration 4)
+
+### 🟡 17. Leave email body had defensive XSS gap on leave_type + status · 🔧 fixed in v3.4.51
+**Where**: `scripts/leave.js` `triggerLeaveEmail` (lines 734-843).
+**Symptom**: Three template-string interpolations passed user-controlled DB fields into the HTML email body without escaping:
+  - `${typeLabels[record.leave_type] || record.leave_type}` — typeLabels lookup is hardcoded and safe, but the `|| raw` fallback path emits raw `record.leave_type` from the DB
+  - `${record.status}` (line 783)
+  - `${record.status.toLowerCase()}` (line 787)
+A user with the published anon key (visible in `scripts/app-state.js`) could insert a leave_request with `leave_type = '<img onerror="…">'` or similar; the supervisor receiving the email would render that string in their email client.
+**Real-world risk**: low. Modern clients (Gmail / Outlook / Apple Mail) strip `<script>` tags from rendered HTML. But on* handlers on `<img>`, `<a>`, `<iframe>` etc. are not always stripped, depending on client. The defence is cheap; the principle is "don't ship raw user data into HTML even via an email roundtrip."
+**Fix**: defined `safeTypeFallback`, `safeStatus`, `safeStatusLower` local helpers at the top of the function and substituted them in the HTML template. Subject lines kept plaintext — Resend handles MIME header encoding, and escaping subject would visibly mangle legitimate ampersands.
+**Behaviour preservation**: typeLabels[record.leave_type] returns a hardcoded string for valid input (99.9% case) — the lookup result still flows through unescaped because it can't contain unsafe chars. Only the rare fallback path is now defensive.
+
+### 🟡 18. Leave email subject leaks raw fields too · 📝 documented
+**Where**: `scripts/leave.js` lines 747, 780, 804 (subject construction).
+**Symptom**: Subjects use `${record.requester_name}`, `${record.leave_type}`, `${record.status}` raw without escaping. Subjects are plaintext (Resend handles MIME encoding) so this isn't an XSS vector. But a maliciously-crafted name could break subject formatting (newlines, control chars) — Resend probably strips these but not verified.
+**Severity**: 🟡 latent. Not exploitable as XSS. Logged for completeness.
+
+### 🟢 19. Email error toasts may leak the recipient address · 📝 documented
+**Where**: `scripts/leave.js` line 837: `showToast('Email failed: ' + (data.message || JSON.stringify(data)));`.
+**Symptom**: If the Resend / send-email function returns an error response containing the recipient email in the error body, the UI toast displays it. Information leak only at the supervisor's screen — they're allowed to see it. Cosmetic.
 
