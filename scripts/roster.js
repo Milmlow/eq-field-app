@@ -457,6 +457,8 @@ function renderEditor() {
               data-name="${esc(p.name)}" data-week="${week}" data-day="${d}"
               oninput="handleCellInput(this)"
               onchange="updateCell(this)"
+              onfocus="if (typeof presenceFocus==='function') presenceFocus(this.dataset.name, this.dataset.week, this.dataset.day)"
+              onblur="if (typeof presenceBlur==='function') presenceBlur(this.dataset.name, this.dataset.week, this.dataset.day)"
               autocomplete="off" spellcheck="false">
           </div>`;
           }).join('')}
@@ -475,6 +477,10 @@ function renderEditor() {
 
   document.getElementById('editor-content').innerHTML = html;
   document.querySelectorAll('#editor-content input[type=text]').forEach(inputColor);
+  // v3.4.47: re-apply presence outlines after each editor render so a
+  // remote-driven re-render (e.g. live update from another supervisor)
+  // doesn't drop the indicators.
+  if (typeof _presenceRender === 'function') _presenceRender();
   const sb = document.getElementById('editor-sort-btn');
   if (sb) sb.textContent = editorSort === 'asc' ? 'A–Z ▲' : 'Z–A ▼';
 }

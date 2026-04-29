@@ -65,6 +65,7 @@
 <script src="scripts/calendar.js"></script>
 <script src="scripts/audit.js"></script>
 <script src="scripts/realtime.js"></script>
+<script src="scripts/presence.js"></script>
 <script src="scripts/auth.js"></script>
 <script src="scripts/apprentices.js"></script>
 <script src="scripts/journal.js"></script>
@@ -189,8 +190,38 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.46
+  EQ Solves — Field  v3.4.47
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.47  (real-time presence on roster editor — DEMO ONLY)
+  ────────────────────────────────────────────────────────────
+  • New table public.roster_presence + new client module
+    scripts/presence.js. When a supervisor focuses an editor cell,
+    the cell upserts a row { manager_name, week, cell_name,
+    cell_day, focused_at }. A 10s heartbeat refreshes focused_at
+    while the cell is held; blur deletes the row. Other clients
+    see INSERT/UPDATE/DELETE events via the existing Supabase
+    Realtime channel (scripts/realtime.js — extended with a
+    third channel for roster_presence) and outline the affected
+    cell with a purple border + "X is editing" tooltip.
+  • Stale rows (focused_at older than 15s) are filtered visually
+    so a tab close before blur fires doesn't leave a phantom
+    indicator. A pg_cron hourly DELETE keeps the table from
+    growing unbounded if many tab closes orphan rows.
+  • scripts/realtime.js: 'eq' lifted from the realtime gate so
+    the EQ tenant gets live updates + presence (was previously
+    SKS-only). 'demo' (in-memory tenant) still skips because it
+    has no Supabase to connect to.
+  • Migration: migrations/2026-04-29_roster_presence.sql.
+    Already applied to the EQ Supabase project. Not yet applied
+    to SKS prod — that ports when Royce is back from holidays.
+  • Caveat: today's deploy enables presence for EQ tenant users
+    as soon as it's merged, but presence indicators only become
+    visible when TWO supervisors are simultaneously editing the
+    same week. Test by opening eq-solves-field.netlify.app in
+    two browsers (or one normal + one incognito), unlock both,
+    and focus the same cell from each — purple outline appears
+    on each side showing the other's editor.
 
   CHANGES IN v3.4.46  (extract shared mobile/desktop cell helpers — DEMO ONLY)
   ────────────────────────────────────────────────────────────
