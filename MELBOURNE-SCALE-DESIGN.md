@@ -1083,4 +1083,259 @@ Sidebar collapses to a bottom-tab bar on mobile (already current behaviour). Sam
 
 Total: ~2-3 weeks of UI work, spread across waves. Each wave's engineering effort already includes its own page-level guards.
 
+---
+
+## Section 6 — Render performance at scale
+
+### Today's numbers vs Melbourne's
+
+| Surface | SKS today (~50 ppl) | Melbourne scale (~577 ppl) | Multiplier |
+|---|---|---|---|
+| Editor cells in DOM | ~50 × 7 = 350 | ~577 × 7 = 4,039 | 11.5× |
+| Schedule rows on page load | ~50 × 4 weeks = 200 | ~577 × 52 weeks = 30,004 | 150× |
+| Realtime messages / hour during active editing | ~20 (one supervisor) | ~200 (10 supervisors × 20 each) | 10× |
+| Initial sbFetch payload (uncompressed) | ~50KB | ~3MB | 60× |
+
+The 150× initial-load multiplier is the headline number. 30k schedule rows is too much to ship to the browser on every page load — both bandwidth and the subsequent DOM render would suffer.
+
+### Three independent perf workstreams
+
+These are largely orthogonal — work can run in parallel:
+
+1. **Editor virtualisation** — render only the visible rows in the DOM, lazy-render the rest on scroll.
+2. **Initial-load scoping** — don't ship 52 weeks of schedule data on every load; fetch the visible week range only.
+3. **Realtime channel scoping** — don't subscribe to ALL schedule changes; subscribe per-region or per-week.
+
+### Workstream 1 — Editor virtualisation
+
+#### What today's render does
+
+`renderEditor` in `scripts/roster.js` builds the entire DOM as a string concatenation, then writes it to `editor-content.innerHTML` in one shot. For 50 people × 7 cell-inputs each = 350 input elements, that's fine — modern browsers parse + lay out 350 elements in ~30ms.
+
+For 577 people × 7 = 4,000 inputs, the same code path produces a ~4× slower paint (parse + reflow + paint). Anecdotally on iPad Safari this becomes a 200-400ms hang on every editor open or week navigation.
+
+#### The choice: roll-our-own vs library
+
+| Approach | Pros | Cons |
+|---|---|---|
+| **Roll-our-own intersection-observer-based** | Zero dependencies (matches the codebase ethos), full control, can lazy-render exactly what's needed | ~2 days engineering, edge cases (jump-to-row, search-highlight) need attention |
+| **Clusterize.js** (3KB, no deps) | Drop-in, minimal complexity, designed exactly for this case | Still a dependency, slightly heavier markup, less customisable |
+| **virtual-scroller / react-window equivalent for vanilla JS** | Battle-tested at scale | Heavier dependency footprint, framework-shaped |
+
+Recommendation: **roll-our-own** to match the codebase. The pattern is well-understood and the editor is a controlled surface — fixed row height, no nested scroll, no dynamic row sizing. Cheap enough to write that the dependency cost outweighs the engineering hours saved.
+
+#### Concrete approach
+
+```js
+// scripts/editor-virtual.js (new)
+//
+// Pattern:
+//   - Render a "spacer" div sized to total-rows × row-height
+//   - Render only rows visible in the viewport (+ 5 row buffer above/below)
+//   - On scroll, recalculate visible range and re-render
+//   - Each row keyed by (group, person.id) so renders don't churn unnecessarily
+
+const ROW_HEIGHT_PX = 64;
+const BUFFER_ROWS   = 5;
+let _visibleRange = { start: 0, end: 0 };
+
+function renderEditorVirtual() {
+  const container = document.getElementById('editor-content');
+  const groups    = ['Direct', 'Apprentice', 'Labour Hire'];
+  const allPeople = groups.flatMap(g => STATE.people.filter(p => p.group === g));
+  const totalRows = allPeople.length + groups.length;  // +1 for each group strip
+
+  // Render skeleton: total-height spacer + a positioned "viewport" div
+  container.innerHTML = `
+    <div class="editor-spacer" style="height:${totalRows * ROW_HEIGHT_PX}px;position:relative">
+      <div id="editor-rows" style="position:absolute;top:0;left:0;right:0"></div>
+    </div>`;
+
+  function renderVisible() {
+    const scrollTop = container.scrollTop;
+    const viewportH = container.clientHeight;
+    const startRow  = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT_PX) - BUFFER_ROWS);
+    const endRow    = Math.min(totalRows, Math.ceil((scrollTop + viewportH) / ROW_HEIGHT_PX) + BUFFER_ROWS);
+
+    if (startRow === _visibleRange.start && endRow === _visibleRange.end) return;
+    _visibleRange = { start: startRow, end: endRow };
+
+    const rows = document.getElementById('editor-rows');
+    rows.style.transform = `translateY(${startRow * ROW_HEIGHT_PX}px)`;
+    rows.innerHTML = allPeople
+      .slice(startRow, endRow)
+      .map((p, i) => renderPersonRow(p, /* absolute idx */ startRow + i))
+      .join('');
+  }
+
+  container.addEventListener('scroll', renderVisible, { passive: true });
+  renderVisible();
+}
+```
+
+Numbers: at 577 people, viewport shows ~10 rows at a time. With 5-row buffer = 20 rows in DOM at any moment instead of 577. **30× fewer DOM nodes.**
+
+Key edge cases:
+
+- **Search/jump-to-row**: scrollIntoView equivalent — set `container.scrollTop = personIndex × ROW_HEIGHT_PX`, then renderVisible repaints.
+- **Edit-in-progress preservation**: if the user is typing in a cell that scrolls out of view, save the value to STATE before the row is removed from the DOM. On scroll back, the row re-renders with the preserved value.
+- **Realtime updates**: when a remote write changes a cell that's currently NOT in the viewport, just update STATE — no DOM work needed. When it scrolls back into view, it renders with the new value.
+- **Print / export**: bypass virtualisation, render all rows. Print-only CSS already handles the page-break layout.
+
+Per the BATTLE-TEST finding #21 (input-attribute coupling presence.js ↔ roster.js), virtualisation needs to maintain the same `data-name` / `data-week` / `data-day` attributes so presence outlines keep working.
+
+#### Effort
+
+~2-3 days for the core. Another ~1-2 days for edge cases (search, edit preservation, presence interop). Test plan: load a synthesised 600-person SEED on demo and check editor responsiveness.
+
+### Workstream 2 — Initial-load scoping
+
+#### What today's load does
+
+`loadFromSupabase` in `index.html:1665` fetches ALL schedule rows for the tenant in one shot:
+
+```js
+sbFetch('schedule?select=*'),
+```
+
+At Melbourne scale: 577 people × ~52 weeks of forward + 4 weeks of past = ~32,000 rows × ~120 bytes each = ~4MB JSON over the wire. On a 4G connection that's ~5 seconds of just waiting for the schedule load.
+
+#### The fix: visible-week scoping + lazy expand
+
+```js
+// Instead of `?select=*`, fetch only the visible week range:
+const currentMonday = mondayKey(new Date());
+const weeksAhead = 12;  // default range
+const weeksList = [];
+for (let i = -2; i <= weeksAhead; i++) {
+  weeksList.push(mondayKeyPlus(currentMonday, i));
+}
+
+sbFetch('schedule?select=*&week=in.(' + weeksList.map(encodeURIComponent).join(',') + ')')
+```
+
+- Default load: 14 weeks (2 past + 12 ahead).
+- At 577 people × 14 weeks = ~8,000 rows = ~1MB. Acceptable on first paint.
+- User clicks "show more weeks ahead" → lazy-fetch the next 12 weeks via additional sbFetch, append to STATE.schedule.
+- "Show full year" loads all 52 weeks but at user request, with a loading spinner. Forecast page does this proactively because it needs the full range.
+
+#### Pagination on people / contacts list
+
+Same pattern for `?select=*&order=name` on people:
+
+- Default load: first 100 rows ordered by name.
+- Pagination controls at bottom: "Showing 1-100 of 577 · [Next 100]".
+- Search field at top filters across the full set via `?name=ilike.*…*` queries (server-side filter).
+
+577 people fits in memory comfortably (~700KB of JSON), so this is more about render speed than memory. But if we ever hit 5000+ people tenants, the pagination already exists.
+
+#### Effort
+
+~1-2 days. Mostly modifying loadFromSupabase + the renderRoster / renderContacts pagination affordances. Code change is small; testing is what takes time (need to verify week navigation, deep-linking, realtime merges still work with partial schedule in memory).
+
+### Workstream 3 — Realtime channel scoping
+
+#### What today's subscription does
+
+`scripts/realtime.js` `_rtJoinChannel` subscribes to a postgres_changes channel filtered by `org_id`:
+
+```js
+const topic = 'realtime:public:schedule:org_id=eq.' + TENANT.ORG_UUID;
+```
+
+This means every supervisor receives EVERY schedule change for the entire tenant. At SKS today (50 people, 1-3 supervisors), that's maybe 20 messages/hour during peak. Trivial.
+
+At Melbourne scale (577 people, 10-20 supervisors editing concurrently): ~200 messages/hour per supervisor × 20 supervisors = 4000 messages/hour fan-out. Network and battery cost on iPads becomes noticeable.
+
+#### Three scoping options
+
+**Option A — per-week scoping**:
+
+```js
+// Subscribe only to the current visible week
+const topic = `realtime:public:schedule:org_id=eq.${TENANT.ORG_UUID}:week=eq.${STATE.currentWeek}`;
+```
+
+- Pro: drastically reduces traffic — supervisors only get changes for the week they're looking at.
+- Pro: matches user mental model — when I'm editing wk24, I only care about wk24 changes.
+- Con: changing weeks requires re-subscribing (channel teardown + new join). ~50ms latency on week-change but invisible.
+- Con: cross-week aggregations (forecast view) need a separate broader subscription.
+
+**Option B — per-region scoping** (Wave 4 multi-region):
+
+```js
+const topic = `realtime:public:schedule:org_id=eq.${TENANT.ORG_UUID}:region_id=eq.${STATE.currentRegion}`;
+```
+
+- A NSW supervisor doesn't get VIC roster changes. Lines up with the multi-region UI gating.
+- Doesn't help inside a single region — VIC alone is still ~350 people.
+
+**Option C — per-project scoping** (Wave 1 projects):
+
+```js
+const topic = `realtime:public:schedule:org_id=eq.${TENANT.ORG_UUID}:project_id=eq.${VIEWING_PROJECT}`;
+```
+
+- Only useful if the user is drilled into a specific project.
+- Not the default view, so this is an opportunistic optimization.
+
+**Recommendation**: Option A (per-week) as the default in Wave 2 (when forecast view stabilises which weeks the user touches). Option B layers cleanly on top in Wave 4. Option C as a small optimization for the project-drill-down view.
+
+Combined: subscribe to `org_id + region_id + week_in_visible_range`. With 14-week visible range and one region, supervisor receives ~1/4 of org-wide traffic instead of 100%.
+
+#### Effort
+
+~3-4 days. The Phoenix protocol implementation in `scripts/realtime.js` already supports filtered topics — extending the filter syntax is small. Bigger work is handling channel resubscription on week-change / region-change without dropping events during the transition.
+
+### Render performance — auxiliary concerns
+
+#### Editor scroll performance on iPad Safari
+
+iPad Safari has historically been the weakest renderer in the EQ Field user base. Even after virtualisation, scroll performance can degrade if:
+
+- Cell `<input>` elements have `box-shadow` or `border-radius` (composite layer triggers).
+- Inline `style` attributes on every cell (they are, today — hot pink `style="color:..."` per cell).
+
+Mitigation: convert hot inline styles to CSS classes in a follow-up pass. Already a lurking issue today; becomes urgent at 600-row scale.
+
+#### Service worker pre-cache budget
+
+`sw.js` PRECACHE list grows with every new feature. At Melbourne scale we'll have added: editor-virtual.js, sidebar.js, forecast.js, regions.js, compliance.js. Each ~3-5KB compressed. Total ~30KB of new JS in PRECACHE — negligible.
+
+#### Materialised view refresh latency
+
+The `mv_project_week_actuals` from Section 2 refreshes every 5 minutes via pg_cron. At Melbourne scale with frequent edits, the forecast view could be up to 5 min stale. Two options:
+
+- Accept 5min staleness (forecast is a planning tool, not real-time).
+- Trigger-based refresh on schedule writes (more responsive, more DB load).
+- Hybrid: trigger refresh when the most recent schedule write is older than 30s, throttled.
+
+Recommendation: 5min cron is fine for v1. Tighten later if users complain.
+
+### Performance budget per page
+
+Concrete targets to validate against during Wave 2-4:
+
+| Page | Time-to-interactive (4G iPad Safari) | Cells in DOM | Schedule rows in memory |
+|---|---|---|---|
+| Roster (Starter, ~10 ppl) | <500ms | ~70 | ~140 (14 wks × 10 ppl) |
+| Roster (SMB, ~50 ppl) | <800ms | ~350 | ~700 (14 wks × 50 ppl) |
+| Roster (Enterprise, ~600 ppl) | <1500ms | ~140 (virtualised) | ~8000 (14 wks × 577 ppl) |
+| Forecast (Enterprise) | <2000ms (initial), <100ms (cached) | ~400 (12 wks × ~30 visible projects+rows) | (uses materialised view, not raw schedule) |
+| Editor week-change | <300ms | re-renders visible range only | unchanged in memory |
+
+These budgets become acceptance criteria for Wave 2 and Wave 4 PRs.
+
+### Effort summary
+
+| Workstream | Engineering | Calendar |
+|---|---|---|
+| Editor virtualisation | 4-5 days | Week of Wave 1 launch |
+| Initial-load scoping | 1-2 days | Same week |
+| Realtime channel scoping | 3-4 days | Wave 2 |
+| Inline-style → CSS-class cleanup | 2-3 days | Background |
+| Materialised view tuning | 1 day | Wave 2 |
+
+Total: ~2 weeks of focused perf work, spread across the wave delivery. Most of it is week-of-Wave-2 — when the forecast view ships, performance becomes the gating factor.
+
 
