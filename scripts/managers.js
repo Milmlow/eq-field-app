@@ -5,6 +5,35 @@
 // Depends on: app-state.js, utils.js, supabase.js
 // ─────────────────────────────────────────────────────────────
 
+// v3.4.46: shared cell helpers used by BOTH the mobile-card and the
+// desktop-table renderers below. Adding an action button (or changing
+// the no-phone fallback styling, or anything that's logically the same
+// between the two viewports) now updates one place instead of two,
+// killing the "added it on desktop, forgot mobile" drift class.
+function _managerActions(m) {
+  return `<button class="btn-icon" title="Edit" onclick="openEditManager('${m.id}')">✎</button>
+    <button class="btn-icon" style="color:var(--red)" title="Remove"
+      data-mid="${m.id}" data-mname="${esc(m.name)}"
+      onclick="confirmRemoveManager(this.dataset.mid, this.dataset.mname)">✕</button>`;
+}
+function _managerPhone(m, size) {
+  // size: 'mobile' (14px purple link in card) | 'desktop' (default link in table cell)
+  if (!m.phone) {
+    return size === 'mobile'
+      ? '<span style="color:#EF4444;font-size:12px">No phone</span>'
+      : '<span style="color:#EF4444;font-size:11px">No phone</span>';
+  }
+  return size === 'mobile'
+    ? `<a href="tel:${m.phone}" style="color:var(--purple);font-weight:600;text-decoration:none;font-size:14px">${m.phone}</a>`
+    : `<a href="tel:${m.phone}">${m.phone}</a>`;
+}
+function _managerEmail(m, size) {
+  if (!m.email) return size === 'mobile' ? '' : '—';
+  return size === 'mobile'
+    ? `<a href="mailto:${esc(m.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(m.email)}</a>`
+    : `<a href="mailto:${esc(m.email)}" style="color:var(--purple)">${esc(m.email)}</a>`;
+}
+
 function renderManagers() {
   const search   = (document.getElementById('managers-search').value || '').toLowerCase();
   const category = document.getElementById('managers-category').value;
@@ -60,23 +89,18 @@ function renderManagers() {
       const col = catColors[cat] || '#8494A7';
       html += `<div style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${col};padding:10px 4px 6px">${cat}</div>`;
       grouped[cat].forEach(m => {
-        const phoneHtml = m.phone
-          ? `<a href="tel:${m.phone}" style="color:var(--purple);font-weight:600;text-decoration:none;font-size:14px">${m.phone}</a>`
-          : '<span style="color:#EF4444;font-size:12px">No phone</span>';
+        const emailHtml = _managerEmail(m, 'mobile');
         html += `<div style="background:white;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:14px;color:var(--navy);margin-bottom:3px">${esc(m.name)}</div>
             <div style="font-size:12px;color:var(--ink-2);margin-bottom:5px">${m.role || ''}</div>
             <div style="display:flex;flex-direction:column;gap:3px">
-              ${phoneHtml}
-              ${m.email ? `<a href="mailto:${esc(m.email)}" style="color:var(--purple);font-size:11px;text-decoration:none">${esc(m.email)}</a>` : ''}
+              ${_managerPhone(m, 'mobile')}
+              ${emailHtml}
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn-icon" title="Edit" onclick="openEditManager('${m.id}')">✎</button>
-            <button class="btn-icon" style="color:var(--red)" title="Remove"
-              data-mid="${m.id}" data-mname="${esc(m.name)}"
-              onclick="confirmRemoveManager(this.dataset.mid, this.dataset.mname)">✕</button>
+            ${_managerActions(m)}
           </div>
         </div>`;
       });
@@ -96,14 +120,9 @@ function renderManagers() {
           <td class="name-col" style="font-weight:600">${esc(m.name)}</td>
           <td class="meta-col">${m.role || '—'}</td>
           <td class="meta-col">${m.category || '—'}</td>
-          <td class="phone-col">${m.phone ? `<a href="tel:${m.phone}">${m.phone}</a>` : '<span style="color:#EF4444;font-size:11px">No phone</span>'}</td>
-          <td class="meta-col">${m.email ? `<a href="mailto:${esc(m.email)}" style="color:var(--purple)">${esc(m.email)}</a>` : '—'}</td>
-          <td class="center" style="white-space:nowrap">
-            <button class="btn-icon" title="Edit" onclick="openEditManager('${m.id}')">✎</button>
-            <button class="btn-icon" style="color:var(--red)" title="Remove"
-              data-mid="${m.id}" data-mname="${esc(m.name)}"
-              onclick="confirmRemoveManager(this.dataset.mid, this.dataset.mname)">✕</button>
-          </td>
+          <td class="phone-col">${_managerPhone(m, 'desktop')}</td>
+          <td class="meta-col">${_managerEmail(m, 'desktop')}</td>
+          <td class="center" style="white-space:nowrap">${_managerActions(m)}</td>
         </tr>`;
       });
     });

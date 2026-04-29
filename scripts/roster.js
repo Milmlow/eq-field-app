@@ -229,7 +229,8 @@ function renderRoster() {
   const days        = getVisibleRosterDays();
   const dayLabels   = getVisibleRosterDayLabels();
   const weekDates   = getWeekDates(week);
-  const isMobile    = window.innerWidth <= 768;
+  // v3.4.46: removed dead `const isMobile` — the comment 5 lines below
+  // already notes the renderer is unified, the const had no readers.
 
   renderRosterLegend();
 
