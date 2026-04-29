@@ -193,8 +193,32 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.45
+  EQ Solves — Field  v3.4.46
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.46  (extract shared mobile/desktop cell helpers — DEMO ONLY)
+  ────────────────────────────────────────────────────────────
+  • scripts/managers.js renderManagers and scripts/people.js
+    renderContacts each had a `if (isMobile) { ... } else { ... }`
+    branch where the action buttons, phone link, and email link
+    were duplicated as parallel template strings. Adding a new
+    column or tweaking the no-phone fallback meant editing two
+    places and remembering to keep them in sync. We've already
+    been bitten by drift between the two paths (see v3.4.43 —
+    different filters between digest panel and main supervisors
+    list).
+  • Extracted small helpers in each file:
+    - managers.js: _managerActions, _managerPhone, _managerEmail
+    - people.js:   _personActions,  _personPhone,  _personEmail
+    Both branches now call the helpers. Adding a new action or
+    changing the fallback styling is a one-line edit.
+  • scripts/roster.js renderRoster: removed dead `const isMobile`
+    (a 5-line-below comment already noted the renderer is unified
+    — the const had no readers).
+  • DEMO ONLY release. SKS prod stays on v3.4.45 while Royce is
+    on holidays — the v3.4.45 → main PR (#31) sits open until
+    he's back, and v3.4.46 will follow when SKS is ready to
+    receive both versions in one go.
 
   CHANGES IN v3.4.45  (single-source the version, add release script)
   ────────────────────────────────────────────────────────────
