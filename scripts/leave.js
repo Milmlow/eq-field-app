@@ -15,6 +15,14 @@ let leaveViewMode = 'list';
 let leaveCalMonth = new Date().getMonth();
 let leaveCalYear  = new Date().getFullYear();
 
+// v3.4.54: per-id inflight guard for leave mutations. Prevents
+// double-tap on iPad / accidental double-click from firing
+// archive/unarchive/respond twice — which had been producing
+// duplicate audit-log entries (see BATTLE-TEST finding #24,
+// confirmed in EQ Supabase audit_log) and would also send
+// duplicate approval emails to the requester via respondLeave.
+const _leaveInflight = new Set();
+
 // ── Load / save CC list ───────────────────────────────────────
 
 async function loadLeaveCCList() {
@@ -478,6 +486,16 @@ async function respondLeave(status) {
     return;
   }
 
+  // v3.4.54: per-id inflight guard. Without this, an iPad double-tap on
+  // Approve fires respondLeave twice — both PATCHes go through (idempotent
+  // server-side after the first), but each one writes a separate audit-log
+  // entry AND triggers a separate email to the requester. Confirmed in EQ
+  // Supabase audit_log: duplicate "Archived leave" entries 686ms apart
+  // (BATTLE-TEST finding #24).
+  const lockKey = String(id);
+  if (_leaveInflight.has(lockKey)) return;
+  _leaveInflight.add(lockKey);
+
   try {
     await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', {
       status:         status,
@@ -528,6 +546,8 @@ async function respondLeave(status) {
     renderLeave();
   } catch (e) {
     showToast('Failed — check connection');
+  } finally {
+    _leaveInflight.delete(lockKey);            // v3.4.54: release per-id lock
   }
 }
 
@@ -605,6 +625,10 @@ async function archiveLeaveRequest(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
   const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
+  if (req.archived === true) return;          // v3.4.54: already archived
+  const lockKey = String(id);
+  if (_leaveInflight.has(lockKey)) return;    // v3.4.54: in-flight from prior click
+  _leaveInflight.add(lockKey);
   try {
     await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: true });
     req.archived = true;
@@ -615,6 +639,8 @@ async function archiveLeaveRequest(id) {
     auditLog(`Archived leave: ${req.requester_name} ${req.leave_type}`, 'Leave', `${req.date_start} to ${req.date_end}`, null);
   } catch (e) {
     showToast('Archive failed — check connection');
+  } finally {
+    _leaveInflight.delete(lockKey);
   }
 }
 
@@ -622,6 +648,10 @@ async function unarchiveLeaveRequest(id) {
   if (!isManager) { showToast('Supervision access required'); return; }
   const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
+  if (req.archived !== true) return;          // v3.4.54: already not archived
+  const lockKey = String(id);
+  if (_leaveInflight.has(lockKey)) return;    // v3.4.54
+  _leaveInflight.add(lockKey);
   try {
     await sbFetch(`leave_requests?id=eq.${id}`, 'PATCH', { archived: false });
     req.archived = false;
@@ -630,6 +660,8 @@ async function unarchiveLeaveRequest(id) {
     showToast(`${req.requester_name} leave restored`);
   } catch (e) {
     showToast('Restore failed — check connection');
+  } finally {
+    _leaveInflight.delete(lockKey);
   }
 }
 

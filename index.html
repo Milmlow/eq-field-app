@@ -194,8 +194,34 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.53
+  EQ Solves — Field  v3.4.54
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.54  (leave handlers: per-id inflight guard against double-tap)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 8 (iteration 7 of overnight loop). Switched
+    from code-review to a Supabase MCP runtime sweep. EQ project
+    audit_log surfaced two duplicate "Archived leave: Casey
+    Williams A/L" entries 686ms apart on 2026-04-27 — classic
+    iPad accidental double-tap. Inspecting the handlers showed
+    none of archiveLeaveRequest, unarchiveLeaveRequest, OR
+    respondLeave have a double-click guard.
+  • respondLeave is the worst case — a double-tap on Approve
+    fires two PATCHes (idempotent server-side) but each writes
+    a separate audit-log entry AND triggers a separate email to
+    the requester. Approval emails saying "your leave was
+    approved" twice would erode trust quickly.
+  • Fix: per-id inflight Set `_leaveInflight` shared across all
+    three mutating handlers. Each adds the leave id on entry
+    and deletes on finally. Two parallel actions on different
+    leave rows are still allowed; double-action on the same
+    row is silently ignored.
+  • Bonus guards: archiveLeaveRequest checks `req.archived ===
+    true` (already archived) and unarchiveLeaveRequest checks
+    `req.archived !== true` (already not archived) before doing
+    any work — informative early-return when the click is
+    actually pointless.
+  • Demo only.
 
   CHANGES IN v3.4.53  (managers.js removeManager: id-coercion fix on filter)
   ────────────────────────────────────────────────────────────
