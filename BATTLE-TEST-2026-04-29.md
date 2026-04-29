@@ -85,8 +85,8 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/digest-settings.js`                    |      |                                          |
 | `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
 | `scripts/auth.js` (PIN flow, session token)     |      |                                          |
-| Supabase MCP runtime sweep — `roster_presence`  |      |                                          |
-| Supabase MCP runtime sweep — `audit_log`        |      |                                          |
+| Supabase MCP runtime sweep — `roster_presence`  | ✓    | Pass 8 — clean (0 rows, finding #26)    |
+| Supabase MCP runtime sweep — `audit_log`        | ✓    | Pass 8 — finding #24 (dup archive entry)|
 | Edge-case probe — DST / timezone boundaries     |      |                                          |
 | Edge-case probe — long names / special chars    |      |                                          |
 | Edge-case probe — memory/timer leaks            |      |                                          |
@@ -293,4 +293,26 @@ A user with the published anon key (visible in `scripts/app-state.js`) could ins
 **Where**: `scripts/managers.js` `saveManager` line 186 — `const newId = Math.max(0, ...STATE.managers.map(x => x.id)) + 1;`.
 **Symptom**: `Math.max` coerces its arguments via `Number(...)`. For numeric SEED ids (EQ today) and bigint string ids (SKS) this works. But if EQ ever transitions to a real tenant with uuid ids (`abc-123-def`), `Number("abc-123-def")` is `NaN`, `Math.max(...)` returns `NaN`, `newId` becomes `NaN`. The created mgr object has `id: NaN`. Subsequent `saveManagerToSB` triggers `_upsertById` which detects this isn't a real DB id (NaN fails the regex) and POSTs a fresh row, the DB-assigned uuid gets written back to entity.id. So end-state correct — but during the brief in-memory window between push and POST, the row has id=NaN.
 **Severity**: 🟡 latent. Manifests only on uuid tenants (which is the future-state EQ if it transitions per #11). Quick fix: filter the .map() result to only numeric / coercible ids before Math.max, or simpler — generate temp ids as `temp-${Date.now()}-${Math.random()}` and let `_upsertById` swap them out. Tied to #11 SEED-vs-real decision.
+
+
+---
+
+## Pass 8 — Supabase MCP runtime sweep + leave handler guard (iteration 7)
+
+### 🔴 24. Duplicate audit-log entries from double-tap on archive · 🔧 fixed in v3.4.54
+**Where**: EQ Supabase `audit_log` (read-only sweep), bug in `scripts/leave.js` archiveLeaveRequest, unarchiveLeaveRequest, respondLeave.
+**Discovered via**: Runtime sweep against `audit_log` showed two "Archived leave: Casey Williams A/L" rows 686ms apart on 2026-04-27 (Demo Supervisor, ids `e12278a3…` and `d7f38e17…`). Classic iPad double-tap pattern.
+**Symptom**: None of the three leave-mutating handlers have a double-click guard. Effects:
+  - archive/unarchive: duplicate audit entries, otherwise idempotent server-side. Misleading audit trail.
+  - **respondLeave: each click fires a separate PATCH AND triggers a separate email** to the requester via `triggerLeaveEmail('status_update', ...)`. Two emails saying "your leave was approved" — confusing and trust-eroding.
+**Fix**: per-id inflight `Set` (`_leaveInflight`) at module level, shared across all three handlers. Each handler adds the leave id on entry, deletes on `finally`. The second concurrent click on the same leave row is silently ignored. Different leaves can still be actioned in parallel. Bonus: `archiveLeaveRequest` now early-returns if `req.archived === true` (already archived); `unarchiveLeaveRequest` early-returns if `req.archived !== true` (already not archived).
+
+### 🟢 25. Audit-log ordering at minute resolution · 📝 documented
+**Where**: query results from runtime sweep.
+**Symptom**: `to_char(created_at, 'YYYY-MM-DD HH24:MI')` truncates at the minute boundary. Two events created within the same minute show up out-of-order in the list, since they sort by truncated string. Cosmetic — the underlying timestamps are millisecond-precise (verified separately with `.MS` formatting). Audit-log UI in the app should display sub-minute precision when entries cluster, or sort by raw `created_at` not the formatted string.
+
+### 🟢 26. Runtime sweep — no other anomalies · 📝 documented
+- `roster_presence`: 0 rows. Either pg_cron cleanup is working, or no one's been editing recently. Either way fine.
+- `audit_log`: 43 total, 1 in last 24h, 0 "TAFE Auto-Fill" entries. The cron is scheduled for Sun 06:00 UTC; today's Wednesday so 0 firings is expected.
+- `schedule`: 18 rows, 0 in last 24h, no duplicates (UNIQUE constraint holding). Recent v3.4.47 presence work didn't leave artifacts here — consistent with finding #11 (EQ tenant runs in SEED-demo mode so the schedule writes go to a sink).
 
