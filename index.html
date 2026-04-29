@@ -194,8 +194,30 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.47
+  EQ Solves — Field  v3.4.48
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.48  (presence: fix focus/blur race + drop dead sendBeacon — DEMO ONLY)
+  ────────────────────────────────────────────────────────────
+  • scripts/presence.js had a race in fast focus→blur sequences:
+    POST and DELETE were both async, fired in the order the user
+    triggered them, but the server could process DELETE first
+    (no-op, no row to delete) and then the POST left an orphan
+    row. Other clients saw "X is editing" for ~15s before the
+    client-side staleness filter masked it, and the row sat in
+    Supabase until the hourly pg_cron sweep.
+    Fix: track the latest in-flight POST in `_presenceInflight`.
+    presenceBlur awaits it before issuing DELETE, so the server
+    sees POST → DELETE in the right order.
+  • Removed the beforeunload sendBeacon block. sendBeacon only
+    supports POST (not DELETE) and the request lacked the
+    apikey/Authorization headers PostgREST requires. It was a
+    confidently-named no-op. Unclean tab-close cleanup falls
+    back to the hourly pg_cron sweep + the existing client-side
+    `focused_at > now-15s` visual filter.
+  • Removed dead `cutoff` local in _presenceRender.
+  • Demo only. SKS prod still on the pre-presence baseline until
+    Royce is back from holidays.
 
   CHANGES IN v3.4.47  (real-time presence on roster editor — DEMO ONLY)
   ────────────────────────────────────────────────────────────

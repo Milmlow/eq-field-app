@@ -26,6 +26,7 @@
 const _activePresence = new Map();    // `${week}||${name}||${day}` -> { manager, focused_at, ts }
 let _presenceHeartbeat = null;
 let _presenceCurrent   = null;        // { name, week, day } currently held by THIS client
+let _presenceInflight  = Promise.resolve();  // v3.4.48: latest focus/heartbeat POST so blur can await before deleting
 const _PRESENCE_FRESH_MS = 15000;     // outline shown only while focused_at is within last 15s
 
 function _presenceKey(week, name, day) {
@@ -48,22 +49,25 @@ async function presenceFocus(name, week, day) {
   _presenceCurrent = { name, week, day };
   // Upsert via POST with merge-duplicates so a focus → blur → focus on
   // the same cell refreshes focused_at instead of conflicting.
+  // v3.4.48: track the latest in-flight POST so presenceBlur can await
+  // it before issuing DELETE — without that ordering guarantee, a fast
+  // focus→blur could let DELETE arrive first (no-op, no row to delete)
+  // and the POST then leaves an orphan row.
   const row = {
     manager_name: currentManagerName,
     week, cell_name: name, cell_day: day,
     focused_at: new Date().toISOString()
   };
-  try {
-    await sbFetch(
-      'roster_presence?on_conflict=org_id,manager_name,week,cell_name,cell_day',
-      'POST', row, 'resolution=merge-duplicates,return=minimal'
-    );
-  } catch (e) { /* non-blocking */ }
+  _presenceInflight = sbFetch(
+    'roster_presence?on_conflict=org_id,manager_name,week,cell_name,cell_day',
+    'POST', row, 'resolution=merge-duplicates,return=minimal'
+  ).catch(() => { /* non-blocking */ });
+  await _presenceInflight;
 
   // Heartbeat: refresh focused_at every 10s while held so a slow editor
   // doesn't drop below the 15s freshness threshold on other clients.
   clearInterval(_presenceHeartbeat);
-  _presenceHeartbeat = setInterval(async () => {
+  _presenceHeartbeat = setInterval(() => {
     if (!_presenceCurrent) return;
     const heartbeat = {
       manager_name: currentManagerName,
@@ -72,12 +76,10 @@ async function presenceFocus(name, week, day) {
       cell_day:     _presenceCurrent.day,
       focused_at:   new Date().toISOString()
     };
-    try {
-      await sbFetch(
-        'roster_presence?on_conflict=org_id,manager_name,week,cell_name,cell_day',
-        'POST', heartbeat, 'resolution=merge-duplicates,return=minimal'
-      );
-    } catch (e) { /* non-blocking */ }
+    _presenceInflight = sbFetch(
+      'roster_presence?on_conflict=org_id,manager_name,week,cell_name,cell_day',
+      'POST', heartbeat, 'resolution=merge-duplicates,return=minimal'
+    ).catch(() => { /* non-blocking */ });
   }, 10000);
 }
 
@@ -89,6 +91,10 @@ async function presenceBlur(name, week, day) {
 
   clearInterval(_presenceHeartbeat); _presenceHeartbeat = null;
   _presenceCurrent = null;
+
+  // v3.4.48: wait for any in-flight focus/heartbeat POST to land before
+  // issuing DELETE. See _presenceInflight comment in presenceFocus.
+  try { await _presenceInflight; } catch (e) {}
 
   const m = encodeURIComponent(currentManagerName);
   const w = encodeURIComponent(week);
@@ -102,25 +108,14 @@ async function presenceBlur(name, week, day) {
   } catch (e) { /* non-blocking */ }
 }
 
-// Best-effort cleanup if the user closes the tab while a cell is held.
-window.addEventListener('beforeunload', () => {
-  if (_presenceCurrent && currentManagerName) {
-    // Use sendBeacon for survivable cleanup. Falls back to noop if not supported.
-    try {
-      const m = encodeURIComponent(currentManagerName);
-      const w = encodeURIComponent(_presenceCurrent.week);
-      const n = encodeURIComponent(_presenceCurrent.name);
-      const d = encodeURIComponent(_presenceCurrent.day);
-      // No sendBeacon for DELETE in PostgREST without auth headers — best
-      // effort only. The pg_cron 5-minute cleanup mops up anything we miss.
-      navigator.sendBeacon &&
-        navigator.sendBeacon(
-          `${SB_URL}/rest/v1/roster_presence?manager_name=eq.${m}&week=eq.${w}&cell_name=eq.${n}&cell_day=eq.${d}`,
-          new Blob([''], { type: 'application/x-www-form-urlencoded' })
-        );
-    } catch (e) {}
-  }
-});
+// v3.4.48: removed the beforeunload sendBeacon block. sendBeacon only
+// supports POST and the request had no PostgREST auth headers, so it
+// was a confidently-named no-op. Unclean tab closes are handled by:
+//   1. The hourly pg_cron job in migrations/2026-04-29_roster_presence.sql
+//      which DELETEs rows older than 5 minutes.
+//   2. The client-side `focused_at > now-15s` filter in _presenceRender,
+//      which hides visually-stale presence within 15 seconds on every
+//      other client even before the cron sweeps.
 
 // ── Inbound: realtime → maintain _activePresence + render ────
 function _presenceApplyChange(evType, record, oldRec) {
@@ -159,7 +154,6 @@ function _presenceRender() {
   });
 
   // Apply outlines for fresh presence rows.
-  const cutoff = Date.now() - _PRESENCE_FRESH_MS;
   const week = (typeof STATE !== 'undefined' && STATE.currentWeek) || '';
   for (const [key, v] of _activePresence) {
     // Stale ones get reaped at next render or when realtime delivers
