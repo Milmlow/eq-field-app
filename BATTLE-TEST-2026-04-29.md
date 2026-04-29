@@ -83,7 +83,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
 | `scripts/audit.js`                              | ✓    | Pass 10 — findings #30-35 (forensics gaps) |
 | `scripts/digest-settings.js`                    | ✓    | Pass 11 — findings #36-39 (race fix)    |
-| `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
+| `sw.js` (PRECACHE list, network-first logic)    | ✓    | Pass 12 — findings #40 (cache-error), #41, #42 |
 | `scripts/auth.js` (PIN flow, session token)     |      |                                          |
 | Supabase MCP runtime sweep — `roster_presence`  | ✓    | Pass 8 — clean (0 rows, finding #26)    |
 | Supabase MCP runtime sweep — `audit_log`        | ✓    | Pass 8 — finding #24 (dup archive entry)|
@@ -395,4 +395,23 @@ The `some()` check uses String() coercion (fixes #27) and naturally short-circui
 ### 🟢 39. m.id interpolated raw into onchange handler — defensive XSS gap · 📝 documented
 **Where**: `scripts/digest-settings.js` `_paintPanel` line 98.
 **Symptom**: `onchange="toggleDigest('${m.id}', this.checked)"` interpolates m.id into a single-quoted JS string. m.id is uuid string / bigint / number in practice — none contain quotes or backslashes, so safe in current data shape. If a malicious actor ever managed to insert a managers row with `id` containing `'` or `\`, the JS would break or be exploitable. Deeply defensive (anon role typically can't write to managers.id). Document for the security review checklist.
+
+
+---
+
+## Pass 12 — `sw.js` review (iteration 11)
+
+### 🔴 40. SW caches error responses → users stuck on cached errors · 🔧 fixed in v3.4.58
+**Where**: `sw.js` both fetch handlers (cache-first for `/icons/`+`/manifest.json` lines 65-77; network-first for everything else lines 81-89, pre-fix).
+**Symptom**: `cache.put(event.request, c)` was called for ANY response. A 404 / 500 / 503 returned during a partial Netlify deploy got persisted in the SW cache. Subsequent requests from THIS user with flaky network would serve the cached error from the catch fallback in network-first mode, OR cache-first mode would prefer the cached error indefinitely. User stuck on a broken page until the next successful fetch overwrote the cache entry. Particularly nasty during deploy windows where index.html briefly 404s while Netlify swaps assets.
+**Fix**: wrap `cache.put` in `if (res.ok) { … }` — standard service-worker pattern. Successful responses still cache; errors flow through to the user but don't poison the cache.
+
+### 🟡 41. PRECACHE addAll silent failure · 🔧 fixed in v3.4.58
+**Where**: `sw.js` install handler `.catch(() => {})` line 44 (pre-fix).
+**Symptom**: If any URL in PRECACHE fails to fetch during install (script 404 from deploy mismatch, network blip, CDN issue), the entire `addAll` promise rejects and the empty catch swallows the error. SW installs in a partially-cached state with no signal. Users may experience inconsistent offline behavior; admins have no visibility into the failure mode.
+**Fix**: `.catch(e => console.warn('EQ[sw] PRECACHE addAll failed', e))`. Same pattern as v3.4.56's auditLog change. SW still installs on partial failure (partial cache > no cache for non-blocking files); failures are now observable in DevTools / browser console.
+
+### 🟢 42. manifest.json cache-first → stale tenant branding · 📝 documented
+**Where**: `sw.js` `CACHE_FIRST_PATHS = ['/manifest.json', '/icons/']` line 39.
+**Symptom**: manifest.json is in cache-first set. If tenant branding changes (PWA name, theme color, icon refs), the cached manifest stays until the next cache-version bump (i.e. next code release). For static tenants (SKS, EQ today) this is fine. For multi-tenant onboarding where customers can change their own branding via Settings, manifest staleness becomes a real UX bug — they update the logo, see the change everywhere except the home-screen install. **Tier-relevant**: surfaces once self-serve branding lands. Two fixes possible: (a) move manifest.json out of CACHE_FIRST_PATHS to network-first (slower install but fresh), or (b) include a tenant-branding hash in the cache key so branding changes auto-invalidate. Defer to multi-tenant onboarding phase.
 

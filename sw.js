@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.57
-const CACHE = 'eq-field-v3.4.57';
+// EQ Solves — Field  ·  Service Worker  v3.4.58
+const CACHE = 'eq-field-v3.4.58';
 
 const PRECACHE = [
   '/',
@@ -40,8 +40,14 @@ const CACHE_FIRST_PATHS = ['/manifest.json', '/icons/'];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
+  // v3.4.58: surface PRECACHE failures via console.warn so deploy-time
+  // issues (one of the script files 404s, network blip during install,
+  // CDN issue) are observable. SW still installs even on partial failure
+  // — partial cache is better than no cache.
   event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(PRECACHE)).catch(() => {})
+    caches.open(CACHE)
+      .then(cache => cache.addAll(PRECACHE))
+      .catch(e => console.warn('EQ[sw] PRECACHE addAll failed:', e && e.message || e))
   );
 });
 
@@ -67,8 +73,14 @@ self.addEventListener('fetch', event => {
       caches.match(event.request).then(cached => {
         if (cached) return cached;
         return fetch(event.request).then(res => {
-          const c = res.clone();
-          caches.open(CACHE).then(cache => cache.put(event.request, c));
+          // v3.4.58: only cache successful responses. Without this guard,
+          // a 404/500/503 during a partial deploy gets persisted in the
+          // SW cache and serves indefinitely until the next successful
+          // fetch overwrites it — users get stuck on cached error pages.
+          if (res.ok) {
+            const c = res.clone();
+            caches.open(CACHE).then(cache => cache.put(event.request, c));
+          }
           return res;
         });
       })
@@ -81,8 +93,11 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     fetch(event.request)
       .then(res => {
-        const c = res.clone();
-        caches.open(CACHE).then(cache => cache.put(event.request, c));
+        // v3.4.58: only cache successful responses. See cache-first branch.
+        if (res.ok) {
+          const c = res.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, c));
+        }
         return res;
       })
       .catch(() => caches.match(event.request))
