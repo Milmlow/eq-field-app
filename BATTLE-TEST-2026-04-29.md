@@ -79,7 +79,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/leave.js`                              | ✓    | Pass 5 — findings #17-19 (XSS gap fix)  |
 | `scripts/roster.js`                             | ✓    | Pass 6 — findings #20-21 (fillWeek fix) |
 | `scripts/people.js`                             |      |                                          |
-| `scripts/managers.js`                           |      |                                          |
+| `scripts/managers.js`                           | ✓    | Pass 7 — findings #22 (id-coercion fix), #23 |
 | `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
 | `scripts/audit.js`                              |      |                                          |
 | `scripts/digest-settings.js`                    |      |                                          |
@@ -277,4 +277,20 @@ A user with the published anon key (visible in `scripts/app-state.js`) could ins
 **Where**: `scripts/roster.js` `renderEditor` line 444+ (data attributes on `<input>`s); `scripts/presence.js` `_presenceRender` (CSS selector matching those attributes).
 **Symptom**: presence.js builds a CSS selector `#editor-content input[data-name="${CSS.escape(pName)}"][data-week="${CSS.escape(pWeek)}"][data-day="${pDay}"]` that depends on roster.js emitting matching `data-name`, `data-week`, `data-day` attributes. If roster.js's emitter changes (renames data attributes, drops one), presence breaks silently — outline stops appearing without any error. No type system to catch this; only e2e testing or visual check would notice.
 **Severity**: 🟢 cosmetic. Worth adding a comment in both files cross-referencing the contract, or extracting the attribute names to a shared const. Documented for future hardening.
+
+
+---
+
+## Pass 7 — `scripts/managers.js` review (iteration 6)
+
+### 🔴 22. removeManager filter used strict `!==`, leaving ghost rows on SKS · 🔧 fixed in v3.4.53
+**Where**: `scripts/managers.js` `removeManager` line 225.
+**Symptom**: `STATE.managers = (STATE.managers || []).filter(m => m.id !== id);` — strict inequality. Same id-coercion bug class as v3.4.22 (saveManager edit path) and v3.4.38 (six leave handlers). On SKS, bigint ids from PostgREST sometimes come back as strings; comparing `101 !== "101"` is always true, so the filter keeps every row including the one being deleted. Manager gets removed from the DB via `deleteManagerFromSB` but lingers in the local supervisors list as a "ghost" until next page reload. Royce probably saw this intermittently on SKS without realising the cause.
+**Fix**: `String(m.id) !== String(id)` — same coercion pattern used elsewhere.
+**Why this got missed**: v3.4.22 caught all the `find()` callers, v3.4.38 caught the leave handlers. The remove-flow `filter()` is structurally different (negative match instead of positive) and didn't get swept. Lesson: future audits should grep for both `=== id` AND `!== id` when checking for the bug class.
+
+### 🟡 23. saveManager newId computation NaNs for uuid tenants · 📝 documented
+**Where**: `scripts/managers.js` `saveManager` line 186 — `const newId = Math.max(0, ...STATE.managers.map(x => x.id)) + 1;`.
+**Symptom**: `Math.max` coerces its arguments via `Number(...)`. For numeric SEED ids (EQ today) and bigint string ids (SKS) this works. But if EQ ever transitions to a real tenant with uuid ids (`abc-123-def`), `Number("abc-123-def")` is `NaN`, `Math.max(...)` returns `NaN`, `newId` becomes `NaN`. The created mgr object has `id: NaN`. Subsequent `saveManagerToSB` triggers `_upsertById` which detects this isn't a real DB id (NaN fails the regex) and POSTs a fresh row, the DB-assigned uuid gets written back to entity.id. So end-state correct — but during the brief in-memory window between push and POST, the row has id=NaN.
+**Severity**: 🟡 latent. Manifests only on uuid tenants (which is the future-state EQ if it transitions per #11). Quick fix: filter the .map() result to only numeric / coercible ids before Math.max, or simpler — generate temp ids as `temp-${Date.now()}-${Math.random()}` and let `_upsertById` swap them out. Tied to #11 SEED-vs-real decision.
 

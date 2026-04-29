@@ -222,7 +222,13 @@ function confirmRemoveManager(id, name) {
 
 function removeManager(id, name) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  STATE.managers = (STATE.managers || []).filter(m => m.id !== id);
+  // v3.4.53: coerce both sides to String. Same id-coercion class as
+  // v3.4.22 (saveManager edit path) and v3.4.38 (leave handler lookups).
+  // The remove path was missed in those passes. Without coercion, on
+  // SKS (bigint ids that PostgREST sometimes returns as strings) the
+  // filter keeps every row and the deleted-from-DB manager lingers
+  // locally as a "ghost" until next page reload.
+  STATE.managers = (STATE.managers || []).filter(m => String(m.id) !== String(id));
   closeModal('modal-confirm');
   deleteManagerFromSB(id).catch(() => showToast('Delete failed — check connection'));
   document.getElementById('badge-managers').textContent = STATE.managers.length;
