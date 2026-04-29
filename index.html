@@ -190,8 +190,33 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.57
+  EQ Solves — Field  v3.4.58
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.58  (sw.js: don't cache error responses; visible PRECACHE fails)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 12 (iteration 11 of overnight loop). Reviewed
+    sw.js. Two real issues fixed.
+  • #40 (FIXED) — both fetch handlers (cache-first for icons,
+    network-first for HTML/JS/CSS) called cache.put on the
+    response unconditionally. So a 404 / 500 / 503 returned during
+    a partial Netlify deploy got persisted in the SW cache and
+    served indefinitely until the next successful fetch overwrote
+    it. Users on flaky networks could end up stuck on cached error
+    pages for hours. Now we only cache `res.ok` responses.
+  • #41 (FIXED) — PRECACHE addAll's `.catch(() => {})` swallowed
+    install-time failures silently. If a script 404'd during
+    deploy, the SW still installed but with a partial cache, and
+    nobody knew. Now `console.warn('EQ[sw] PRECACHE addAll failed',
+    e)` surfaces the issue in DevTools. SW still installs on
+    partial failure (partial cache > no cache for non-blocking
+    files).
+  • #42 (DOC) — manifest.json is in CACHE_FIRST_PATHS so tenant
+    branding changes (logo / app name) stay stale until the next
+    cache-key bump. Latent for SKS/EQ today; relevant once
+    multi-tenant onboarding lets customers change their own
+    branding.
+  • Demo only.
 
   CHANGES IN v3.4.57  (digest toggle: kill the optimistic-render race)
   ────────────────────────────────────────────────────────────
