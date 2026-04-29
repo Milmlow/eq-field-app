@@ -190,8 +190,35 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.54
+  EQ Solves — Field  v3.4.55
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.55  (people.js removePerson: id-coercion + idempotency)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 9 (iteration 8 of overnight loop). Reviewed
+    scripts/people.js. removePerson had two bugs from the same
+    family we've been sweeping all night:
+      1. STATE.people.filter(p => p.id !== id) — strict
+         inequality. Same class as #22 (managers.removeManager,
+         fixed v3.4.53). On SKS where bigint ids return as
+         strings, filter kept every row → person deleted from DB
+         but lingered locally as a "ghost".
+      2. No double-tap idempotency guard. Same class as #24
+         (leave handlers, fixed v3.4.54). Double-tap on ✕ on
+         iPad would fire duplicate auditLog + showToast +
+         deletePersonFromSB even though the second call was a
+         no-op server-side.
+  • Fix is one elegant pattern that handles both: early-return
+    if `!STATE.people.some(p => String(p.id) === String(id))`.
+    The `some()` check uses String() coercion (fixes bug 1) and
+    naturally short-circuits the second tap because the first
+    tap removed the row from STATE (fixes bug 2). The
+    subsequent .filter() also gets String() coercion to match.
+  • Documented #29 (architectural): schedule table is keyed by
+    name+week+org_id, not by person_id. Two people with the
+    same name today can't coexist in the same week's schedule.
+    Long-standing assumption; documented for the design doc.
+  • Demo only.
 
   CHANGES IN v3.4.54  (leave handlers: per-id inflight guard against double-tap)
   ────────────────────────────────────────────────────────────
