@@ -26,8 +26,9 @@ function renderManagers() {
     return;
   }
 
-  const catOrder  = ['Operations', 'Project Management', 'Construction', 'Supervisor', 'Internal', 'Other'];
+  const catOrder  = ['Executive', 'Operations', 'Project Management', 'Construction', 'Supervisor', 'Internal', 'Other'];
   const catColors = {
+    'Executive':           '#1A1A2E',
     'Operations':          '#1F335C',
     'Project Management':  '#7C77B9',
     'Construction':        '#34486C',
@@ -43,7 +44,14 @@ function renderManagers() {
     grouped[cat].push(m);
   });
 
-  const cats    = catOrder.filter(cat => grouped[cat]);
+  // v3.4.43: render known categories in catOrder, then append any unknown
+  // categories at the end. Previous code dropped anyone whose category
+  // wasn't in catOrder (e.g. 'Executive' before v3.4.42 reached SKS, or
+  // any typo) — they appeared in the digest panel's fresh fetch but not
+  // in the main supervisors table.
+  const knownCats   = catOrder.filter(cat => grouped[cat]);
+  const unknownCats = Object.keys(grouped).filter(cat => !catOrder.includes(cat)).sort();
+  const cats        = [...knownCats, ...unknownCats];
   const isMobile = window.innerWidth <= 768;
   let html = '';
 
