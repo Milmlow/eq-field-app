@@ -78,7 +78,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `supabase/functions/tafe-weekly-fill/index.ts`  | ✓    | Pass 4 — 4 findings (#13-16, all 🟡/🟢) |
 | `scripts/leave.js`                              | ✓    | Pass 5 — findings #17-19 (XSS gap fix)  |
 | `scripts/roster.js`                             | ✓    | Pass 6 — findings #20-21 (fillWeek fix) |
-| `scripts/people.js`                             |      |                                          |
+| `scripts/people.js`                             | ✓    | Pass 9 — findings #27 (id-coerc + idem), #29 |
 | `scripts/managers.js`                           | ✓    | Pass 7 — findings #22 (id-coercion fix), #23 |
 | `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
 | `scripts/audit.js`                              |      |                                          |
@@ -315,4 +315,33 @@ A user with the published anon key (visible in `scripts/app-state.js`) could ins
 - `roster_presence`: 0 rows. Either pg_cron cleanup is working, or no one's been editing recently. Either way fine.
 - `audit_log`: 43 total, 1 in last 24h, 0 "TAFE Auto-Fill" entries. The cron is scheduled for Sun 06:00 UTC; today's Wednesday so 0 firings is expected.
 - `schedule`: 18 rows, 0 in last 24h, no duplicates (UNIQUE constraint holding). Recent v3.4.47 presence work didn't leave artifacts here — consistent with finding #11 (EQ tenant runs in SEED-demo mode so the schedule writes go to a sink).
+
+
+---
+
+## Pass 9 — `scripts/people.js` removePerson review (iteration 8)
+
+### 🔴 27. removePerson filter used strict `!==` · 🔧 fixed in v3.4.55
+**Where**: `scripts/people.js` `removePerson` line 281.
+**Symptom**: Same id-coercion bug class as #22 (managers.removeManager) and the v3.4.22 / v3.4.38 sweeps. `STATE.people.filter(p => p.id !== id)` against SKS bigint ids that PostgREST sometimes returns as strings → `100 !== "100"` is always true → filter keeps everything → person deleted from DB but lingers locally as a "ghost" until next page reload. Silent UX bug.
+**Fix**: see #28 — the elegant idempotency check fixes this and #28 in one line.
+
+### 🔴 28. removePerson had no double-tap idempotency guard · 🔧 fixed in v3.4.55
+**Where**: `scripts/people.js` `removePerson` (whole function).
+**Symptom**: Same class as #24 (leave handlers). A double-tap on ✕ would call removePerson twice. Effects on the second call:
+  - Filters STATE.people / STATE.schedule again (idempotent — first call already removed)
+  - showToast('X removed') fires twice (UX confusion)
+  - **auditLog fires twice** — duplicate forensics entry
+  - deletePersonFromSB + sbFetch DELETE schedule both fire twice — server-side no-ops (200/204 even when zero rows match), but unnecessary network traffic
+**Fix**: early-return if the person is already gone from STATE.people:
+```js
+if (!STATE.people.some(p => String(p.id) === String(id))) return;
+```
+The `some()` check uses String() coercion (fixes #27) and naturally short-circuits the second tap. The subsequent .filter() also gets String() coercion. Two bugs, one fix.
+**Pattern lesson**: idempotency-via-state-check is cleaner than per-id inflight Sets when the action is purely local + fire-and-forget DB. Use this pattern for removeManager (currently uses just String() coercion without idempotency check — could double-fire audit/toast on iPad). Future cleanup.
+
+### 🟡 29. Schedule table keyed by name not by person_id · 📝 documented
+**Where**: `STATE.schedule` rows + `schedule` table — primary identity is `(name, week, org_id)`.
+**Symptom**: Two people with the same name (e.g. two "John Smiths" in a 100-person org) can't coexist in the schedule data model. Saving a roster cell for "John Smith" overwrites whichever John Smith was there first; no way to disambiguate. Royce's roster is small enough today that name collisions are unlikely (he'd notice), but at Melbourne scale (~577 people, almost certainly multiple Andrew/James/Michael etc.) the architecture forces a workaround like name-suffixes ("John Smith (Apprentice)").
+**Severity**: 🟡 long-standing architectural decision, not a fix-tonight bug. Surfaced for the design doc as a real gap before scaling to enterprise. The proper fix is foreign-key the schedule rows to `people.id`, not match by name. That's a non-trivial migration but unblocks the namesake case + lets renames not require schedule rewrites. Tied to the broader data-model expansion (projects + employment_type + region) in the Melbourne-scale design.
 

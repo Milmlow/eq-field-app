@@ -278,7 +278,17 @@ function confirmRemove(id, name) {
 
 function removePerson(id, name) {
   if (!isManager) { showToast('Supervision access required'); return; }
-  STATE.people   = STATE.people.filter(p => p.id !== id);
+  // v3.4.55: idempotency + id-coercion fix.
+  // — Early-return if the person is already gone from STATE.people. This
+  //   makes a double-tap on ✕ a no-op for the second click instead of firing
+  //   duplicate auditLog / showToast / deletePersonFromSB. Same bug class
+  //   as the leave-handlers in v3.4.54 (#24) and managers.removeManager in
+  //   v3.4.53 (#22).
+  // — String() coercion on both sides of the filter — managers.js had the
+  //   same bug pre-v3.4.53 where SKS bigint ids returned as strings made
+  //   the strict `!==` always true and the row lingered locally.
+  if (!STATE.people.some(p => String(p.id) === String(id))) return;
+  STATE.people   = STATE.people.filter(p => String(p.id) !== String(id));
   STATE.schedule = STATE.schedule.filter(s => s.name !== name);
 
   // BUG-003 FIX: Clear schedule index for this person
