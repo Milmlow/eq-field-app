@@ -1338,4 +1338,135 @@ These budgets become acceptance criteria for Wave 2 and Wave 4 PRs.
 
 Total: ~2 weeks of focused perf work, spread across the wave delivery. Most of it is week-of-Wave-2 — when the forecast view ships, performance becomes the gating factor.
 
+---
+
+## Section 7 — Open questions
+
+**These are the decisions only you can make.** Sections 1-6 describe HOW to build the thing; Section 7 asks WHAT you actually want. Read this first if you only have 10 minutes — answers here unblock the rest of the roadmap.
+
+Eight questions. Each has a recommendation + reasoning, but the recommendations are mine, not yours. Disagree freely.
+
+### Q1. EQ tenant — keep as SEED demo, or transition to a real tenant?
+
+**Recommendation**: Keep EQ as the **Starter tier SEED demo** permanently. Make this the official "try before you commit" front door for new prospects.
+
+**Reasoning**:
+- Today's behaviour (loadFromSupabase short-circuits to SEED for the EQ tenant — finding #11) already IS a SEED demo, just unintentionally. We can rebrand intent.
+- The Melbourne sales motion needs a "click here, see it work in 30 seconds" demo. Today that's eq-solves-field.netlify.app. Don't break that pattern.
+- A second persistent demo tenant (where actions stick) is useful for a different reason — extended trial. Could ship later as `trial.eq-solves-field.netlify.app` pointing to a different Supabase project with `is_seed_demo=false` and a 14-day data wipe schedule.
+- Keeps the investment focused on SMB / Enterprise paths where revenue lives.
+
+**Cost of NOT deciding now**: every new feature we build has to handle the EQ-as-SEED case anyway (because EQ Supabase exists and has live data accumulating). The 6 EQ-vs-demo gates audited in finding #12 are the visible artefact. If we decide "Starter = SEED forever", those gates are intentional and correct. If we decide "EQ becomes real", we have to remove them all in a careful sweep.
+
+### Q2. Per-region pricing tiers — yes or no?
+
+**Recommendation**: **No** for v1. One tenant subscribes once at one tier; regions are sub-units that share the tier. Revisit at 50+ paying tenants.
+
+**Reasoning**:
+- Per-region pricing is a billing complication. Stripe handles it but each step (sign-up, upgrade, downgrade, region added/removed) becomes a multi-step billing change.
+- The Melbourne archetype customer doesn't want to think "is VIC on Enterprise but NSW on SMB?" — they want one bill.
+- Sub-org admin (Q3) handles the "VIC office shouldn't see NSW data" axis without billing complexity.
+- If a customer specifically asks for per-region pricing, that's a signal they should buy multiple tenant subscriptions instead.
+
+**Cost of saying no**: simpler billing. Cleaner UX. Fewer edge cases.
+
+### Q3. Sub-org admin model — global supervisors only, or per-region admins?
+
+**Recommendation**: **Per-region admins** in Wave 4 (multi-region). RLS already requires `region_id` scoping for the data; layering a `users.region_id_admin` role onto that costs little extra.
+
+**Reasoning**:
+- Melbourne's reality: the VIC office runs VIC; the NSW office runs NSW. A NSW supervisor who can edit a VIC roster is the wrong shape.
+- Implementation: add `users.role text` (`viewer` / `supervisor` / `admin`) and `users.region_id` (the region they admin). Cross-region admins flagged separately (`is_super_admin` from Section 5) for finance / IT roles.
+- Doesn't replace global supervisors — those are users with `region_id = NULL` and `role = 'admin'`.
+
+**Cost of NOT doing this**: tenants with multiple regions will share the supervisor PIN across the whole company, including data they shouldn't be editing. Privacy / governance issues.
+
+### Q4. Labour-hire vendor portal — in scope or v3+?
+
+**Recommendation**: **v3+** (out of Wave 1-4 scope). Treat as a separate product / SKU.
+
+**Reasoning**:
+- Labour-hire agencies (NECA, AGA, GForce, etc) want visibility into where their workers are deployed and how many hours have been worked. This is a real ask.
+- BUT the user shape is fundamentally different — agency users are external to the tenant, need their own auth (vendor login), see only their workers' data (very narrow RLS), see no other tenant data (cross-tenant boundary).
+- That's a separate product surface — different login, different navigation, different data model. Should not be tucked into EQ Field's existing surface.
+- Could ship as `agency.eq.solutions` later — a thin portal that reads the same Supabase tables but with vendor-scoped RLS.
+
+**Cost of saying yes-now**: the Wave 1-4 timeline doubles. Agency auth + UI is its own 2-3 month workstream. Better delivered AFTER the tenant-side platform is solid.
+
+### Q5. Compliance / SOC 2 timeline — when?
+
+**Recommendation**: **Don't pursue SOC 2 until you have a paying Enterprise customer asking for it.** Get the technical foundations right NOW (audit log retention, encrypted secrets, MFA-ready auth), but skip the formal certification process until a deal needs it.
+
+**Reasoning**:
+- SOC 2 Type 1 costs ~$15-30k AUD + 3-6 months of preparation. Type 2 costs more and takes 6-12 months of operating with controls in place.
+- A first paying Enterprise customer would justify the investment + give specific guidance on which controls matter most.
+- The technical work that DOES matter regardless: tighten the lax RLS (BATTLE-TEST #4 — `roster_presence USING(true)`), add user-level audit logging beyond current manager-level, add a secrets vault for service role tokens (BATTLE-TEST #11 implications), formalise the backup retention policy.
+- Royce is solo — running through SOC 2 paperwork without a paying customer to fund it is a 3-month distraction from Wave 2 / Wave 3.
+
+**Cost of NOT pursuing now**: missing some Enterprise tenders that explicitly require SOC 2 certification. Mitigation: be honest in sales conversations — "SOC 2 in progress" with a credible 6-month timeline once a deal is on the table.
+
+### Q6. Hosted onboarding for Starter — yes when?
+
+**Recommendation**: **Wave 5** (~Month 7). Defer self-serve until the Wave 1-4 surface is stable and customer feedback proves Starter is a real tier worth investing in.
+
+**Reasoning**:
+- Self-serve onboarding requires: sign-up form, Supabase project provisioning automation, email verification, billing integration, abuse / spam prevention.
+- Per current scale (1 paying customer, SKS), manual onboarding is fine — Royce spins up Supabase projects when prospects ask.
+- Once Wave 1-4 lands and the product appeals to small electrical contractors, build self-serve. Until then, every prospect IS a sales conversation, which is more useful for product feedback than self-serve sign-ups.
+
+**Alternative**: a "request access" form on eq-solves-field.netlify.app's marketing page that emails Royce and creates a calendar invite. Lighter-weight than full self-serve, captures lead intent, doesn't block on automation.
+
+### Q7. SSO — when does PIN auth get replaced?
+
+**Recommendation**: **Wave 5+** for SAML/OAuth, but design Wave 4's auth changes to be SSO-compatible. Today's PIN works at SMB scale; Enterprise customers (>200 employees) typically demand SSO as a deal-blocker.
+
+**Reasoning**:
+- Today's PIN auth (per CLAUDE.md memory: plaintext compare via env vars, no salt-hash) works for SMB scale where everyone shares a code.
+- Enterprise customers with 200+ employees want individual login (audit trail, deprovisioning, password rotation) which PIN doesn't support.
+- SAML implementation is well-understood (Supabase has SAML support built-in for Enterprise tier of Supabase itself). Plumbing it through EQ Field is ~1-2 weeks engineering.
+- Design implication for Wave 4: when adding `users` table for multi-region admin (Q3), structure it so SSO identity providers can populate it — `users.email` as the unique key, `users.external_idp_id` as a future column.
+- BATTLE-TEST findings #43-47 (auth review) flagged the "remember me stores raw access code" issue. SSO replacement is the proper long-term fix.
+
+**Cost of NOT doing now**: an Enterprise prospect could tender require SSO and we say "Q3 next year" → lose deal. Mitigation: same as SOC 2 — credible roadmap commitment when a deal demands it.
+
+### Q8. Forecast accuracy target — how close before we declare it working?
+
+**Recommendation**: **±15% at 4-week horizon, ±25% at 12-week horizon, no target for 12+ weeks.** Build the dashboards to show actual-vs-target accuracy retrospectively; if SKS / Melbourne use the forecast and the accuracy meets these bounds, ship to Wave 3.
+
+**Reasoning**:
+- Construction forecasts beyond 12 weeks are fundamentally guesses — clients change scope, projects delay, weather. ±25% is honest.
+- ±15% at 4 weeks aligns with "next month is fairly visible". Tighter than that requires daily updates, which becomes operational overhead.
+- The accuracy metric itself is valuable — Melbourne can use "our 4-week forecast accuracy is ±10%" as a credibility signal in tenders.
+- Implementation: store target snapshots (project_targets is one row per project per week, but we could keep `target_history` with `set_at` timestamps) so retrospective accuracy queries work.
+
+**Cost of NOT setting a target**: forecast view ships, supervisors enter targets, but nobody knows if the targets are good. Without the accuracy dashboard, the feature has no feedback loop.
+
+### Summary table
+
+| # | Question | Recommendation | Decision date |
+|---|---|---|---|
+| 1 | EQ → SEED forever or real? | Starter SEED forever | Before Wave 1 starts |
+| 2 | Per-region pricing? | No (v1) | Wave 4 design phase |
+| 3 | Sub-org admin model? | Per-region admins | Wave 4 (~Month 5) |
+| 4 | Labour-hire vendor portal? | v3+ separate product | After Wave 4 ships |
+| 5 | SOC 2 certification? | When a customer asks | When a deal demands |
+| 6 | Self-serve onboarding? | Wave 5 (Month 7+) | After Waves 1-4 stable |
+| 7 | SSO replacement for PIN? | Wave 5+, design for it earlier | When Enterprise deal requires |
+| 8 | Forecast accuracy target? | ±15% / ±25% / no-target by horizon | Wave 2 launch |
+
+The single most decision-blocking item: **Q1 (EQ as SEED forever)**. It's the foundation for the tier model, the migration path, the UI gating — everything in Sections 1-6 has a coexistence clause that depends on this answer. Decide Q1 first, then everything else falls into place.
+
+---
+
+## Doc done. Sections 1-7 complete.
+
+Sections 1, 2, 3, 4, 5, 6, 7 — total ~1,800 lines covering schema diff with concrete SQL, forecast view design with wireframe + aggregation queries, zero-downtime migration path with rollback per step, five-wave product roadmap with decision points, tier-driven progressive disclosure UI design, render performance approach for 500+ rows / 30k schedule rows / per-week realtime scoping, and 8 open questions.
+
+Status of work outside this doc:
+- `BATTLE-TEST-2026-04-29.md` — 47 findings across 13 passes, 16 fixes shipped (v3.4.40-58), tier-analysis section populated.
+- Live demo on `eq-solves-field.netlify.app` shipping at v3.4.58.
+- Working branch `claude/festive-roentgen-60761d` clean.
+- Open PRs to merge: none (last one merged at iteration 12).
+- No pending Supabase migrations beyond what's already live.
+- Royce on holidays. SKS prod untouched.
 
