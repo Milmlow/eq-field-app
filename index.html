@@ -189,8 +189,28 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.43
+  EQ Solves — Field  v3.4.44
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.44  (sync the version refs v3.4.40-43 missed)
+  ────────────────────────────────────────────────────────────
+  • Bumped the three places v3.4.40–43 didn't touch:
+    - scripts/app-state.js APP_VERSION ('3.4.39' → '3.4.44'),
+      so PostHog session_started + Clarity tags now report
+      the right version on every page load.
+    - index.html:1091 visible sidebar version span ('v3.4.39'
+      → 'v3.4.44'). This is the user-facing label Royce was
+      checking on sks-nsw-labour.netlify.app — the comment-
+      block banner had moved on but the rendered badge was
+      stuck at v3.4.39 because nobody bumped it.
+    - sw.js cache key + version comment ('eq-field-v3.4.39'
+      → 'eq-field-v3.4.44'). New CACHE name forces the old SW
+      to deactivate and the new one to claim clients on the
+      next page load, dropping all v3.4.39-era cached HTML/JS.
+  • No code-behaviour change — purely a release-stamping fix.
+  • Going forward: the four refs (banner, APP_VERSION, sidebar
+    span, sw.js CACHE) all need bumping together on each
+    release. Treating them as a single tuple.
 
   CHANGES IN v3.4.43  (Supervision: stop silently hiding unknown categories)
   ────────────────────────────────────────────────────────────
@@ -1088,7 +1108,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.39</span><br>
+      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.44</span><br>
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
