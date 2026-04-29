@@ -81,7 +81,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/people.js`                             | ✓    | Pass 9 — findings #27 (id-coerc + idem), #29 |
 | `scripts/managers.js`                           | ✓    | Pass 7 — findings #22 (id-coercion fix), #23 |
 | `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
-| `scripts/audit.js`                              |      |                                          |
+| `scripts/audit.js`                              | ✓    | Pass 10 — findings #30-35 (forensics gaps) |
 | `scripts/digest-settings.js`                    |      |                                          |
 | `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
 | `scripts/auth.js` (PIN flow, session token)     |      |                                          |
@@ -344,4 +344,33 @@ The `some()` check uses String() coercion (fixes #27) and naturally short-circui
 **Where**: `STATE.schedule` rows + `schedule` table — primary identity is `(name, week, org_id)`.
 **Symptom**: Two people with the same name (e.g. two "John Smiths" in a 100-person org) can't coexist in the schedule data model. Saving a roster cell for "John Smith" overwrites whichever John Smith was there first; no way to disambiguate. Royce's roster is small enough today that name collisions are unlikely (he'd notice), but at Melbourne scale (~577 people, almost certainly multiple Andrew/James/Michael etc.) the architecture forces a workaround like name-suffixes ("John Smith (Apprentice)").
 **Severity**: 🟡 long-standing architectural decision, not a fix-tonight bug. Surfaced for the design doc as a real gap before scaling to enterprise. The proper fix is foreign-key the schedule rows to `people.id`, not match by name. That's a non-trivial migration but unblocks the namesake case + lets renames not require schedule rewrites. Tied to the broader data-model expansion (projects + employment_type + region) in the Melbourne-scale design.
+
+
+---
+
+## Pass 10 — `scripts/audit.js` review (iteration 9)
+
+### 🟡 30. auditLog write was silently swallowing all errors · 🔧 fixed in v3.4.56
+**Where**: `scripts/audit.js` `auditLog` line 22.
+**Symptom**: `sbFetch('audit_log', 'POST', entry, 'return=minimal').catch(() => {})`. Empty no-op catch hides ALL errors — network blips (expected), RLS rejections (latent misconfig), schema drift (deploy-time issue), validation errors (data shape change). For a forensics log this is dangerous: if writes start failing for any reason, audit entries stop being recorded with zero signal. The "we logged everything" compliance claim becomes silently false.
+**Fix**: `.catch(e => console.warn('EQ[audit] write failed:', e && e.message || e))`. Still fire-and-forget (UI never blocks on audit), still non-fatal, but failures are observable in DevTools. Future hardening: also push to a localStorage failure queue + retry on next page load — but the console.warn is the cheapest first step.
+
+### 🟢 31. Hard 500-row read limit, no pagination · 📝 documented
+**Where**: `scripts/audit.js` `openAuditLog` line 34.
+**Symptom**: `sbFetch('audit_log?select=*&order=created_at.desc&limit=500')`. The modal shows the most-recent 500 entries; older ones are unreachable from the UI. SMB scale fine (500 entries spans days/weeks). At Melbourne scale (~577 people, multiple supervisors, daily roster + leave + timesheet activity) 500 entries is a single morning. **Tier-relevant — Enterprise · S · audit log pagination + date filter** added to the Tier analysis section.
+
+### 🟢 32. toLocaleDateString grouping uses browser locale not tenant timezone · 📝 documented
+**Where**: `scripts/audit.js` `renderAuditLog` line 80.
+**Symptom**: `d.toLocaleDateString('en-AU', {…})` formats per the user's browser locale + timezone. An audit entry created at 23:30 NSW time would group on Wednesday for someone in NSW, but on Thursday for someone in WA (which is 21:30 their time → still Wednesday actually, OK timezone is the issue not date). More likely scenario: late-night events near midnight grouping inconsistently across users in different states. Cosmetic for SMB; visible inconsistency at multi-region enterprise scale. Real fix needs a tenant-level timezone setting.
+
+### 🟢 33+35. CSV export non-portable + missing ID · 🔧 fixed in v3.4.56
+**Where**: `scripts/audit.js` `exportAuditCSV` line 115.
+**Symptom**: Used `toLocaleString('en-AU')` for the timestamp column (ambiguous DD/MM/YYYY vs MM/DD/YYYY for international auditors, also viewer-locale dependent so two exports of the same data could differ). No `id` column — if an exported row needs investigation, no DB-level handle.
+**Fix**: header is now `ID,Created At (UTC ISO),Manager,Category,Action,Detail,Week`. Timestamp uses `new Date(r.created_at).toISOString()` (always UTC, always sortable). Auditors and payroll integrators have something machine-readable. Also: every exported row is traceable back to its DB id.
+
+
+### Tier-analysis entries from Pass 10 (audit.js)
+
+- **Enterprise · S · Audit log pagination + date filter** — `openAuditLog` hard-caps at 500 rows. SMB scale fine (~days/weeks of activity). At Melbourne scale (~577 people, multi-supervisor, daily roster + leave + timesheet activity) 500 entries is a single morning. Need: paginated load (page=1,2,…), or date-range filter (default last 7 days, expand on demand). Not urgent at current SKS scale; surfaces as a real gap once seat count crosses ~150.
+- **Enterprise · M · Tenant-level timezone setting** — both `renderAuditLog` grouping and the prior CSV export used the viewer's browser locale, so the same audit row "lives" on different dates for users in different timezones. A tenant has one canonical timezone (NSW for SKS, VIC for Melbourne); store it on the org record and use it for both display and export. Touches more than just audit.js — leave dates, schedule weeks, TAFE holiday windows would all benefit. Foundation feature for the multi-region tier.
 
