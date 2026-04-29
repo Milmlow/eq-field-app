@@ -668,4 +668,154 @@ Supabase has automatic daily backups by default. Before each phase:
 
 Total wall-clock: ~8 weeks. Total engineering: ~3 weeks of focused work, the rest is verification windows.
 
+---
+
+## Section 4 — Phasing
+
+### Distinguishing this from Section 3
+
+Section 3 = the schema migration plumbing. Internal to engineering. User sees nothing change.
+Section 4 = the product roadmap. What user-visible capabilities ship, in what order, gated by what flags.
+
+The two are loosely coupled: schema migrations finish in ~8 weeks (Section 3), but feature waves can extend over 6+ months. The schema arrives once; the features ship in waves as engineering capacity allows and the tier model justifies.
+
+### What ships first — Wave 1: Projects (~3-4 weeks)
+
+The minimum viable product hierarchy. Just enough to make the rest of the design earn its keep without committing to forecast or multi-region.
+
+**User-visible capability**: assign sites to projects; see "Airtrunk Shell L · 23 people" instead of "AIRT · 23 people" on dashboards and rosters.
+
+**Schema delivered** (Section 3 phases A, B, C subset):
+- `projects` table created
+- `sites.project_id` column wired and FK enforced
+- `mv_project_week_actuals` materialised view created (5-min refresh)
+
+**UI delivered**:
+- New "Projects" sidebar entry below "Sites"
+- Add Project / Edit Project modal (same shape as Sites)
+- Site form: dropdown to assign a project (nullable; default "Default Project" for legacy)
+- Dashboard widget: per-project headcount (this week)
+- Roster row chips show site abbr AND project abbr ("AIRT · DC1") when project is set
+
+**Tier gating**: `tier IN ('SMB', 'Enterprise')`. Starter (EQ today's SEED) hides the Projects sidebar entry entirely.
+
+**Decision point at end of Wave 1**: was project hierarchy useful to SKS in practice? If supervisors don't use it, the rest of the roadmap is theoretical. Talk to Royce + Mark + the project managers; if they say "yes, this is what was missing", proceed to Wave 2. If "we don't really group sites by projects" — the rest of the roadmap pivots toward employment-type analytics instead.
+
+### Wave 2: Forecast view (~4-6 weeks after Wave 1)
+
+The Section 2 design lands as a real page.
+
+**User-visible capability**: 52-week horizon grid; project managers can set headcount targets and see actual vs target per project per week.
+
+**Schema delivered**: project_targets table; v_schedule_cells view; mv_project_week_actuals already exists from Wave 1.
+
+**UI delivered**:
+- New "Forecast" sidebar entry between "Roster" and "Timesheets"
+- Full grid + filters + edit interactions per Section 2
+- Empty-state walkthrough for tenants with 0 projects (already covered in Wave 1)
+- Mobile single-week swipe view
+
+**Tier gating**: `tier = 'Enterprise'` only. SMB sees no Forecast entry. Starter / SMB tenants who want a peek can ask Royce to flip a per-tenant feature flag (`organisations.features.forecast = true`) for evaluation.
+
+**Decision point at end of Wave 2**: how complete is the apprentice-ratio compliance picture? If the bottom rail's "Apprentice ratio: 3.4" is enough for state regulators, ratio compliance is done. If not, Wave 3 expands into a dedicated compliance module.
+
+### Wave 3: Employment type + RTO/GTO + apprentice-ratio compliance dashboard (~3-4 weeks after Wave 2)
+
+The HR-shaped axis lands.
+
+**User-visible capability**: filter rosters by employment type; see "12 FT, 4 LH, 3 FTApprentice" headcount strips; per-region apprentice-ratio compliance widget.
+
+**Schema delivered**: `people.employment_type`, `people.rto`, `people.hire_company` (rename from `agency`).
+
+**UI delivered**:
+- People form gets two new dropdowns (employment type, RTO)
+- Person card shows employment type as a badge alongside today's group icon
+- Roster filter dropdown adds employment-type filter
+- New compliance dashboard widget on Dashboard page: "Apprentice ratio per region · this week · last 4 weeks trend"
+- Optional alert when ratio drops below state threshold (state-specific — NSW = 1:3 max, configurable per region)
+
+**Tier gating**: `tier IN ('SMB', 'Enterprise')`. Compliance is valuable at SMB scale too — SKS today would benefit.
+
+### Wave 4: Multi-region (~6-8 weeks after Wave 3)
+
+The hardest wave, by a margin. Touches auth, RLS, UI everywhere.
+
+**User-visible capability**: a single tenant can have NSW + VIC + QLD + WA as siblings. Supervisors are scoped to a region; cross-region admins can see all.
+
+**Schema delivered**: regions table (already there from Section 3), region_id columns (already there), region-aware RLS policies.
+
+**UI delivered**:
+- Region picker in the sidebar (above "My Schedule")
+- People form gets region dropdown
+- Sites form gets region dropdown (constrained to project's region)
+- Forecast view filterable by region (already in Section 2 design)
+- Audit log filter by region
+- Per-region timezone display (closes BATTLE-TEST #32)
+
+**Schema bonus**: tenant-timezone field on regions enables correct audit-log grouping cross-state.
+
+**Tier gating**: `tier = 'Enterprise'` only. Default for SMB is single implicit region (current behaviour).
+
+**Decision point**: at end of Wave 4, the schema work is fully exposed. From here on, the question shifts from "can we model Melbourne's data?" to "can we sell to Melbourne?" — different conversation.
+
+### Wave 5+: Surface-area expansion (each ~2-4 weeks)
+
+Once the core shape is in, additional waves can run in parallel or stage:
+
+- **Self-serve onboarding** (Starter tier path): hosted sign-up form provisions a tenant + first user + sample SEED data. Replaces the current "ask Royce to spin up a Supabase project" workflow.
+- **Magic-link approve from email** (already chipped earlier): tokenised approve/reject in the leave email + Friday digest. Cross-tier value.
+- **Bulk operations**: assign 50 people to a project in one action; copy a full week's roster to a future week as a template; bulk import people via CSV with the new employment_type column.
+- **Reporting / export**: weekly project headcount CSV for payroll integration; per-region compliance report PDF.
+- **Integrations**: Xero / MYOB payroll handoff (per-person hours by week); Google Calendar leave sync.
+
+### Parallel vs sequential delivery
+
+```
+Wave 1 (Projects) ─┬─> Wave 2 (Forecast) ─┐
+                   │                       ├─> Wave 4 (Multi-region) ─> Wave 5+
+                   └─> Wave 3 (HR axis) ───┘
+```
+
+Wave 2 and Wave 3 can run in parallel — they touch different data + UI surfaces. Wave 4 needs both done first because RLS policies have to know about region_id on every query Wave 2 / 3 introduce.
+
+Practical engineer-allocation:
+- 1 engineer: sequential. ~28 weeks total (~7 months).
+- 2 engineers: Wave 1 sequential, Waves 2+3 in parallel, Wave 4 sequential. ~20 weeks total (~5 months).
+- 3 engineers: Wave 1 sequential, then 3 parallel tracks (Wave 2 / Wave 3 / Wave 5+ early starts), Wave 4 sequential. ~16 weeks total (~4 months).
+
+Royce's current development cadence is 1 person (Royce + Claude). Practical estimate: ~5-7 months from kickoff to all 4 waves done, assuming ~10 hours/week of focused engineering and verification.
+
+### Decision points (the gates between waves)
+
+| End of | Decision | Question to answer | If "no" → |
+|---|---|---|---|
+| Wave 1 | Was project hierarchy actually used? | Talk to Mark + project managers. Are they grouping sites by project? | Pivot Waves 2+ toward HR-axis analytics; skip forecast altogether |
+| Wave 2 | Is forecast accurate enough? | Compare 4-week-out forecast actuals to targets. Within 10%? | Add target-history table (forecast accuracy report); maybe iterate UX before Wave 3 |
+| Wave 3 | Compliance widget adopted? | Do supervisors check ratio before approving leave? | Move ratio into a hard-block rule on the leave form (state regs require it); needs legal review |
+| Wave 4 | Multi-region complete? | Can a NSW supervisor approve a NSW request without seeing VIC requests? | Wave 4.5: tighten per-region RLS more before opening to multi-state customers |
+
+### Tier mapping (cross-reference with BATTLE-TEST tier analysis)
+
+| Tier | Waves visible | Examples |
+|---|---|---|
+| Starter (1-10 ppl, SEED-demo) | 0 | EQ tenant today (rebrand as Starter). No projects, no forecast, no employment_type advanced fields. |
+| SMB (10-50, SKS today) | 0 + 1 + 3 | Add projects + employment_type + compliance widget. SKS's current Friday digest + leave + roster + supervision all stay. |
+| Enterprise (50-500+, Melbourne) | 0 + 1 + 2 + 3 + 4 | Full surface — projects, forecast, employment_type, compliance, multi-region. |
+
+Wave numbers map cleanly onto the tier model. Each tier *adds* waves, doesn't remove them. Progressive disclosure in the UI handles the visibility gating (covered in Section 5).
+
+### Effort + calendar (consolidated)
+
+| Wave | Engineering effort | Calendar (1 engineer) | Tier delivered |
+|---|---|---|---|
+| 1 — Projects | 3-4 weeks | Month 1 | SMB |
+| 2 — Forecast | 4-6 weeks | Month 2-3 | Enterprise |
+| 3 — HR axis + compliance | 3-4 weeks | Month 4 | SMB |
+| 4 — Multi-region | 6-8 weeks | Month 5-6 | Enterprise |
+| 5+ — Surface expansion | 2-4 weeks each | Month 7+ | All tiers |
+
+Total to fully deliver Enterprise: ~6 months, 1 engineer. Faster with parallel tracks.
+
+**The single most important sentence in this section**: Wave 1 ships first. Don't try to design or build Wave 2-4 before Wave 1 is in production and validated. Every wave-1 lesson (UI nits, RLS fights, perf surprises) compounds into better Wave 2-4 delivery. Resist the temptation to pre-build.
+
 
