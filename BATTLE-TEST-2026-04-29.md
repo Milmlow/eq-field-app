@@ -75,8 +75,8 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/presence.js`                           | ✓    | Pass 1 — 5 findings (#1-5)              |
 | `scripts/realtime.js`                           | ✓    | Pass 2 — 3 findings (#6, #7, #8)        |
 | `index.html` polling / SW registration          | ✓    | Pass 2 — finding #9                     |
-| `supabase/functions/tafe-weekly-fill/index.ts`  |      |                                          |
-| `scripts/leave.js`                              |      |                                          |
+| `supabase/functions/tafe-weekly-fill/index.ts`  | ✓    | Pass 4 — 4 findings (#13-16, all 🟡/🟢) |
+| `scripts/leave.js`                              | ✓    | Pass 5 — findings #17-19 (XSS gap fix)  |
 | `scripts/roster.js`                             |      |                                          |
 | `scripts/people.js`                             |      |                                          |
 | `scripts/managers.js`                           |      |                                          |
@@ -207,3 +207,54 @@ This is the highest-leverage open question for the morning. Adding to the design
   - Already-lifted gates: `startRealtime` (v3.4.47), `startPolling` (v3.4.49), `updateOnlineStatus` (v3.4.50) — all CORRECT to lift, since presence/polling/offline-warning work even on a SEED demo when writes go to a real Supabase.
 
 So the codebase pattern is healthier than it looked at first read — there ARE intentional gates for the SEED-demo behaviour and there ARE accidentally-extended gates for things like polling/realtime/offline that should never have been gated. The remaining 4 gates (auth + digest + loadFromSupabase) are intentional and should stay until/unless Royce decides EQ transitions to a real tenant.
+
+---
+
+## Pass 4 — `supabase/functions/tafe-weekly-fill/index.ts` review (iteration 3)
+
+### 🟡 13. Misleading comment claimed a fallback that doesn't exist · 🔧 fixed (comment-only)
+**Where**: `supabase/functions/tafe-weekly-fill/index.ts` line 108 (now corrected).
+**Symptom**: Comment said "(per-org, falls back to project-wide row if none for org)" but the code is strict per-org with no fallback. For tenants without their own `app_config.tafe_holidays` row (e.g. EQ tenant — see #14), `holidays = []` and no school-holiday days are skipped. Future devs would read the comment, trust it, and miss this. Comment now matches behaviour.
+**Why no version bump**: source-only doc change; the deployed Edge Function's behaviour is unchanged. Will be reflected next time the function is re-deployed (no urgency).
+
+### 🟡 14. EQ Supabase has no `tafe_holidays` row; client-loader vs Edge Function inconsistency · 📝 documented
+**Where**: EQ Supabase project `ktmjmdzqrogauaevbktn`, plus `scripts/tafe.js` `loadTafeHolidays` vs the function above.
+**Discovered**: The seed migration `2026-04-16_tafe_day_and_holidays.sql` only INSERTs one row scoped to `org_id = '1eb831f9-aeae-4e57-b49e-9681e8f51e15'` (SKS). EQ Supabase had the migration applied (per the migration header note) but received no row.
+**Symptom 1 (Edge Function)**: For the EQ tenant, the Sunday cron has `holidays = []` and would happily fill TAFE on every weekday, including the Autumn / Winter / Spring / Summer school holiday ranges. Effectively-moot today because EQ runs in SEED-demo mode (finding #11) so the cron's writes go to a sink nobody reads. But the future-state when EQ becomes a real tenant needs a holiday seed.
+**Symptom 2 (client-loader inconsistency)**: `scripts/tafe.js loadTafeHolidays` calls `sbFetch('app_config?key=eq.tafe_holidays&select=value')` with NO `org_id` filter (because `app_config` isn't in `ORG_TABLES` so sbFetch doesn't auto-stamp). On the EQ tenant this returns the SKS row (or any row) instead of empty. So the manual "Apply TAFE Day" button on EQ tenant uses NSW school holidays (the SKS row's data) — not by intent, but by accident of the client-side org_id behaviour.
+**Severity**: 🟡 latent — only matters once EQ becomes a real tenant. Then the manual button and the cron disagree about what counts as a holiday, which is bad. **Why deferred**: requires either (a) fixing the client loader to filter by org_id (which then makes EQ holidays empty until seeded), (b) seeding EQ with NSW holidays, or (c) deciding holidays are project/region-level not org-level. Tied to the EQ-as-SEED-demo decision (#11).
+
+### 🟢 15. Manual `trigger_tafe_weekly_fill()` always fills NEXT week · 📝 documented
+**Where**: `supabase/functions/tafe-weekly-fill/index.ts` `nextMondayKey()` (lines 49-53).
+**Symptom**: `nextMondayKey(now)` always returns "Monday-of-this-week + 7 days." If a manager runs `SELECT public.trigger_tafe_weekly_fill();` on Monday afternoon to fill TODAY's week, they instead get NEXT Monday's week. Counterintuitive but consistent — the function is named `tafe-weekly-fill` after all and the Sunday cron's intent is "fill the upcoming week." A user wanting the current week passes an explicit `p_week`.
+**Severity**: 🟢 UX nit. Documented in the function README and migration but worth surfacing in the doc here.
+
+### 🟢 16. EQ Supabase will run the cron against a SEED-demo sink · 📝 documented
+**Where**: pg_cron schedule on EQ Supabase project `ktmjmdzqrogauaevbktn`.
+**Symptom**: Every Sunday 06:00 UTC, EQ's pg_cron will fire the Edge Function which writes TAFE rows + audit_log entries that nobody reads (per finding #11). Wasted cycles but harmless. Could disable the cron on EQ Supabase but the cost is negligible (~5 row writes / week / 0 reads). Decision tied to #11 — if EQ stays a SEED demo, disable the EQ cron; if EQ transitions to a real tenant, leave it on and seed `tafe_holidays`.
+
+
+---
+
+## Pass 5 — `scripts/leave.js` triggerLeaveEmail review (iteration 4)
+
+### 🟡 17. Leave email body had defensive XSS gap on leave_type + status · 🔧 fixed in v3.4.51
+**Where**: `scripts/leave.js` `triggerLeaveEmail` (lines 734-843).
+**Symptom**: Three template-string interpolations passed user-controlled DB fields into the HTML email body without escaping:
+  - `${typeLabels[record.leave_type] || record.leave_type}` — typeLabels lookup is hardcoded and safe, but the `|| raw` fallback path emits raw `record.leave_type` from the DB
+  - `${record.status}` (line 783)
+  - `${record.status.toLowerCase()}` (line 787)
+A user with the published anon key (visible in `scripts/app-state.js`) could insert a leave_request with `leave_type = '<img onerror="…">'` or similar; the supervisor receiving the email would render that string in their email client.
+**Real-world risk**: low. Modern clients (Gmail / Outlook / Apple Mail) strip `<script>` tags from rendered HTML. But on* handlers on `<img>`, `<a>`, `<iframe>` etc. are not always stripped, depending on client. The defence is cheap; the principle is "don't ship raw user data into HTML even via an email roundtrip."
+**Fix**: defined `safeTypeFallback`, `safeStatus`, `safeStatusLower` local helpers at the top of the function and substituted them in the HTML template. Subject lines kept plaintext — Resend handles MIME header encoding, and escaping subject would visibly mangle legitimate ampersands.
+**Behaviour preservation**: typeLabels[record.leave_type] returns a hardcoded string for valid input (99.9% case) — the lookup result still flows through unescaped because it can't contain unsafe chars. Only the rare fallback path is now defensive.
+
+### 🟡 18. Leave email subject leaks raw fields too · 📝 documented
+**Where**: `scripts/leave.js` lines 747, 780, 804 (subject construction).
+**Symptom**: Subjects use `${record.requester_name}`, `${record.leave_type}`, `${record.status}` raw without escaping. Subjects are plaintext (Resend handles MIME encoding) so this isn't an XSS vector. But a maliciously-crafted name could break subject formatting (newlines, control chars) — Resend probably strips these but not verified.
+**Severity**: 🟡 latent. Not exploitable as XSS. Logged for completeness.
+
+### 🟢 19. Email error toasts may leak the recipient address · 📝 documented
+**Where**: `scripts/leave.js` line 837: `showToast('Email failed: ' + (data.message || JSON.stringify(data)));`.
+**Symptom**: If the Resend / send-email function returns an error response containing the recipient email in the error body, the UI toast displays it. Information leak only at the supervisor's screen — they're allowed to see it. Cosmetic.
+

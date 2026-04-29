@@ -734,6 +734,14 @@ async function resendLeaveEmail(id) {
 async function triggerLeaveEmail(type, record) {
   try {
     const typeLabels = { 'A/L': 'Annual Leave', 'U/L': 'Unpaid Leave', 'RDO': 'RDO' };
+    // v3.4.51: defensive HTML escaping for user-controlled DB fields
+    // that flow into the email body. typeLabels[...] returns hardcoded
+    // strings (safe by construction); only the `|| raw` fallback path
+    // and `record.status` need escaping. Subjects stay plaintext —
+    // Resend handles MIME header encoding.
+    const safeTypeFallback = escHtml(record.leave_type || '');
+    const safeStatus       = escHtml(record.status || '');
+    const safeStatusLower  = escHtml((record.status || '').toLowerCase());
     let to, cc = [], subject, html;
 
     if (type === 'new_request') {
@@ -753,7 +761,7 @@ async function triggerLeaveEmail(type, record) {
         <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
           <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong>${escHtml(record.requester_name)}</strong> has submitted a leave request for your approval.</p>
           <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">
-            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || record.leave_type}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || safeTypeFallback}</td></tr>
             <tr><td style="padding:8px 0;color:#6B7280">Dates</td><td style="padding:8px 0;font-weight:600">${record.date_start} to ${record.date_end}</td></tr>
             ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
           </table>
@@ -780,13 +788,13 @@ async function triggerLeaveEmail(type, record) {
       subject = `Leave ${record.status}: ${typeLabels[record.leave_type] || record.leave_type} (${record.date_start} to ${record.date_end})`;
       html    = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:500px;margin:0 auto">
         <div style="background:#1F335C;padding:20px 24px;border-radius:12px 12px 0 0">
-          <h2 style="color:white;margin:0;font-size:18px">Leave ${record.status}</h2>
+          <h2 style="color:white;margin:0;font-size:18px">Leave ${safeStatus}</h2>
           <p style="color:rgba(255,255,255,.6);margin:4px 0 0;font-size:13px">EQ Solves — Field</p>
         </div>
         <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
-          <p style="margin:0 0 16px;font-size:14px;color:#374151">Your leave request has been <strong style="color:${statusColor}">${record.status.toLowerCase()}</strong> by ${escHtml(record.responded_by)}.</p>
+          <p style="margin:0 0 16px;font-size:14px;color:#374151">Your leave request has been <strong style="color:${statusColor}">${safeStatusLower}</strong> by ${escHtml(record.responded_by)}.</p>
           <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">
-            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || record.leave_type}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || safeTypeFallback}</td></tr>
             <tr><td style="padding:8px 0;color:#6B7280">Dates</td><td style="padding:8px 0;font-weight:600">${record.date_start} to ${record.date_end}</td></tr>
             ${record.response_note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.response_note)}</td></tr>` : ''}
           </table>
@@ -810,7 +818,7 @@ async function triggerLeaveEmail(type, record) {
         <div style="background:white;padding:24px;border:1px solid #E5E7EB;border-top:none;border-radius:0 0 12px 12px">
           <p style="margin:0 0 16px;font-size:14px;color:#374151">Hi ${escHtml(record.requester_name)} — your leave request has been submitted and is awaiting approval from <strong>${escHtml(record.approver_name)}</strong>.</p>
           <table style="width:100%;font-size:13px;color:#374151;border-collapse:collapse">
-            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || record.leave_type}</td></tr>
+            <tr><td style="padding:8px 0;color:#6B7280;width:100px">Type</td><td style="padding:8px 0;font-weight:600">${typeLabels[record.leave_type] || safeTypeFallback}</td></tr>
             <tr><td style="padding:8px 0;color:#6B7280">Dates</td><td style="padding:8px 0;font-weight:600">${record.date_start} to ${record.date_end}</td></tr>
             ${record.note ? `<tr><td style="padding:8px 0;color:#6B7280">Note</td><td style="padding:8px 0">${escHtml(record.note)}</td></tr>` : ''}
             <tr><td style="padding:8px 0;color:#6B7280">Status</td><td style="padding:8px 0;font-weight:600;color:#D97706">Pending</td></tr>
