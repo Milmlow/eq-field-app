@@ -175,3 +175,35 @@ Format: **Tier · Effort · Title** — rationale.
 - **Any · M · Magic-link approve from email** — already chipped in `mcp__ccd_session__spawn_task`. Removes the "open the app to approve a leave request" friction. Auth-surface change → needs Royce sign-off before deploying to either tenant.
 - **Any · S · Realtime reconnect jitter (finding #7)** — latent at SMB scale, real at enterprise. Math.random() * delay * 0.3 in `_rtScheduleReconnect`.
 
+
+---
+
+## Pass 3 — `scripts/supabase.js` review (iteration 2 of loop)
+
+### 🔴 10. Offline banner suppressed for EQ tenant · 🔧 fixed in v3.4.50
+**Where**: `scripts/supabase.js` `updateOnlineStatus` line 265.
+**Symptom**: Same gate-class as #9. `if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') { banner.classList.remove('show'); return; }`. EQ tenant DOES write to Supabase (audit log, presence, schedule, leave requests via saveCellToSB) — those writes silently failing without a banner means an EQ user editing offline has no idea their queue is filling up.
+**Fix**: Drop `'eq'` from the gate; keep `'demo'` (genuinely has no Supabase per the loadTenantConfig short-circuit).
+
+### 🟠 11. META-FINDING: EQ tenant is a SEED-demo, not a Supabase-backed tenant · 📝 surfaced for design doc
+**Where**: `index.html:1810` (`loadFromSupabase` short-circuit), `scripts/auth.js:23,245,454` (auth gates), `scripts/digest-settings.js:129` (digest fresh-fetch skip), historic gates we've already lifted (`startRealtime` v3.4.47, `startPolling` v3.4.49, `updateOnlineStatus` v3.4.50).
+**What's actually happening**: The EQ tenant has a configured Supabase project (`ktmjmdzqrogauaevbktn`), and writes DO go there (saveCellToSB, presence upserts, audit_log inserts). But the main READ path — `loadFromSupabase` at `index.html:1810` — short-circuits to in-memory `SEED.people / SEED.sites / SEED.schedule / SEED.managers` for both 'eq' AND 'demo' tenants. So EQ tenant users see the same fixed cast every page load, regardless of what's stored. EQ Supabase is effectively a write-only sink: data goes in, nobody reads it back.
+**Why it works as a "live demo"**: Presence (v3.4.47) and audit logging still function because they operate ON TOP OF the SEED render — two prospects loading the same SEED simultaneously share cell coordinates, so presence outlines render correctly. The audit log captures "who did what" even though the data they touched gets re-seeded on next load.
+**Implication for v3.4.49 (polling fix)**: lifting `'eq'` from the polling gate causes `refreshData(true)` → `loadFromSupabase` → SEED re-map → `renderCurrentPage` every 30s. Idempotent — no flicker, no data change — just wasted CPU on idle EQ tabs. NOT reverting because if EQ ever transitions to a real Supabase-backed tenant, polling becomes useful immediately. Forward-compatible cost.
+**Implication for v3.4.49 migration**: `migrations/2026-04-30_eq_realtime_publication.sql` is also moot for the EQ tenant in its current SEED-demo shape — adding `schedule` + `leave_requests` to the publication doesn't help if EQ doesn't load schedule/leave_requests from Supabase. But the migration is still RIGHT — when EQ transitions to real-data, those tables need to be in the publication. Apply it on return; leave the gate-lift in place.
+**The design question** (for tomorrow's design doc): Is the EQ tenant intentionally a SEED demo (Starter-tier "try it now" front-door, no real persistence required), or is it transitional state meant to become a real Supabase-backed tenant? That decision shapes:
+  - Whether the Starter tier IS this SEED-demo model (just rebrand it as "Starter")
+  - Whether to add a "Promote to real tenant" flow that flips the SEED short-circuit off and migrates writes
+  - Whether to keep 6+ EQ-specific gates scattered across the codebase (auth, gate dropdown, digest, load path) or consolidate them behind a single `TENANT.IS_SEED_DEMO` flag
+
+This is the highest-leverage open question for the morning. Adding to the design doc Section 7 (Open questions).
+
+### 🟢 12. Six places treat 'eq' as 'demo' — pattern, not always a bug · 📝 documented
+**Locations**: `scripts/auth.js:23` (gate dropdown source), `scripts/auth.js:245` (login flow accepts 'demo'/'demo1234' for both tenants), `scripts/auth.js:454` (`isDemo = eq || demo` for manager-password short-circuit), `scripts/digest-settings.js:129` (skip fresh fetch), `index.html:1810` (loadFromSupabase short-circuit), and the three we've already lifted.
+**Audit verdict**:
+  - `auth.js:23, 245, 454` — INTENTIONAL given EQ's SEED-demo nature. Lifting these would break the "anyone can try the demo with PIN 'demo'/'demo1234'" front-door.
+  - `digest-settings.js:129` — INTENTIONAL. SEED `STATE.managers` IS the truth for EQ; fresh fetch from Supabase would surface stale write-only-sink data.
+  - `index.html:1810` — INTENTIONAL by design. This is the SEED short-circuit itself.
+  - Already-lifted gates: `startRealtime` (v3.4.47), `startPolling` (v3.4.49), `updateOnlineStatus` (v3.4.50) — all CORRECT to lift, since presence/polling/offline-warning work even on a SEED demo when writes go to a real Supabase.
+
+So the codebase pattern is healthier than it looked at first read — there ARE intentional gates for the SEED-demo behaviour and there ARE accidentally-extended gates for things like polling/realtime/offline that should never have been gated. The remaining 4 gates (auth + digest + loadFromSupabase) are intentional and should stay until/unless Royce decides EQ transitions to a real tenant.

@@ -190,8 +190,35 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.49
+  EQ Solves — Field  v3.4.50
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.50  (offline banner gate; surface EQ-as-SEED-demo finding)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 3 (iteration 2 of overnight loop). Same
+    gate-class as v3.4.49 — `updateOnlineStatus` in
+    scripts/supabase.js suppressed the offline banner for EQ
+    tenant. EQ does write to Supabase (audit log, presence,
+    schedule, leave) so silent write failures without a banner
+    leave the user blind to a queued-edit pile. Drop 'eq' from
+    the gate; keep 'demo' (genuinely no Supabase).
+  • SURFACED for design doc (no code change, doc only):
+    EQ tenant is a SEED demo — `loadFromSupabase` at
+    index.html:1810 short-circuits to in-memory SEED for both
+    'eq' and 'demo'. Writes go to EQ Supabase, but reads never
+    do. This means v3.4.49's polling fix is wasteful for EQ
+    (re-renders SEED every 30s — no flicker but no benefit
+    either) and the realtime publication migration is moot for
+    EQ until/unless EQ transitions to a real tenant. The "is EQ
+    a SEED demo or a real tenant?" decision is the single
+    highest-leverage open question for the design doc.
+  • Audit of all 6 EQ-vs-demo gates in the codebase: 3 already
+    lifted (realtime v3.4.47, polling v3.4.49, offline banner
+    v3.4.50 = today). Remaining 3 (auth gate dropdown, login
+    flow, digest fresh-fetch skip) are INTENTIONAL given the
+    SEED-demo design and should stay until Royce decides on
+    the SEED-vs-real-tenant question. Documented in
+    BATTLE-TEST-2026-04-29.md finding #12.
 
   CHANGES IN v3.4.49  (EQ tenant sync was completely broken — fix polling gate)
   ────────────────────────────────────────────────────────────
