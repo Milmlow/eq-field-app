@@ -80,7 +80,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/roster.js`                             |      |                                          |
 | `scripts/people.js`                             |      |                                          |
 | `scripts/managers.js`                           |      |                                          |
-| `scripts/supabase.js` (sbFetch wrapper, CAS)    |      |                                          |
+| `scripts/supabase.js` (sbFetch wrapper, CAS)    | ✓    | Pass 3 — findings #10, #11 (meta), #12  |
 | `scripts/audit.js`                              |      |                                          |
 | `scripts/digest-settings.js`                    |      |                                          |
 | `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
