@@ -2185,8 +2185,16 @@ let _pollInterval = null;
 function startPolling() {
   if (_pollInterval) clearInterval(_pollInterval);
   _pollInterval = setInterval(() => {
-    // Skip if: demo tenant, editor active, user typing, writes pending
-    if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') return;
+    // Skip if: demo tenant (no Supabase to poll), editor active,
+    // user typing, writes pending. v3.4.49 — 'eq' lifted from this
+    // gate. The combination of (a) realtime previously gated off
+    // for EQ and (b) polling ALSO gated meant two EQ supervisors
+    // editing concurrently would never see each other's changes
+    // until a page reload. Realtime was lifted in v3.4.47 but its
+    // postgres publication was incomplete (see migration
+    // 2026-04-30_eq_realtime_publication.sql); polling is the
+    // belt-and-braces fallback in the meantime.
+    if (TENANT.ORG_SLUG === 'demo') return;
     if (currentPage === 'editor') return;
     const active = document.activeElement;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;

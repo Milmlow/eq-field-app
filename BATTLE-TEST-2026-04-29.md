@@ -32,4 +32,34 @@ Each finding gets:
 **Where**: `scripts/presence.js` interaction with the week-navigation buttons.
 **Symptom**: If the user is focused on cell X on week A, then clicks "Next Week" via a button, the editor input loses focus → `onblur` fires → `presenceBlur` runs → DELETE goes through. So in practice this is handled cleanly today. Logged as a watch item if week-change is ever wired up via a keyboard shortcut that doesn't blur the input first.
 
+---
+
+## Pass 2 — `scripts/realtime.js` after EQ-tenant gate lift
+
+### 🔴 6. EQ Supabase realtime publication is missing `schedule` + `leave_requests` · 🚧 PR open with additive migration, NOT applied
+**Where**: EQ Supabase project `ktmjmdzqrogauaevbktn`, `pg_publication_tables` for `supabase_realtime`.
+**Discovered via**: `SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';` — returned only `public.roster_presence`.
+**Symptom**: v3.4.47 lifted `'eq'` from the realtime gate so EQ users now connect to Realtime. But the EQ project's `supabase_realtime` publication was never extended beyond `roster_presence` (which we ADDed in the v3.4.47 migration). So `_rtJoinChannel('schedule')` and `_rtJoinChannel('leave_requests')` succeed at the Phoenix-protocol level but no postgres_changes events ever fire — silent realtime failure for the two tables that matter most. Effect on a single-user demo: invisible, because only one user is editing. Effect on multi-supervisor demo (two browsers): roster cells and leave requests don't live-merge; users see stale data until the next 30s poll.
+**Fix shape**: Two-line additive migration —
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE public.schedule;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.leave_requests;
+```
+**Why deferred**: Schema change → Royce should sign off before applying, especially since SKS prod likely needs the same check (its publication state is unverified — read-only check skipped per "never touch SKS" rule). Migration file committed to repo; Royce applies via Supabase SQL editor when back.
+
+### 🟡 7. No jitter in realtime reconnect backoff · 📝 documented
+**Where**: `scripts/realtime.js` `_rtScheduleReconnect` (lines 125-131).
+**Symptom**: Backoff is `1s, 2s, 4s, 8s, 16s, 30s` exactly. If many clients lose connection at the same instant (Supabase blip, Netlify edge issue), all reconnect at the same instants — thundering herd. Not a problem at SMB scale (5-50 supervisors) but worth fixing before enterprise scale. Add `Math.random() * delay * 0.3` jitter.
+**Why deferred**: Latent at current scale; cosmetic-tier fix.
+
+### 🟡 8. Failed channel JOIN is not retried · 📝 documented
+**Where**: `scripts/realtime.js` `_rtOnMessage` (lines 184-191).
+**Symptom**: If a `phx_join` reply has `status !== 'ok'`, the code logs an error and leaves `chan.joined = false`. There's no retry path. So if (e.g.) RLS rejects one client's subscription transiently, that channel stays dead until the next page reload. Other channels work, so the failure is partial and easy to miss.
+**Why deferred**: Hard to repro — would need a transient RLS error to test. Document for future hardening.
+
+### 🔴 9. EQ tenant ALSO has 30s polling gated → no sync at all · 🔧 fixed in v3.4.49
+**Where**: `index.html` line 2189 (`startPolling`).
+**Symptom**: Same root-cause as #6. Discovered while validating the realtime fix. The polling fallback (which calls `refreshData()` every 30s when no one's actively editing) has the SAME `if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') return;` gate as `startRealtime` did pre-v3.4.47. Combined with #6, the EQ tenant has neither realtime nor polling — two EQ supervisors editing simultaneously today would never see each other's changes until a page reload. Demo (in-memory tenant) correctly stays gated since it has no Supabase to poll.
+**Fix**: Drop `'eq'` from the polling gate; keep `'demo'`. Polling is now active for EQ tenant. After the realtime publication migration (#6) is applied, polling becomes mostly redundant for EQ but stays harmless — it only fires when no one's editing and silently refreshes data.
+
 
