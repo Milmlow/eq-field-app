@@ -84,7 +84,7 @@ Tick rotation slots as they're reviewed so the loop spreads attention systematic
 | `scripts/audit.js`                              | ✓    | Pass 10 — findings #30-35 (forensics gaps) |
 | `scripts/digest-settings.js`                    | ✓    | Pass 11 — findings #36-39 (race fix)    |
 | `sw.js` (PRECACHE list, network-first logic)    | ✓    | Pass 12 — findings #40 (cache-error), #41, #42 |
-| `scripts/auth.js` (PIN flow, session token)     |      |                                          |
+| `scripts/auth.js` (PIN flow, session token)     | ✓    | Pass 13 — findings #43-47 (review-only) |
 | Supabase MCP runtime sweep — `roster_presence`  | ✓    | Pass 8 — clean (0 rows, finding #26)    |
 | Supabase MCP runtime sweep — `audit_log`        | ✓    | Pass 8 — finding #24 (dup archive entry)|
 | Edge-case probe — DST / timezone boundaries     |      |                                          |
@@ -414,4 +414,30 @@ The `some()` check uses String() coercion (fixes #27) and naturally short-circui
 ### 🟢 42. manifest.json cache-first → stale tenant branding · 📝 documented
 **Where**: `sw.js` `CACHE_FIRST_PATHS = ['/manifest.json', '/icons/']` line 39.
 **Symptom**: manifest.json is in cache-first set. If tenant branding changes (PWA name, theme color, icon refs), the cached manifest stays until the next cache-version bump (i.e. next code release). For static tenants (SKS, EQ today) this is fine. For multi-tenant onboarding where customers can change their own branding via Settings, manifest staleness becomes a real UX bug — they update the logo, see the change everywhere except the home-screen install. **Tier-relevant**: surfaces once self-serve branding lands. Two fixes possible: (a) move manifest.json out of CACHE_FIRST_PATHS to network-first (slower install but fresh), or (b) include a tenant-branding hash in the cache key so branding changes auto-invalidate. Defer to multi-tenant onboarding phase.
+
+
+---
+
+## Pass 13 — `scripts/auth.js` checkPin review (iteration 12, REVIEW-ONLY)
+
+Auth surface — code changes need explicit Royce sign-off per the global rules. All findings in this pass are 📝 documented only.
+
+### 🟡 43. "Remember me" stores the raw access code in localStorage · 📝 documented
+**Where**: `scripts/auth.js` `checkPin` lines 188-197.
+**Symptom**: When the user checks "remember me" on the tenant-code gate, the payload written to `localStorage.setItem('eq_local_remember_' + TENANT.ORG_SLUG, JSON.stringify(payload))` includes `code: val` (the raw access code the user typed). Comment says "Local-only — never leaves the user's browser." That's accurate, but localStorage is accessible to any script on the same origin, so a future XSS bug could exfiltrate the code and the attacker could mint server-side session tokens via verify-pin. Also: shared-computer scenarios (kiosk / shop-floor terminal where multiple users use the same browser) — User B opens DevTools, reads User A's code.
+**Why deferred**: Acceptable today for SMB scale where everyone has their own browser + the access codes are tenant-shared anyway. For enterprise tier with proper SSO this becomes a red flag in a SOC 2 review. Long-term fix: server-issued opaque session token (revocable), not the user's password. Tier-relevant.
+
+### 🟡 44. Sessionstorage / localStorage writes are not atomic · 📝 documented
+**Where**: `scripts/auth.js` `checkPin` various.
+**Symptom**: ~6 sessionStorage / localStorage `setItem` calls scattered across the function. If the browser crashes mid-sequence (low memory, tab killed by OS), partial state could persist. Practical risk: very low — these are fast operations, no user data corruption. Mentioned for completeness during the review.
+
+### 🟡 45. Token mint is fire-and-forget; race window with protected calls · 📝 documented
+**Where**: `scripts/auth.js` `checkPin` lines 212-232.
+**Symptom**: After the local code matches, an async IIFE fires off `verify-pin` to mint a server-side session token. The function does NOT await it — `initApp()` runs immediately. If the user (or app) triggers a protected endpoint (`send-email`, EQ Agent) within ~100-300ms of login, before the token has minted, those calls auth-fail silently. The comment correctly notes "Failures are silent — core app functionality doesn't depend on this." But `triggerLeaveEmail` IS triggered automatically on submit, and a fast-clicker submitting leave right after login could miss the token window.
+**Why deferred**: Race window is narrow (~100ms in normal conditions). The fix is to await the token mint before showing the app, with a small "checking…" indicator — but that adds login latency for the 99% of users who never use a protected endpoint. Acceptable tradeoff. Future hardening: retry on auth fail in send-email itself, with a one-shot token re-mint.
+
+### 🟡 47. Unknown-exception path doesn't clear the gate-pin DOM input · 📝 documented
+**Where**: `scripts/auth.js` `checkPin` outer catch line 329-333.
+**Symptom**: Both the success path and the known-failure paths (incorrect-code branches) clear the PIN input via `document.getElementById('gate-pin').value = ''`. The outer catch (network error / JSON parse fail) does NOT clear it. So a connection error during login leaves the PIN visible in the DOM. Browser dev tools / form auto-fill / accidental screen-share could expose it. Narrow window since the user would normally retry and clear naturally.
+**Why deferred**: Defensive hardening, low real-world impact. Add `document.getElementById('gate-pin').value = '';` to the outer catch as a one-line fix when next touching the file.
 
