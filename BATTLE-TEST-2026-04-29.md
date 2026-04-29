@@ -113,3 +113,65 @@ Captured as the loop matures — not directives for the next iteration (those li
 - **Coverage matrix** added between iterations 1 and 2: rotation slot picking is now matrix-driven (prefer un-covered slots) rather than random.
 - **Stop condition refined** between iterations 1 and 2: was "last 2 iterations with no findings"; now "every rotation slot covered at least once AND last 3 iterations produced no new findings." Less trigger-happy.
 - **Iteration cap dropped** between iterations 1 and 2 (was ~12). Royce explicitly asked for "go as long as needed until you've improved everything as much as possible."
+
+---
+
+## Reference: Melbourne VIC labour program
+
+Royce shared `2025 VIC Construction  Labour Program V1 .xlsm` as the upper-scale reference point — "about as large as we could ever hope to facilitate a solution for." Key data extracted (read-only inspection, no edits):
+
+| Metric | Value |
+|---|---|
+| Total people in VIC ele construction | ~577 |
+| Direct employees | ~350 |
+| FT tradespeople | 398 |
+| FT apprentices | 52 |
+| Labour Hire apprentices | 116 |
+| Forward forecast horizon | ~52 weeks (weekly columns) |
+| Largest single-project headcount | 345 (Airtrunk Shell) |
+| Apprentice year levels tracked | 1st–6th (not 1st–4th) |
+| Apprentice training orgs | 7+ (NECA, Yanda, AGA, MAG, G-Force, MAXIM, Frontline) |
+| Employment-type variants | 7+ (FT, PT, Casual, FT Apprentice, LH Apprentice, FT Apprentice On Loan, LH) |
+| Master sheet dimensions | 660 rows × 614 cols (project × week × type matrix) |
+
+**Pattern**: Melbourne treats labour as a **forecast problem**, not just a current-week roster problem. Their primary view is "where will my 577 people be deployed across 12 active projects over the next 12 months?" — EQ Field today answers "where are they this week?". That gap (forecast horizon, project hierarchy above sites, headcount roll-ups) is the single biggest enterprise feature missing.
+
+
+## Tier analysis — initial entries (informed by Melbourne reference)
+
+Format: **Tier · Effort · Title** — rationale.
+
+### Enterprise (200–600 people, multi-project, multi-region)
+
+- **Enterprise · L · Project hierarchy above sites** — Melbourne tracks per-project headcount across 52 weeks; EQ Field has flat site abbreviations. A `project` entity that groups sites + carries weekly headcount targets is the centre of gravity for enterprise. Without it the forecast view has no "what should this look like" anchor.
+- **Enterprise · L · 52-week forward forecast view** — Melbourne's VIC LABOUR FORECAST sheet is project × week → required headcount, 52 weeks wide. The current EQ Field weekly editor doesn't compose into a horizon view. Needs a new screen + aggregation queries (weekly totals per project per state).
+- **Enterprise · M · Employment-type modelling beyond `group`** — today `people.group` is one of Direct/Apprentice/Labour Hire (3 values). Melbourne uses 7+ types (FT, PT, Casual, FT Apprentice, LH Apprentice, FT Apprentice On Loan, LH). Add `employment_type` as a separate column from group; group becomes "what they do" and employment_type becomes "how they're engaged".
+- **Enterprise · S · Apprentice training org (GTO/RTO) field** — Melbourne tracks NECA / Yanda / AGA / G-Force / MAG / MAXIM / Frontline per apprentice (the WORKING SHEET RTO column). One nullable text/enum field on `people`. Compliance reporting needs it.
+- **Enterprise · M · Apprentice ratio compliance widget** — APP NO's sheet tracks weekly apprentice-to-tradesperson ratio (e.g. 3.5:1 means 3.5 trades per apprentice — well within Australian state rules). State rules vary (typically 1:3 in NSW for electrical). Needs a per-week, per-region computation + alert when below threshold.
+- **Enterprise · M · Aggregate roll-up dashboards** — VIC ELE sheet has a left-rail "totals" stack (398 FT, 52 FT App, etc.). EQ Field has the dashboard but not these specific roll-ups. Add: totals by employment type × week, totals by project × week.
+- **Enterprise · L · Multi-region within one tenant** — Melbourne is one state. SKS has NSW, VIC, presumably others. Today: separate Supabase project per tenant. Enterprise wants regions WITHIN a tenant (NSW + VIC + QLD as siblings under one SKS Group org). Schema: add `region_id` FK on `people` + `sites`; RLS policies extended; UI for region switcher. Big change.
+- **Enterprise · M · Render performance at 500+ people** — current editor grid renders one row per person × 7 days. At 577 people that's ~4,000 cells in DOM at once. Slow on Safari/iPad. Needs virtual scrolling or pagination by group/site.
+- **Enterprise · M · Print/PDF labour program export** — Melbourne distributes the program as a printed sheet. EQ has print CSS for the roster but not a multi-page labour-program layout.
+
+### Mid-market bridge (50–200 people)
+
+- **Mid · M · Filtering UX on the editor** — at 50+ people the editor scroll gets long. Needs persistent group/site filters up top + a search box that highlights matching rows. Not a new feature so much as a UX polish on existing data.
+- **Mid · S · "Hire Company" as a first-class field** — today `people.agency` exists but is free-text. Melbourne's matrix has dedicated Hire Company columns. Promote agency from free-text to enum-with-typeahead so labour-hire reporting groups cleanly.
+- **Mid · S · Roster bulk-paste from clipboard** — Melbourne workflow includes copying blocks from one week to another via Excel. EQ has "Copy Last Week" but not arbitrary bulk paste from clipboard. Useful at any size; matters more at 100+.
+
+### SMB (5–50, EQ Field's current sweet spot)
+
+- **SMB · S · Top-of-page "supervisors editing this week" indicator** — pairs with v3.4.47 presence. Shows you the count + names of other supervisors actively editing the current week without having to spot the cell-level outlines. Cheap addition.
+- **SMB · M · "Save week as template" / "apply template"** — extends Copy Last Week. For repeating site assignments (e.g. "this is a NEXTDC week, fill from the NEXTDC template"). Tier-agnostic but earns its keep at 30+ people.
+
+### Starter (1–10 people)
+
+- **Starter · M · Self-serve onboarding** — today setting up a tenant requires manual Supabase project creation. Starter tier needs a sign-up flow that provisions per-tenant Supabase storage automatically. Without this, Starter pricing isn't viable.
+- **Starter · S · Hide BETA / DO NOT USE tabs by default** — small teams shouldn't see Apprentices BETA, Job Numbers BETA, Trial Dashboard NEW. Behind a Settings → Advanced toggle.
+- **Starter · S · Default-collapsed Leave/Timesheets** — first-load surface should be Roster + Contacts + Sites only. Leave/Timesheets surface when explicitly enabled. Reduces "what does all this do" friction for solo operators.
+
+### Cross-cutting (any tier — bridge features)
+
+- **Any · M · Magic-link approve from email** — already chipped in `mcp__ccd_session__spawn_task`. Removes the "open the app to approve a leave request" friction. Auth-surface change → needs Royce sign-off before deploying to either tenant.
+- **Any · S · Realtime reconnect jitter (finding #7)** — latent at SMB scale, real at enterprise. Math.random() * delay * 0.3 in `_rtScheduleReconnect`.
+
