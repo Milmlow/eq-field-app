@@ -190,8 +190,26 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.52
+  EQ Solves — Field  v3.4.53
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.53  (managers.js removeManager: id-coercion fix on filter)
+  ────────────────────────────────────────────────────────────
+  • Battle-test pass 7 (iteration 6 of overnight loop). Reviewed
+    scripts/managers.js. removeManager line 225 used strict
+    `m.id !== id` for the filter that drops the deleted manager
+    from STATE.managers. Same id-coercion bug class that v3.4.22
+    fixed for the edit path (saveManager) and v3.4.38 fixed for
+    leave handlers — but the remove path was missed.
+  • Symptom on SKS: bigint ids that PostgREST sometimes returns
+    as strings made `m.id !== id` always true (number !== string).
+    Filter kept every row. Manager got deleted from the DB via
+    deleteManagerFromSB but lingered locally as a "ghost" in the
+    supervisors list until next page reload — same behaviour
+    Royce's been intermittently hitting on SKS.
+  • Fix: `String(m.id) !== String(id)` matches the v3.4.22 /
+    v3.4.38 pattern across the rest of the codebase.
+  • Demo only.
 
   CHANGES IN v3.4.52  (fillWeek consistency: scheduleIndex + UI refresh + audit)
   ────────────────────────────────────────────────────────────
