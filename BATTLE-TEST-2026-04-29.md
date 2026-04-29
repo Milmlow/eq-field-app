@@ -374,3 +374,25 @@ The `some()` check uses String() coercion (fixes #27) and naturally short-circui
 - **Enterprise · S · Audit log pagination + date filter** — `openAuditLog` hard-caps at 500 rows. SMB scale fine (~days/weeks of activity). At Melbourne scale (~577 people, multi-supervisor, daily roster + leave + timesheet activity) 500 entries is a single morning. Need: paginated load (page=1,2,…), or date-range filter (default last 7 days, expand on demand). Not urgent at current SKS scale; surfaces as a real gap once seat count crosses ~150.
 - **Enterprise · M · Tenant-level timezone setting** — both `renderAuditLog` grouping and the prior CSV export used the viewer's browser locale, so the same audit row "lives" on different dates for users in different timezones. A tenant has one canonical timezone (NSW for SKS, VIC for Melbourne); store it on the org record and use it for both display and export. Touches more than just audit.js — leave dates, schedule weeks, TAFE holiday windows would all benefit. Foundation feature for the multi-region tier.
 
+
+---
+
+## Pass 11 — `scripts/digest-settings.js` review (iteration 10)
+
+### 🟡 36. toggleDigest optimistic-render races the PATCH · 🔧 fixed in v3.4.57
+**Where**: `scripts/digest-settings.js` `toggleDigest` (lines 50-69 pre-fix).
+**Symptom**: After the user clicks a digest checkbox, code did 1) optimistic STATE update 2) renderDigestPanel (which does a fresh DB fetch + repaint) 3) await PATCH. Step 2's fetch could complete BEFORE step 3's PATCH committed, so the panel painted with stale data and the checkbox visibly UNCHECKED for 50-200ms before the user's next interaction triggered a re-render. On a slow connection (Brave iOS, mobile data) the flicker could persist longer.
+**Fix**: removed the immediate renderDigestPanel() call. The native `<input type="checkbox">` already shows the new state via default HTML behaviour after click — no JS re-render needed for the success case. The catch block keeps its renderDigestPanel call so the rollback DOES re-paint to undo the optimistic STATE change.
+
+### 🟢 37. hydrateDigestOptIns silent catch could regress digest preferences · 📝 documented
+**Where**: `scripts/digest-settings.js` `hydrateDigestOptIns` lines 32-37.
+**Symptom**: On any sbFetch error (RLS rejection, network blip, schema migration not applied), the catch block defaults `m.digest_opt_in = true` for managers where it's currently `undefined`. Comment says this is graceful migration handling, but the same path triggers on transient errors too. Risk is narrow (only managers with `undefined` get reset; once `false` is loaded once, it sticks). Future hardening: add console.warn so transient failures are observable, mirroring the v3.4.56 change to auditLog write.
+
+### 🟢 38. installWrap + hydrate polling degrade silently after 5-10s · 📝 documented
+**Where**: `scripts/digest-settings.js` `document.addEventListener('DOMContentLoaded', ...)` lines 174-195.
+**Symptom**: Two `setInterval` polling loops — one for managers.js to define `renderManagers`, one for STATE.managers to populate. Both stop silently after a fixed number of tries (20 / 40) if the dependency never appears. If managers.js fails to load (CDN issue, syntax error in upstream file, etc.), the digest panel never renders and there's no diagnostic. Future hardening: console.warn on timeout. Cosmetic at current scale.
+
+### 🟢 39. m.id interpolated raw into onchange handler — defensive XSS gap · 📝 documented
+**Where**: `scripts/digest-settings.js` `_paintPanel` line 98.
+**Symptom**: `onchange="toggleDigest('${m.id}', this.checked)"` interpolates m.id into a single-quoted JS string. m.id is uuid string / bigint / number in practice — none contain quotes or backslashes, so safe in current data shape. If a malicious actor ever managed to insert a managers row with `id` containing `'` or `\`, the JS would break or be exploitable. Deeply defensive (anon role typically can't write to managers.id). Document for the security review checklist.
+
