@@ -63,3 +63,53 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.leave_requests;
 **Fix**: Drop `'eq'` from the polling gate; keep `'demo'`. Polling is now active for EQ tenant. After the realtime publication migration (#6) is applied, polling becomes mostly redundant for EQ but stays harmless — it only fires when no one's editing and silently refreshes data.
 
 
+
+---
+
+## Coverage matrix
+
+Tick rotation slots as they're reviewed so the loop spreads attention systematically rather than randomly. ✓ = at least one iteration spent on it.
+
+| Slot                                            | Iter | Result                                  |
+|-------------------------------------------------|------|------------------------------------------|
+| `scripts/presence.js`                           | ✓    | Pass 1 — 5 findings (#1-5)              |
+| `scripts/realtime.js`                           | ✓    | Pass 2 — 3 findings (#6, #7, #8)        |
+| `index.html` polling / SW registration          | ✓    | Pass 2 — finding #9                     |
+| `supabase/functions/tafe-weekly-fill/index.ts`  |      |                                          |
+| `scripts/leave.js`                              |      |                                          |
+| `scripts/roster.js`                             |      |                                          |
+| `scripts/people.js`                             |      |                                          |
+| `scripts/managers.js`                           |      |                                          |
+| `scripts/supabase.js` (sbFetch wrapper, CAS)    |      |                                          |
+| `scripts/audit.js`                              |      |                                          |
+| `scripts/digest-settings.js`                    |      |                                          |
+| `sw.js` (PRECACHE list, network-first logic)    |      |                                          |
+| `scripts/auth.js` (PIN flow, session token)     |      |                                          |
+| Supabase MCP runtime sweep — `roster_presence`  |      |                                          |
+| Supabase MCP runtime sweep — `audit_log`        |      |                                          |
+| Edge-case probe — DST / timezone boundaries     |      |                                          |
+| Edge-case probe — long names / special chars    |      |                                          |
+| Edge-case probe — memory/timer leaks            |      |                                          |
+| Edge-case probe — offline / queue replay        |      |                                          |
+| `scripts/release.mjs` regex robustness          |      |                                          |
+
+---
+
+## Tier analysis
+
+Strategic findings: features (or absences) that affect which tier of customer the app appeals to. Track separately from bugs so Royce's morning skim can read this section as a roadmap, not a bug list.
+
+Format per entry: **Tier · Effort (S/M/L) · Title** — one-line rationale.
+
+(populated as iterations discover gaps)
+
+---
+
+## Process notes (loop self-improvement)
+
+Captured as the loop matures — not directives for the next iteration (those live in the prompt), but lessons learned worth carrying forward.
+
+- **Smoke-test preflight** added between iterations 1 and 2: ~30s `curl` of the live demo to confirm 200 + latest version banner before drilling into code. Catches deploy regressions before they compound across iterations.
+- **Coverage matrix** added between iterations 1 and 2: rotation slot picking is now matrix-driven (prefer un-covered slots) rather than random.
+- **Stop condition refined** between iterations 1 and 2: was "last 2 iterations with no findings"; now "every rotation slot covered at least once AND last 3 iterations produced no new findings." Less trigger-happy.
+- **Iteration cap dropped** between iterations 1 and 2 (was ~12). Royce explicitly asked for "go as long as needed until you've improved everything as much as possible."
