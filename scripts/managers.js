@@ -26,8 +26,9 @@ function renderManagers() {
     return;
   }
 
-  const catOrder  = ['Operations', 'Project Management', 'Construction', 'Supervisor', 'Internal', 'Other'];
+  const catOrder  = ['Executive', 'Operations', 'Project Management', 'Construction', 'Supervisor', 'Internal', 'Other'];
   const catColors = {
+    'Executive':           '#1A1A2E',
     'Operations':          '#1F335C',
     'Project Management':  '#7C77B9',
     'Construction':        '#34486C',
