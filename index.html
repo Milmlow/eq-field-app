@@ -193,8 +193,82 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.39
+  EQ Solves — Field  v3.4.43
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.43  (Supervision: stop silently hiding unknown categories)
+  ────────────────────────────────────────────────────────────
+  • scripts/managers.js renderManagers: previous code did
+    `cats = catOrder.filter(cat => grouped[cat])`, which dropped
+    every supervisor whose category value wasn't in the predefined
+    catOrder list. Symptom on SKS prod: David Boyd (category =
+    something not in catOrder, e.g. 'Executive' typed before that
+    label was added in v3.4.42, or 'Director'/'GM'/etc.) appeared
+    in the Friday digest opt-in panel — which does its own fresh
+    DB fetch with no category filter — but was missing from the
+    main supervisors table directly below it. The bug class is
+    "filter-by-inclusion silently hides data": any new category
+    label added in the DB before catOrder was updated would vanish.
+  • Fix: render known categories in catOrder, then append any
+    unknown categories alphabetically at the end. Unknown bands
+    use the existing catColors fallback (#8494A7 grey) until the
+    next version adds a proper colour. No DB migration needed.
+  • This unblocks SKS — David Boyd will reappear immediately on
+    the next page load, in his own category band at the bottom,
+    so Royce can see his current category value and decide whether
+    to leave it or move him to Executive.
+
+  CHANGES IN v3.4.42  (Supervision: Executive category)
+  ────────────────────────────────────────────────────────────
+  • New 'Executive' category added to the Supervisors page —
+    sits at the top of catOrder ahead of Operations so directors
+    /executives group cleanly together (e.g. Mark, John, Royce).
+    Colour: #1A1A2E (EQ Ink — distinct from Operations #1F335C).
+    No DB migration needed; managers.category is a free-text
+    column. Re-categorise existing supervisors via the edit
+    modal — pick Executive from the dropdown, save.
+  • Updated: scripts/managers.js (catOrder + catColors),
+    index.html ×2 (filter select, edit modal select), version
+    banner.
+
+  CHANGES IN v3.4.41  (TAFE auto-fill — Sunday cron via Edge Function)
+  ────────────────────────────────────────────────────────────
+  • New Supabase Edge Function: supabase/functions/tafe-weekly-fill.
+    Mirrors the manual "🎓 Apply TAFE Day" button (scripts/tafe.js)
+    but runs server-side every Sunday 06:00 UTC (= 16:00 AEST /
+    17:00 AEDT) regardless of whether a manager has the app open.
+    Walks every apprentice with a nominated tafe_day, computes
+    next Monday's date for that weekday, skips holiday ranges from
+    app_config.tafe_holidays, and writes 'TAFE' into the schedule
+    only if the cell is still empty (compare-and-swap on `is.null`
+    so concurrent manual writes always win). Audit log entries are
+    written under manager_name='TAFE Auto-Fill'.
+  • New migration: migrations/2026-04-29_tafe_weekly_cron.sql.
+    Same pattern as 2026-04-19_digest_cron_schedule.sql — pg_cron
+    fires net.http_post against the function URL stored in
+    app_config.tafe_fn_url with bearer from app_config.tafe_fn_token.
+    Includes public.trigger_tafe_weekly_fill(p_dry_run, p_week,
+    p_org_id) for manual SQL invocation/preview.
+  • Apply order per tenant Supabase project:
+    1. supabase functions deploy tafe-weekly-fill
+    2. INSERT app_config rows tafe_fn_url + tafe_fn_token
+    3. Apply migrations/2026-04-29_tafe_weekly_cron.sql
+    4. Smoke-test:
+       SELECT public.trigger_tafe_weekly_fill(p_dry_run := true);
+    Both EQ demo and SKS prod need the same three steps in their
+    own Supabase project — function code is tenant-agnostic and
+    iterates organisations.id, so no per-tenant code fork.
+
+  CHANGES IN v3.4.40  (leave CC list — fix silent save no-op)
+  ────────────────────────────────────────────────────────────
+  • scripts/leave.js saveLeaveCCList: PATCH on a non-existent
+    app_config row returns 204 No Content with `return=minimal` —
+    not an error — so the previous catch-only localStorage fallback
+    never fired. Result: adding a CC recipient appeared to work in
+    the modal but reset to empty on the next page load. Now mirrors
+    the PATCH-then-POST pattern already used by saveTafeHolidays in
+    scripts/tafe.js, plus a localStorage cache mirror so a Supabase
+    blip can't drop an in-session list either.
 
   CHANGES IN v3.4.39  (id-coercion sweep + EMAIL_FROM wired up)
   ────────────────────────────────────────────────────────────
@@ -1137,7 +1211,7 @@
   <div class="page hidden" id="page-managers">
     <div class="filter-row">
       <div class="search-wrap"><span class="search-icon">⌕</span><input type="text" id="managers-search" placeholder="Search name, role or company…" oninput="renderManagers()"></div>
-      <select class="filter-select" id="managers-category" onchange="renderManagers()"><option value="">All Categories</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select>
+      <select class="filter-select" id="managers-category" onchange="renderManagers()"><option value="">All Categories</option><option value="Executive">Executive</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select>
       <button class="btn btn-secondary btn-sm" onclick="openAddManager()">＋ Add Contact</button>
     </div>
     <div id="managers-content"></div>
@@ -1521,7 +1595,7 @@
 </div>
 
 <!-- Manager modal -->
-<div class="modal-overlay" id="modal-manager"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="modal-manager-title">Add Contact</h3><button class="modal-close" onclick="closeModal('modal-manager')">✕</button></div><div class="modal-body"><input type="hidden" id="manager-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Name</label><input class="form-input" id="manager-name" placeholder="e.g. Ian Marston"></div><div class="form-group"><label class="form-label">Category</label><select class="form-select" id="manager-category"><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select></div></div><div class="form-group"><label class="form-label">Role</label><input class="form-input" id="manager-role" placeholder="e.g. Project Manager"></div><div class="form-row"><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="manager-phone" placeholder="04XX XXX XXX"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="manager-email" placeholder="name@example.com" type="email"></div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager')">Cancel</button><button class="btn btn-primary" onclick="saveManager()">Save</button></div></div></div>
+<div class="modal-overlay" id="modal-manager"><div class="modal" style="max-width:480px"><div class="modal-header"><h3 id="modal-manager-title">Add Contact</h3><button class="modal-close" onclick="closeModal('modal-manager')">✕</button></div><div class="modal-body"><input type="hidden" id="manager-edit-id"><div class="form-row"><div class="form-group"><label class="form-label">Name</label><input class="form-input" id="manager-name" placeholder="e.g. Ian Marston"></div><div class="form-group"><label class="form-label">Category</label><select class="form-select" id="manager-category"><option value="Executive">Executive</option><option value="Internal">Internal</option><option value="Operations">Operations</option><option value="Project Management">Project Management</option><option value="Construction">Construction</option><option value="Supervisor">Supervisor</option><option value="Other">Other</option></select></div></div><div class="form-group"><label class="form-label">Role</label><input class="form-input" id="manager-role" placeholder="e.g. Project Manager"></div><div class="form-row"><div class="form-group"><label class="form-label">Mobile</label><input class="form-input" id="manager-phone" placeholder="04XX XXX XXX"></div><div class="form-group"><label class="form-label">Email</label><input class="form-input" id="manager-email" placeholder="name@example.com" type="email"></div></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager')">Cancel</button><button class="btn btn-primary" onclick="saveManager()">Save</button></div></div></div>
 
 <!-- Supervisor password modal -->
 <div class="modal-overlay" id="modal-manager-pw"><div class="modal" style="max-width:380px"><div class="modal-header"><h3>🔓 Supervision Access</h3><button class="modal-close" onclick="closeModal('modal-manager-pw')">✕</button></div><div class="modal-body"><div class="form-group"><label class="form-label">Your Name</label><select class="form-input" id="manager-name-select" style="background:var(--surface)"><option value="">— Select your name —</option></select></div><div class="form-group"><label class="form-label">Password</label><input class="form-input" id="manager-pw-input" type="password" placeholder="Enter supervision password" onkeydown="if(event.key==='Enter') submitManagerPassword()"></div><div id="manager-pw-error" style="display:none;color:#EF4444;font-size:12px;margin-top:6px">Incorrect password or no name selected.</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-manager-pw')">Cancel</button><button class="btn btn-primary" onclick="submitManagerPassword()">Unlock</button></div></div></div>
