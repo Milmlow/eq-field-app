@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.68';
+const APP_VERSION = '3.4.69';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -59,7 +59,8 @@ const ORG_TABLES = [
   'leave_requests', 'audit_log', 'job_numbers',
   'apprentice_profiles', 'skills_ratings', 'feedback_entries',
   'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log',
-  'roster_presence'  // v3.4.47 — realtime presence on roster editor cells
+  'roster_presence',  // v3.4.47 — realtime presence on roster editor cells
+  'prestarts'         // v3.4.69 — Site Reports module, prestart briefings
 ];
 
 // v3.4.29: tables a tenant doesn't have. sbFetch GET on these returns []

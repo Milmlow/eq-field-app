@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.68
-const CACHE = 'eq-field-v3.4.68';
+// EQ Solves — Field  ·  Service Worker  v3.4.69
+const CACHE = 'eq-field-v3.4.69';
 
 const PRECACHE = [
   '/',
@@ -33,6 +33,7 @@ const PRECACHE = [
   '/scripts/analytics.js',
   '/scripts/whatsnew.js',
   '/scripts/presence.js',
+  '/scripts/site-reports.js',
 ];
 
 // Static assets that rarely change — cache-first is safe

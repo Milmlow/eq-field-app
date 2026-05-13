@@ -37,7 +37,9 @@ window.EQ_PERMISSIONS = {
     'reports.receive_digest', 'reports.subscribe_digest', 'reports.view_tenant_reports',
     'reports.export_data',
     'admin.view_config', 'admin.edit_config', 'admin.manage_roles', 'admin.invite_users',
-    'admin.manage_billing', 'admin.view_audit_log'
+    'admin.manage_billing', 'admin.view_audit_log',
+    // v3.4.67 — Site Reports (Prestart v1)
+    'reports.prestart.view', 'reports.prestart.create', 'reports.prestart.submit', 'reports.prestart.sign'
   ],
   supervisor: [
     'roster.view_own', 'roster.view_team', 'roster.view_all', 'roster.request_changes',
@@ -51,14 +53,19 @@ window.EQ_PERMISSIONS = {
     'sites.view_list', 'sites.view_details', 'sites.edit', 'sites.edit_lead',
     'app.view_team_profiles', 'app.view_skills', 'app.edit_skills',
     'app.manage_rotations', 'app.view_engagement', 'app.quarterly_review',
-    'reports.receive_digest', 'reports.subscribe_digest', 'reports.view_tenant_reports'
+    'reports.receive_digest', 'reports.subscribe_digest', 'reports.view_tenant_reports',
+    // v3.4.67 — Site Reports (Prestart v1)
+    'reports.prestart.view', 'reports.prestart.create', 'reports.prestart.submit', 'reports.prestart.sign'
   ],
   employee: [
     'roster.view_own', 'roster.view_team', 'roster.request_changes',
     'ts.submit_own', 'ts.edit_own', 'ts.view_own',
     'leave.view_own_balance', 'leave.submit_request',
     'people.view_own', 'people.edit_own', 'people.view_team',
-    'sites.view_list', 'sites.view_details'
+    'sites.view_list', 'sites.view_details',
+    // v3.4.67 — Site Reports: employees can view briefings they were
+    // crewed onto and sign their own attendance (v2 — magic-link sign-off).
+    'reports.prestart.sign'
   ],
   apprentice: [
     'roster.view_own', 'roster.view_team', 'roster.request_changes',
@@ -66,12 +73,14 @@ window.EQ_PERMISSIONS = {
     'leave.view_own_balance', 'leave.submit_request',
     'people.view_own', 'people.edit_own', 'people.view_team',
     'sites.view_list', 'sites.view_details',
-    'app.view_own_profile', 'app.submit_feedback', 'app.view_skills', 'app.buddy_checkin'
+    'app.view_own_profile', 'app.submit_feedback', 'app.view_skills', 'app.buddy_checkin',
+    'reports.prestart.sign'
   ],
   labour_hire: [
     'roster.view_own',
     'ts.submit_own', 'ts.view_own',
     'people.view_own',
-    'sites.view_list'
+    'sites.view_list',
+    'reports.prestart.sign'
   ]
 };
