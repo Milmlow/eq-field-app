@@ -75,6 +75,20 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// v3.4.74: ESC-to-close on the top-most open modal. Standard keyboard
+// convention — previously modals could only be closed via the ✕ button
+// or a backdrop click. Closes only ONE modal per press so a confirm-on-
+// top-of-edit stack peels back rather than blowing both away.
+// Skips when focus is on a form field that's actively using Escape
+// (rare but defensive — e.g. native datepickers).
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelectorAll('.modal-overlay.open');
+  if (!open.length) return;
+  // Close the LAST opened modal (DOM order ≈ open order in practice).
+  open[open.length - 1].classList.remove('open');
+});
+
 // ── CSV helpers ───────────────────────────────────────────────
 function csvEscape(val) {
   if (val == null) return '';
