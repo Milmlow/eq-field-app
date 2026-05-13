@@ -13,9 +13,9 @@
 // Env vars required:
 //   EQ_SECRET_SALT     — HMAC signing key (must match send-email
 //                        and supervisor-digest)
-//   AUDIT_SB_URL       — Supabase REST URL (for leave_requests,
+//   LEAVE_SB_URL       — Supabase REST URL (for leave_requests,
 //                        managers, audit_log)
-//   AUDIT_SB_KEY       — Supabase publishable key
+//   LEAVE_SB_KEY       — Supabase publishable key
 //   RESEND_API_KEY     — for the requester notification
 //   EMAIL_FROM         — from-address (optional, has fallback)
 //   APP_ORIGIN         — used in the confirmation HTML "Open app"
@@ -26,11 +26,11 @@
 const crypto = require('crypto');
 
 const SECRET_SALT = process.env.EQ_SECRET_SALT;
-const SB_URL      = process.env.AUDIT_SB_URL;
-const SB_KEY      = process.env.AUDIT_SB_KEY;
+const SB_URL      = process.env.LEAVE_SB_URL;
+const SB_KEY      = process.env.LEAVE_SB_KEY;
 
 if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
-if (!SB_URL || !SB_KEY) console.error('FATAL: AUDIT_SB_URL or AUDIT_SB_KEY not set');
+if (!SB_URL || !SB_KEY) console.error('FATAL: LEAVE_SB_URL or LEAVE_SB_KEY not set');
 
 // ── Token verification ───────────────────────────────────────
 // Same wire format as verify-pin's session token:
