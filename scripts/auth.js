@@ -440,6 +440,15 @@ function toggleManagerMode() {
     isManager          = false;
     currentManagerName = '';
     applyManagerMode();
+    // v3.4.67 Phase C — re-resolve role after lock-out. Without this,
+    // EQ_PERMS.can() would still return 'supervisor' until next reload.
+    // resolveSessionRole falls back to 'employee' when no name + no PIN.
+    if (window.EQ_PERMS && typeof window.EQ_PERMS.resolve === 'function') {
+      try {
+        window.EQ_PERMS.resolve();
+        if (window.EQ_SESSION) { window.EQ_SESSION.role = null; }
+      } catch (e) { /* noop */ }
+    }
     showToast('Switched to view only');
     return;
   }
@@ -535,6 +544,14 @@ async function submitManagerPassword() {
     isManager          = true;
     currentManagerName = name;
     applyManagerMode();
+    // v3.4.67 Phase C — re-resolve role now that PIN unlock has flipped
+    // isManager. Without this, EQ_PERMS.can() would still return the
+    // pre-unlock role until next cold boot. PIN-unlock-wins rule means
+    // the new role will be 'supervisor' (or 'manager' if that's what the
+    // person's DB row says).
+    if (window.EQ_PERMS && typeof window.EQ_PERMS.resolve === 'function') {
+      try { window.EQ_PERMS.resolve(); } catch (e) { /* noop */ }
+    }
     closeModal('modal-manager-pw');
     showToast('Supervision mode unlocked — ' + name);
     auditLog('Unlocked manager mode', 'Access', null, null);
