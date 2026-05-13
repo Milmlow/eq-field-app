@@ -198,7 +198,27 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.72
+  EQ Solves — Field  v3.4.73
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.73  (widen week-picker — "(this week)" no longer truncates)
+  ────────────────────────────────────────────────────────────
+  Royce flagged the topbar week-dropdown was cutting "(this week)"
+  down to "(t...s)" on the SKS app.
+
+  Cause: #globalWeek <select> had max-width:80px while the selected
+  option's textContent is "◉  DD.MM.YY  (this week)" (~22 chars).
+  At the inherited 11px font that label needs ~150px to render in full.
+
+  Fix: removed the max-width entirely. <select> now sizes to its
+  widest option's content. Topbar gains ~70px on desktop. Mobile
+  unchanged — .topbar-week already uses flex:1 there.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.72 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.72  (skip render when polled data hasn't changed)
@@ -1893,7 +1913,11 @@
     <div class="topbar-week">
       <button onclick="stepWeek(-1)" style="background:none;border:none;cursor:pointer;color:var(--navy-2);font-size:15px;padding:0 2px;line-height:1;font-family:inherit">‹</button>
       <span id="week-label-text" style="font-size:12px;font-weight:600;color:var(--navy-2)">Loading…</span>
-      <select id="globalWeek" onchange="onWeekChange()" style="border:none;background:transparent;font-family:inherit;font-size:11px;color:var(--ink-3);outline:none;cursor:pointer;padding:0;max-width:80px"></select>
+      <!-- v3.4.73: removed max-width:80px so the "(this week)" suffix no longer
+           truncates to "(t...s)". Select sizes to the widest option's content
+           (~150px on desktop with "◉  DD.MM.YY  (this week)"). Mobile already
+           has flex:1 on .topbar-week so the dropdown stays comfortable. -->
+      <select id="globalWeek" onchange="onWeekChange()" style="border:none;background:transparent;font-family:inherit;font-size:11px;color:var(--ink-3);outline:none;cursor:pointer;padding:0"></select>
       <button onclick="stepWeek(1)" style="background:none;border:none;cursor:pointer;color:var(--navy-2);font-size:15px;padding:0 2px;line-height:1;font-family:inherit">›</button>
     </div>
     <span class="pill pill-green" id="stat-active">— active</span>
