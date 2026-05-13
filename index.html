@@ -194,7 +194,29 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.64
+  EQ Solves — Field  v3.4.65
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.65  (send-email.js — bigint leave_id coercion for SKS)
+  ────────────────────────────────────────────────────────────
+  • 🔴 SKS bug. The v3.4.63 magic-link Approve/Reject buttons
+    rendered as render://# in supervisor inboxes because
+    send-email.js's resolveLeaveActionContext required
+    `typeof leaveId === 'string'` — but SKS leave_requests.id is
+    bigint (JSON number), so the strict check rejected every
+    SKS leave-request email. ctx.error → placeholders replaced
+    with `#` → Outlook rendered the malformed href as "render://#".
+  • Fix: coerce leaveId to String() with null/undefined guard
+    before the validity check. Both string (EQ uuid) and number
+    (SKS bigint) ids now flow through cleanly.
+  • Same id-coercion bug class as BATTLE-TEST findings #22, #27
+    (managers.removeManager + people.removePerson on SKS bigint).
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.64 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.64  (env var rename: AUDIT_SB_* → LEAVE_SB_* for magic-link)
