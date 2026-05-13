@@ -458,7 +458,11 @@ function openLeaveRespond(id) {
 }
 
 async function respondLeave(status) {
-  if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.67 Phase B — permission-key gate (was binary isManager check).
+  // 'leave.approve' is in BOTH supervisor + manager tiers, so behaviour
+  // is preserved for today's PIN-unlocked supervisors. The migration
+  // creates the surface for future tier-specific gating.
+  if (!(window.EQ_PERMS && EQ_PERMS.can('leave.approve'))) { showToast('Supervision access required'); return; }
   // BUG-014 FIX: read id exactly once
   // v3.4.21: id is a uuid string — do NOT parseInt (was producing NaN on uuid, silent fail)
   const id   = document.getElementById('leave-respond-id').value;
@@ -622,7 +626,8 @@ async function writeLeaveToSchedule(req) {
 // NOT touch the roster/schedule — approved leave stays on the grid.
 
 async function archiveLeaveRequest(id) {
-  if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.67 Phase B — 'leave.archive' (supervisor + manager both have it).
+  if (!(window.EQ_PERMS && EQ_PERMS.can('leave.archive'))) { showToast('Supervision access required'); return; }
   const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
   if (req.archived === true) return;          // v3.4.54: already archived
@@ -645,7 +650,8 @@ async function archiveLeaveRequest(id) {
 }
 
 async function unarchiveLeaveRequest(id) {
-  if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.67 Phase B — 'leave.archive' (the un-archive action is gated on the same perm).
+  if (!(window.EQ_PERMS && EQ_PERMS.can('leave.archive'))) { showToast('Supervision access required'); return; }
   const req = leaveRequests.find(r => String(r.id) === String(id));
   if (!req) return;
   if (req.archived !== true) return;          // v3.4.54: already not archived

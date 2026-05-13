@@ -283,7 +283,8 @@ function toggleTsSplit(pid, btn) {
 // copy through saveTsCell unchanged.
 // Triggered from the ">> Week" button in the Monday cell.
 async function fillTsWeekFromMon(name, grp) {
-  if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.67 Phase B — 'ts.approve' (supervisor + manager). Behaviour-preserving.
+  if (!(window.EQ_PERMS && EQ_PERMS.can('ts.approve'))) { showToast('Supervision access required'); return; }
   if (!name) return;
   const week  = STATE.currentWeek;
   const entry = (STATE.timesheets || []).find(r => r.name === name && r.week === week);
@@ -470,7 +471,8 @@ function _togglePendingPopover() {
 // rate-limit (default 12h per person+week). Demo tenant is rejected
 // before the call so we don't get a confusing edge-function error.
 async function sendTsReminder(personName, week, btn) {
-  if (!isManager) { showToast('Supervision access required'); return; }
+  // v3.4.67 Phase B — 'ts.send_reminders' (supervisor + manager). Behaviour-preserving.
+  if (!(window.EQ_PERMS && EQ_PERMS.can('ts.send_reminders'))) { showToast('Supervision access required'); return; }
   if (!personName || !week) return;
 
   // Demo tenant has no Supabase backend — surface this clearly.

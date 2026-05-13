@@ -194,7 +194,45 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.66
+  EQ Solves — Field  v3.4.68
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.68  (Phase B+C role system — DEMO ONLY soak)
+  ────────────────────────────────────────────────────────────
+  • Royce flagged Phase B + C risk on SKS prod; staging to demo for
+    5-7 day soak before any SKS port. Schema migration (Phase A)
+    already applied to BOTH EQ + SKS Supabase — this ship is the
+    client-side wiring only, demo branch only.
+  • PHASE C — login → role resolution. New scripts/permissions.js
+    resolveSessionRole() helper. Fires from initApp() after
+    loadFromSupabase + auto-admin pass, also from auth.js when
+    supervisor PIN is unlocked and when supervisor mode is locked.
+    Populates window.EQ_SESSION.role with one of 5 tiers:
+    manager | supervisor | employee | apprentice | labour_hire.
+    Source order: people.role from DB → fallback derive from
+    people.group → fallback 'employee'. PIN-unlock-wins rule:
+    if isManager === true, role forced to 'supervisor'.
+  • PHASE B — first 5 handler gates migrated from isManager to
+    EQ_PERMS.can(<permKey>):
+      - leave.js respondLeave        → 'leave.approve'
+      - leave.js archiveLeaveRequest → 'leave.archive'
+      - leave.js unarchiveLeaveRequest → 'leave.archive'
+      - timesheets.js fillTsWeekFromMon → 'ts.approve'
+      - timesheets.js sendTsReminder → 'ts.send_reminders'
+    All 5 perms are in BOTH supervisor + manager tiers — migration
+    is behaviour-preserving. ~35 more handler gates remain on
+    isManager; will migrate progressively as the matrix matures.
+  • DEMO ONLY. PR to demo, NOT merged to main. SKS stays on isManager
+    binary model until soak passes.
+  • Plan ref: MELBOURNE-SCALE-DESIGN.md §7 Q3 (locked: per-region
+    admins, Wave 4). Phase D server-side enforcement remains a
+    separate workstream (~2 weeks, planned for early June).
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.66 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.66  (SPA pageview tracking — fix PostHog/Clarity blind spot)
@@ -2620,6 +2658,16 @@ async function initApp() {
     sessionStorage.removeItem('eq_auto_admin');
     showPage('dashboard');
     mobileNav('dashboard');
+  }
+
+  // v3.4.67 Phase C — resolve session role now that STATE.people is
+  // loaded AND auto-admin / PIN unlock has been applied. Populates
+  // window.EQ_SESSION.role (one of: manager, supervisor, employee,
+  // apprentice, labour_hire). PIN-unlock-wins rule preserved — anyone
+  // who entered the supervisor PIN becomes 'supervisor' regardless of
+  // their DB-row role. See scripts/permissions.js resolveSessionRole.
+  if (window.EQ_PERMS && typeof window.EQ_PERMS.resolve === 'function') {
+    try { window.EQ_PERMS.resolve(); } catch (e) { /* never break boot */ }
   }
 
   // Restore agency session
