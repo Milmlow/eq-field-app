@@ -74,6 +74,7 @@
 <script src="scripts/realtime.js"></script>
 <script src="scripts/presence.js"></script>
 <script src="scripts/site-reports.js"></script>
+<script src="scripts/toolbox.js"></script>
 <script src="scripts/auth.js"></script>
 <script src="scripts/apprentices.js"></script>
 <script src="scripts/journal.js"></script>
@@ -198,22 +199,48 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.74
+  EQ Solves — Field  v3.4.75
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
-  CHANGES IN v3.4.74  (ESC-to-close on modals — accessibility quick-win)
+  CHANGES IN v3.4.75  (Site Reports v2 — Toolbox Talk MVP — DEMO ONLY)
   ────────────────────────────────────────────────────────────
-  Surfaced by the Night 1 manual audit run (AUDIT-REVIEW.md, usability
-  angle). Modals already closed on backdrop-click and ✕-button. ESC key
-  did nothing — standard keyboard convention violation.
+  Second workflow in the Site Reports module, mirroring v3.4.69 Prestart.
+  Toolbox Talks are periodic safety briefings (typically weekly) with
+  per-attendee sign-off, topic + safety message, items reviewed, and
+  open actions carried from prior talks.
 
-  Fix: added a global keydown listener in scripts/utils.js. Closes only
-  the TOP-MOST open modal per press so confirm-on-top-of-edit stacks
-  peel back rather than blowing both away.
+  Adds:
+  • scripts/toolbox.js — new module (~650 lines), sibling to
+    scripts/site-reports.js. Photo + signature + offline-queue helpers
+    copy-pasted with `toolbox` / `_tbx` prefixes. Refactor target:
+    once Diary lands, extract shared helpers to site-report-shared.js.
+  • migrations/2026-05-14_toolbox_talks_v1.sql — toolbox_talks table
+    (uuid PK, org_id, site_abbr, meeting_date/time, facilitator,
+    topic, safety_message, items_reviewed, open_actions, hazards,
+    swms_refs, next_meeting, attendance jsonb, photos jsonb, status).
+    Same RLS + realtime pattern as prestarts. Photos included from
+    day 1 (Prestart needed a follow-up migration — not repeating).
+  • permission-matrix.js v1.2 — reports.toolbox.{view,create,submit,
+    sign} added. Manager + supervisor get all four; employee /
+    apprentice / labour_hire get .sign only (same shape as prestart).
+  • Sidebar entry "Toolbox" with BETA chip under Testing (DO NOT USE),
+    next to Prestart. Will collapse to one "Site Reports" entry once
+    Diary lands (per the outstanding build brief — hub deferred until
+    ≥2 workflows ship, which is now true).
 
-  First step of a broader accessibility pass needed for Melbourne
-  enterprise procurement. See AUDIT-REVIEW.md FINDING #U2 for the
-  full aria-* coverage gap.
+  Schema differences from prestarts (deliberate):
+  • `facilitator` not `sks_rep` — toolbox column names must be tenant-
+    neutral. Prestart's `sks_rep` is a legacy leak we're not repeating.
+  • `meeting_date/time` not `briefing_date/time` — toolbox = scheduled
+    meeting, not pre-shift briefing.
+  • `attendance` not `crew` — toolbox audiences include subbies, clients,
+    visitors. Same JSONB shape, so signature pad code is reusable.
+
+  Path C absorption (eq-context ops/decisions.md 2026-05-13): this
+  workflow is the second of four being absorbed from Ben Ritchie's
+  sks-field-reports.netlify.app v29 into EQ Field. Demo-only soak until
+  Ben + Royce sign off. Migration applied to eq-solves-field Supabase
+  ONLY — SKS live waits for explicit "SKS live" trigger.
   ════════════════════════════════════════════════════════════════
 -->
 
@@ -1900,6 +1927,7 @@
       <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
       <button class="nav-item edit-only" onclick="showPage('prestart')" id="nav-prestart"><span class="nav-icon">⚠</span> Prestart <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-prestart" style="display:none">0</span></button>
+      <button class="nav-item edit-only" onclick="showPage('toolbox')" id="nav-toolbox"><span class="nav-icon">🔧</span> Toolbox <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-toolbox" style="display:none">0</span></button>
     </div>
   </div>
   <div class="sidebar-footer" style="padding:0">
@@ -2144,6 +2172,12 @@
   <div class="page hidden" id="page-prestart">
     <div id="page-prestart-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">
       <div class="empty" style="padding:24px"><div class="empty-icon">⚠</div><p>Loading prestarts…</p></div>
+    </div>
+  </div>
+
+  <div class="page hidden" id="page-toolbox">
+    <div id="page-toolbox-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">
+      <div class="empty" style="padding:24px"><div class="empty-icon">🔧</div><p>Loading toolbox talks…</p></div>
     </div>
   </div>
 
@@ -2580,7 +2614,7 @@ const PAGE_TITLES = {
   data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
-  prestart:'Prestart Briefings'
+  prestart:'Prestart Briefings', toolbox:'Toolbox Talks'
 };
 
 function showPage(id) {
@@ -2628,6 +2662,7 @@ function renderCurrentPage() {
   else if (currentPage === 'trial')      renderTrialDashboard();
   else if (currentPage === 'apprentices') renderApprentices();
   else if (currentPage === 'prestart')   { loadPrestarts().then(renderPrestart); }
+  else if (currentPage === 'toolbox')    { loadToolboxTalks().then(renderToolbox); }
 }
 
 // ── Week controls ─────────────────────────────────────────────
@@ -3200,6 +3235,19 @@ const eqAgent = (function() {
     </div>
     <div id="prestart-form-body" style="overflow-y:auto;flex:1;padding:0">
       <!-- populated by renderPrestartForm() -->
+    </div>
+  </div>
+</div>
+
+<!-- Toolbox talk modal (v3.4.75) -->
+<div class="modal-overlay" id="modal-toolbox">
+  <div class="modal" style="max-width:760px;max-height:92vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <h3 style="margin:0">🔧 Toolbox Talk</h3>
+      <button class="modal-close" onclick="closeModal('modal-toolbox')">✕</button>
+    </div>
+    <div id="toolbox-form-body" style="overflow-y:auto;flex:1;padding:0">
+      <!-- populated by renderToolboxForm() -->
     </div>
   </div>
 </div>
