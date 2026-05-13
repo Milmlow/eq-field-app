@@ -64,20 +64,6 @@ not yet addressed stay until Royce decides + closes them._
 
 ### Open findings — needs Royce review
 
-#### FINDING #C1 — code [low] — apprentices.js is 2271 lines (2-3x next biggest)
-- **File:** `scripts/apprentices.js` (whole file; 69 top-level functions)
-- **Evidence:** `wc -l` against all script files. Next biggest: `timesheets.js` (1106), `leave.js` (1135). At ~33 lines/function avg, individual functions are fine — the file as a whole is the smell.
-- **Enterprise tie-in:** At Melbourne scale (~577 people, more apprentices), this file will grow further. Maintaining a 3000+ line module gets risky — onboarding new contributors, code review fatigue, merge conflict surface.
-- **Recommended fix:** split into `apprentices-render.js` (table + cards), `apprentices-data.js` (Supabase + STATE shaping), `apprentices-modal.js` (profile + journal modals). ~3-4 hour refactor, behaviour-preserving.
-- **Decision needed:** schedule for a refactor cycle, or wait until it actively bites?
-
-#### FINDING #C2 — code [low] — stale TODO doc in scripts/
-- **File:** `scripts/analytics-TODO-hooks.md`
-- **Evidence:** markdown file in the scripts/ folder. Some hooks listed in it ARE now implemented in scripts/analytics.js but the doc hasn't been pruned.
-- **Enterprise tie-in:** noise reduction. Keeping stale TODO files in code dirs misleads readers about open work.
-- **Recommended fix:** audit the doc against current analytics.js, mark hooks done/keep, move surviving items to `docs/` or a GitHub issue.
-- **Decision needed:** Royce confirms it's safe to remove (it's a doc, no code references).
-
 #### FINDING #U2 — usability [med] — only 10 aria-* attributes across 3500-line index.html
 - **File:** `index.html` (whole file)
 - **Evidence:** `grep -c "aria-label\|aria-describedby\|role=\|tabindex"` = 10. Modals, action buttons (Edit, Archive, Delete), sortable headers, icon-only buttons all lack labels.
@@ -99,20 +85,6 @@ not yet addressed stay until Royce decides + closes them._
 - **Recommended fix:** virtualisation library (e.g. clusterize.js, ~3KB) for the few big-list views (contacts, roster editor). Alternatively, lit-html for surgical updates. MELBOURNE-SCALE-DESIGN.md §6.1 mentions the gap.
 - **Decision needed:** library vs roll-our-own, and when?
 
-#### FINDING #S3 — scalability [med] — realtime channel is org-scoped, not week-scoped
-- **File:** `scripts/realtime.js:137` — `topic = 'realtime:public:schedule:org_id=eq.' + TENANT.ORG_UUID`
-- **Evidence:** every roster edit in the org fans out to every connected user. Currently fine (SKS has ~20 active users), but at 577 users editing concurrently you'd be fanning out maybe ~50 messages/second to each user, most of which they ignore.
-- **Enterprise tie-in:** Realtime cost on Supabase Pro scales with messages broadcast × subscribers. At Melbourne scale this gets expensive AND drops UX (clients spending CPU on irrelevant events).
-- **Recommended fix:** subscribe per visible-week instead of per-org. When user navigates weeks, unsubscribe old + subscribe new. MELBOURNE-SCALE-DESIGN.md §6.2 mentions this pattern.
-- **Decision needed:** part of the Melbourne sprint, or earlier?
-
-#### FINDING #SEC1 — security [med] — magic-link approve/reject TTL is 7 days
-- **File:** `supabase/functions/supervisor-digest/index.ts:100` — `LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000`
-- **Evidence:** when a supervisor receives a leave email with Approve / Reject buttons, those signed tokens stay valid for 7 days. If a supervisor's mailbox is compromised within that window, the attacker can approve/reject leave on their behalf.
-- **Enterprise tie-in:** action tokens of 7 days are a SOC 2 / enterprise-pentest finding. Industry norm is 24-48 hours for one-click action links.
-- **Recommended fix:** reduce to 48h (or 24h). One-line change. Edge case: supervisor on annual leave > 48h won't be able to click old emails; they'd need to open the app and approve in-UI, which is the desired fallback anyway.
-- **Decision needed:** acceptable to drop to 48h? Or longer (3-5 days)?
-
 #### FINDING #SEC2 — security [low] — verify-pin rate limit is in-memory only
 - **File:** `netlify/functions/verify-pin.js:49-50` — `const attempts = {}; const MAX_ATTEMPTS = 5; const LOCKOUT_MS = 15 * 60 * 1000;`
 - **Evidence:** Netlify Functions are stateless — each cold start resets the in-memory counter. Attacker can spam attempts across cold starts (~every 5min on low traffic).
@@ -120,9 +92,21 @@ not yet addressed stay until Royce decides + closes them._
 - **Recommended fix:** move to Supabase-backed rate limit table OR Netlify Blobs (free tier covers the low write volume). 1-2 hours of work.
 - **Decision needed:** acceptable for now given ~20 active users + 4-char PIN entropy? Defer to closer-to-launch?
 
+### Parked findings — acknowledged, deliberately deferred
+
+- **FINDING #S3 — scalability [med] — realtime channel is org-scoped, not week-scoped.**
+  PARKED 2026-05-13 by Royce. Acknowledged as a priority for the Melbourne scaling sprint but not blocking today (SKS ~20 users runs fine on org-scoped channel). Revisit alongside FINDING #S1 implementation since the per-week subscription pattern complements the per-week query scoping.
+- **FINDING #SEC1 — security [med] — magic-link approve/reject TTL is 7 days.**
+  PARKED 2026-05-13 by Royce. Risk accepted: if a supervisor's email is compromised, the leave-approval blast radius is bounded (approving direct-report leave is not a financial transaction; the move can be reversed in-app; audit log captures the action). Revisit if SOC 2 audit demands shorter TTL, or if leave-approval scope ever widens beyond same-team direct reports.
+
+### Tracked findings — open as GitHub issues for scheduled work
+
+- **FINDING #C1 — code [low] — apprentices.js is 2271 lines.** Tracked via [issue #74](https://github.com/Milmlow/eq-field-app/issues/74) for scheduled refactor when convenient.
+
 ### Closed / shipped findings
 
-- **FINDING #U1 — usability [med] — modals can't be closed with ESC.** SHIPPED in v3.4.74 this iteration. `scripts/utils.js` keydown listener added. Closes top-most open modal on ESC press. PR auto-merged (behaviour-preserving, <50 lines, no auth/RLS).
+- **FINDING #U1 — usability [med] — modals can't be closed with ESC.** SHIPPED in v3.4.74 (Night 1). `scripts/utils.js` keydown listener added. Closes top-most open modal on ESC press.
+- **FINDING #C2 — code [low] — stale TODO doc in scripts/.** CLOSED 2026-05-13 by Royce. `scripts/analytics-TODO-hooks.md` deleted; hooks already implemented in `scripts/analytics.js` so the doc was misleading rather than aspirational.
 
 ---
 
