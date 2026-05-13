@@ -543,3 +543,57 @@ If you agree with the recommendation, mark Q1 = SEED in the doc and Wave 1 can s
 
 Loop ended. Tools quiet. Branch `claude/festive-roentgen-60761d` ready for your read on return.
 
+
+---
+
+## Round 1 closeout (2026-05-13, post-holidays)
+
+Royce green-lit the four deferred decisions. Implementation summary below.
+
+### 🔴 48. NEW BUG — tafeIsHolidayForDay off-by-one in client (DST/timezone probe) · 🔧 fixed in v3.4.59
+**Where**: `scripts/tafe.js` `tafeIsHolidayForDay` line ~60.
+**Symptom**: Function constructs `monday` via `new Date(year, month-1, day)` (LOCAL midnight), then formats holiday-comparison key via `d.toISOString().slice(0, 10)` (UTC date). For any Australian timezone (UTC+8 to UTC+11) the UTC instant of local midnight is the PREVIOUS calendar day — so a TAFE day of Monday 2026-04-27 (AEDT) converts to UTC "2026-04-26" and the holiday-range comparison against the plaintext YYYY-MM-DD config always misses by one day.
+**Impact**: Manual "🎓 Apply TAFE Day" button on the roster page IGNORES the holiday config — fills TAFE cells on actual school-holiday days. Server-side Edge Function (Sunday cron) uses all-UTC operations and is correct, so the discrepancy is "manual fill respects holidays differently from auto fill."
+**Fix**: replace `d.toISOString().slice(0, 10)` with manual local-date formatting (`getFullYear()` + `getMonth()+1` + `getDate()`, padStart). Now consistent with server.
+
+### 🟡 #43 deferred to SSO conversation, #44 dropped
+Per Round 1 answer ("#45 + #47 only"): the "remember me stores raw access code" issue (#43) is the right thing to fix as part of the SSO replacement design (MELBOURNE-SCALE-DESIGN.md §7 Q7), not in isolation. Non-atomic storage write (#44) dropped — practical risk is zero.
+
+### 🟡 45. Token mint race · 🔧 fixed in v3.4.59
+**Where**: `scripts/auth.js` `checkPin` — two IIFE call sites (tenant-code gate + demo mode).
+**Fix**: extracted helper `_mintAndStoreEqToken(code, name)` that fetches verify-pin with an `AbortController` 3s timeout. Both IIFE sites replaced with `await _mintAndStoreEqToken(val, name)` so the function returns before `initApp()` paints. Mint failure (network, abort, or invalid response) is non-fatal — same "log + proceed" intent as the original fire-and-forget, but now the token is in localStorage BEFORE any protected fetch can run. Eliminates the fast-clicker race where leave submissions in the first ~200ms of session had no auth token.
+**Cost**: login latency increases by the mint round-trip (typically 100-300ms). Bounded to 3s worst-case via AbortController.
+
+### 🟡 47. Outer catch leaks PIN value · 🔧 fixed in v3.4.59
+**Where**: `scripts/auth.js` `checkPin` outer try/catch.
+**Fix**: one-line addition — `document.getElementById('gate-pin').value = ''` before `gate-err.textContent` is set in the catch. Brings the network-error / JSON-parse-fail path into line with the success + known-failure paths which already clear.
+
+### 🟡 18. Leave email subject CRLF guard · 🔧 fixed in v3.4.59
+**Where**: `scripts/leave.js` `triggerLeaveEmail` — three subject builders (`new_request`, `status_update`, `submit_confirmation`).
+**Fix**: single point of escape just before the `fetch('/.netlify/functions/send-email')` call — `safeSubject = String(subject||'').replace(/[\r\n]+/g, ' ').trim()`. Resend almost certainly encodes MIME headers server-side, but stripping CR/LF at our layer is cheap insurance against the SMTP header-injection class of bug should Resend ever change behaviour or be replaced.
+
+### 🟡 39. m.id in inline onchange handler · 🔧 fixed in v3.4.59
+**Where**: `scripts/digest-settings.js` `_paintPanel` checkbox markup.
+**Fix**: replaced `onchange="toggleDigest('${m.id}', this.checked)"` with `data-digest-id="${escHtmlLocal(m.id)}"` + a delegated event listener that reads `inp.dataset.digestId`. No more JS-in-HTML for the id; attribute context is already escaped by `escHtmlLocal`; dataset access is intrinsically string-safe. Eliminates the entire bug class if a future schema lets ids contain quotes/backslashes.
+
+### 🟡 4. RLS tighten on roster_presence · 🔧 migration written, NOT yet applied
+**Where**: `migrations/2026-05-13_roster_presence_rls_tighten.sql`.
+**Fix**: DROP + RECREATE the INSERT policy with `WITH CHECK (EXISTS (SELECT 1 FROM managers m WHERE m.name = roster_presence.manager_name))`. Eliminates ghost-manager creation — you can't write presence rows under names that aren't real managers.
+**Honest caveat**: UPDATE + DELETE stay open because the auth model uses anon key only (no per-user JWT to enforce "you can only mutate YOUR rows"). The proper full fix is the SSO conversation (Wave 5+). The pg_cron hourly cleanup limits blast radius to ~60min for any ghost rows that slip through.
+**Apply**: Royce to run on BOTH EQ (`ktmjmdzqrogauaevbktn`) AND SKS (`nspbmirochztcjijmcrx`) when next at desk. Pure DDL, idempotent (uses `IF EXISTS`), no data migration.
+
+### Coverage matrix update
+
+| Slot | Status |
+|---|---|
+| Edge-case probe — DST/timezone | ✓ Round 1 — found finding #48 (off-by-one in tafe.js client) |
+
+### v3.4.59 ship summary
+
+- `scripts/auth.js` — #45 token mint helper + await, #47 outer-catch PIN clear
+- `scripts/leave.js` — #18 subject CRLF strip
+- `scripts/digest-settings.js` — #39 dataset + delegated listener
+- `scripts/tafe.js` — #48 local-date formatter (replaces UTC `.toISOString()`)
+- `migrations/2026-05-13_roster_presence_rls_tighten.sql` — #4 partial tighten (pending apply)
+- Version refs synced via `node scripts/release.mjs 3.4.59`
+
