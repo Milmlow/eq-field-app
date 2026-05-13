@@ -114,8 +114,16 @@ async function sbGet(path) {
 // (no buttons) rather than failing the whole email.
 async function resolveLeaveActionContext(leaveId) {
   if (!SB_URL || !SB_KEY) return { error: 'Magic-link mode requires LEAVE_SB_URL and LEAVE_SB_KEY' };
-  if (!leaveId || typeof leaveId !== 'string') return { error: 'leave_id required' };
-  const lvRes = await sbGet(`leave_requests?id=eq.${encodeURIComponent(leaveId)}&select=id,requester_name,approver_name,status`);
+  // v3.4.65: accept both string (uuid) and number (bigint) ids. SKS
+  // leave_requests.id is bigint (returned as JSON number); EQ is uuid
+  // string. The strict typeof === 'string' check silently dropped every
+  // SKS leave-request email's magic-link substitution → placeholders
+  // stayed as literal {{APPROVE_URL}} / {{REJECT_URL}} text in the email
+  // href, which email clients rendered as render://# (Outlook quirk for
+  // invalid schemes). Same id-coercion bug class as BATTLE-TEST #22, #27.
+  const idStr = (leaveId === null || leaveId === undefined) ? '' : String(leaveId);
+  if (!idStr) return { error: 'leave_id required' };
+  const lvRes = await sbGet(`leave_requests?id=eq.${encodeURIComponent(idStr)}&select=id,requester_name,approver_name,status`);
   if (!lvRes.ok || !Array.isArray(lvRes.data) || !lvRes.data.length) return { error: 'leave row not found' };
   const lv = lvRes.data[0];
   if (lv.status && lv.status !== 'Pending') return { error: 'leave already actioned' };

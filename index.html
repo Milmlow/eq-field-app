@@ -194,8 +194,29 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-<<<<<<< Updated upstream
-  EQ Solves — Field  v3.4.64
+  EQ Solves — Field  v3.4.65
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.65  (send-email.js — bigint leave_id coercion for SKS)
+  ────────────────────────────────────────────────────────────
+  • 🔴 SKS bug. The v3.4.63 magic-link Approve/Reject buttons
+    rendered as render://# in supervisor inboxes because
+    send-email.js's resolveLeaveActionContext required
+    `typeof leaveId === 'string'` — but SKS leave_requests.id is
+    bigint (JSON number), so the strict check rejected every
+    SKS leave-request email. ctx.error → placeholders replaced
+    with `#` → Outlook rendered the malformed href as "render://#".
+  • Fix: coerce leaveId to String() with null/undefined guard
+    before the validity check. Both string (EQ uuid) and number
+    (SKS bigint) ids now flow through cleanly.
+  • Same id-coercion bug class as BATTLE-TEST findings #22, #27
+    (managers.removeManager + people.removePerson on SKS bigint).
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.64 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.64  (env var rename: AUDIT_SB_* → LEAVE_SB_* for magic-link)
@@ -796,23 +817,6 @@
     the PATCH-then-POST pattern already used by saveTafeHolidays in
     scripts/tafe.js, plus a localStorage cache mirror so a Supabase
     blip can't drop an in-session list either.
-=======
-  EQ Solves — Field  v3.4.40
-  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
-
-  CHANGES IN v3.4.40  (Help tab rewrite — timesheet + leave coverage)
-  ────────────────────────────────────────────────────────────
-  • index.html: Help tab content rewritten. Employee guide adds an
-    "Entering Your Timesheet" card (8h/40h red-rule, Friday reminder)
-    and expands "Submitting Leave" to cover Withdraw and status flow.
-    Supervisor guide adds "Reviewing Timesheets", "Approving Leave"
-    (Approve/Reject/Archive/Resend), and "Friday Digest" cards.
-  • Login URL is now tenant-aware: "Logging In" card has a
-    <span id="help-app-url"> that showHelpTab() fills with the actual
-    hostname on view. SKS staff now see sks-nsw-labour.netlify.app
-    instead of the hardcoded eq-solves-field.netlify.app.
-  • No schema or API changes. Pure content + a tiny JS hook.
->>>>>>> Stashed changes
 
   CHANGES IN v3.4.39  (id-coercion sweep + EMAIL_FROM wired up)
   ────────────────────────────────────────────────────────────
@@ -1636,11 +1640,7 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-<<<<<<< Updated upstream
       <span id="app-version-badge" style="color:rgba(255,255,255,.4);font-size:9px"></span><br>
-=======
-      <span style="color:rgba(255,255,255,.4);font-size:9px">v3.4.40</span><br>
->>>>>>> Stashed changes
       <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
       <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
