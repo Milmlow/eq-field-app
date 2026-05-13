@@ -194,8 +194,32 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.63
+  EQ Solves — Field  v3.4.64
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.64  (env var rename: AUDIT_SB_* → LEAVE_SB_* for magic-link)
+  ────────────────────────────────────────────────────────────
+  • Caught during v3.4.63 deploy. The new magic-link feature was
+    using env vars AUDIT_SB_URL + AUDIT_SB_KEY — but verify-pin.js
+    + eq-agent.js were already using those for an unrelated
+    audit-log Supabase project (`hignguefjjjtrhofdztu` on SKS).
+    Reusing the var would break verify-pin's audit logs OR
+    misroute the magic-link's leave/manager queries — depending on
+    which value won the upsert.
+  • Renamed: AUDIT_SB_URL → LEAVE_SB_URL, AUDIT_SB_KEY → LEAVE_SB_KEY
+    in approve-leave.js + send-email.js.
+  • Env vars upserted on both Netlify projects via MCP this turn —
+    point at the tenant's own Supabase (where leave_requests +
+    managers + audit_log actually live):
+    - EQ:  https://ktmjmdzqrogauaevbktn.supabase.co
+    - SKS: https://nspbmirochztcjijmcrx.supabase.co
+  • APP_ORIGIN also upserted per-project (was previously absent).
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.63 (history)
 
   CHANGES IN v3.4.63  (one-click email approval — magic-link Approve/Reject)
   ────────────────────────────────────────────────────────────

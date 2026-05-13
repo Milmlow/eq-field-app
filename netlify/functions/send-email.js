@@ -16,8 +16,8 @@
 // Env vars required:
 //   RESEND_API_KEY   — Resend API key
 //   EQ_SECRET_SALT   — HMAC signing key (verify-pin + approve-leave)
-//   AUDIT_SB_URL     — Supabase REST URL (only for magic-link mode)
-//   AUDIT_SB_KEY     — Supabase publishable key (only magic-link mode)
+//   LEAVE_SB_URL     — Supabase REST URL (only for magic-link mode)
+//   LEAVE_SB_KEY     — Supabase publishable key (only magic-link mode)
 //   APP_ORIGIN       — origin used to build magic-link URLs
 //                      (optional; falls back to request Origin header)
 // ─────────────────────────────────────────────────────────────
@@ -26,8 +26,8 @@ const crypto = require('crypto');
 
 // ── Config from env vars (no fallbacks) ──────────────────────
 const SECRET_SALT = process.env.EQ_SECRET_SALT;
-const SB_URL      = process.env.AUDIT_SB_URL;
-const SB_KEY      = process.env.AUDIT_SB_KEY;
+const SB_URL      = process.env.LEAVE_SB_URL;
+const SB_KEY      = process.env.LEAVE_SB_KEY;
 
 if (!SECRET_SALT) console.error('FATAL: EQ_SECRET_SALT env var not set');
 
@@ -113,7 +113,7 @@ async function sbGet(path) {
 // approver can't be looked up — the caller falls back to plain HTML
 // (no buttons) rather than failing the whole email.
 async function resolveLeaveActionContext(leaveId) {
-  if (!SB_URL || !SB_KEY) return { error: 'Magic-link mode requires AUDIT_SB_URL and AUDIT_SB_KEY' };
+  if (!SB_URL || !SB_KEY) return { error: 'Magic-link mode requires LEAVE_SB_URL and LEAVE_SB_KEY' };
   if (!leaveId || typeof leaveId !== 'string') return { error: 'leave_id required' };
   const lvRes = await sbGet(`leave_requests?id=eq.${encodeURIComponent(leaveId)}&select=id,requester_name,approver_name,status`);
   if (!lvRes.ok || !Array.isArray(lvRes.data) || !lvRes.data.length) return { error: 'leave row not found' };
