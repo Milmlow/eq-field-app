@@ -594,6 +594,25 @@ Per Round 1 answer ("#45 + #47 only"): the "remember me stores raw access code" 
 - `scripts/leave.js` — #18 subject CRLF strip
 - `scripts/digest-settings.js` — #39 dataset + delegated listener
 - `scripts/tafe.js` — #48 local-date formatter (replaces UTC `.toISOString()`)
-- `migrations/2026-05-13_roster_presence_rls_tighten.sql` — #4 partial tighten (pending apply)
+- `migrations/2026-05-13_roster_presence_rls_tighten.sql` — #4 partial tighten (APPLIED to both projects via MCP on 2026-05-13)
+- `migrations/2026-05-13_realtime_leave_requests.sql` — #49 (NEW) leave_requests added to realtime publication (APPLIED to both projects)
 - Version refs synced via `node scripts/release.mjs 3.4.59`
+
+### 🔴 49. NEW BUG — leave_requests not in realtime publication on EITHER project · 🔧 fixed by SQL (Round 1 closeout)
+**Where**: Supabase `supabase_realtime` publication on both projects.
+**Surfaced**: post-Round 1, during demo→main port verification. Probed `pg_publication_tables` on SKS expecting to find at least `schedule` and `leave_requests` (since SKS has had realtime working forever). Found only `schedule`. Then probed EQ — found only `roster_presence`. Both projects missing `leave_requests`.
+**Symptom**: when supervisor A approves a leave request, other connected supervisors don't see the badge tick down or the row move from "pending" → "approved" until the next 30-second poll. With realtime they'd see it within ~1-2s.
+**Fix**: applied `ALTER PUBLICATION supabase_realtime ADD TABLE public.leave_requests` to both projects via Supabase MCP. Migration file `migrations/2026-05-13_realtime_leave_requests.sql` documents the change.
+**Why it took this long to surface**: EQ tenant had realtime gated off entirely (lifted in v3.4.47-50, surfacing the `schedule` gap as finding #6). SKS had realtime working for `schedule` (the most-edited table) so the appearance of realtime sync was correct on the editor — leave is the second-most-edited table and the only place where the gap was visible, but only when two supervisors actually triggered approve/deny in parallel (rare enough that nobody noticed). The probe on demo→main port checked publication state on both projects in a single query, which is how it became visible.
+
+### Post-Round 1 Supabase state (both projects identical after migrations)
+
+| Item                                              | EQ (ktmjmdzqrogauaevbktn) | SKS (nspbmirochztcjijmcrx) |
+|---------------------------------------------------|---------------------------|----------------------------|
+| `roster_presence` table                           | ✅ exists                  | ✅ created via migration   |
+| Realtime publication                              | `{leave_requests, roster_presence, schedule}` | `{leave_requests, roster_presence, schedule}` |
+| `roster_presence` policies (4: select/insert/update/delete) | ✅ all 4, INSERT tightened | ✅ all 4, INSERT tightened |
+| `pg_cron` `roster-presence-cleanup` job           | ✅ scheduled               | ✅ scheduled                |
+| `tafe_holidays` config row                        | ✅ 1 row                   | ✅ 1 row                    |
+| Manager id type                                   | `uuid`                     | `bigint`                    |
 
