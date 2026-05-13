@@ -6,7 +6,11 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
+<<<<<<< Updated upstream
 const APP_VERSION = '3.4.64';
+=======
+const APP_VERSION = '3.4.40';
+>>>>>>> Stashed changes
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
