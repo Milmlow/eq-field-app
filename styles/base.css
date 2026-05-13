@@ -466,6 +466,31 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
 .editor-day.empty-cell { background: #FBBF24; border-left: 3px solid #F59E0B; }
 .editor-day.empty-cell input { background: transparent !important; }
 .editor-day.empty-cell input::placeholder { color: #B45309; font-weight: 700; }
+
+/* v3.4.47 — realtime presence: another supervisor is editing this cell. */
+.editor-day.presence-outline {
+  position: relative;
+  outline: 2px solid #7C77B9;
+  outline-offset: -2px;
+  z-index: 1;
+}
+.editor-day.presence-outline::after {
+  content: attr(data-presence-by);
+  position: absolute;
+  top: -18px; left: 50%;
+  transform: translateX(-50%);
+  background: #7C77B9;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  letter-spacing: .3px;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .editor-actions {
   display: flex;
   gap: 2px;

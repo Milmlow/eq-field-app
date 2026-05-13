@@ -105,7 +105,14 @@ async function processOrg(
     };
   }
 
-  // 2. Holiday config (per-org, falls back to project-wide row if none for org)
+  // 2. Holiday config — strict per-org. (Comment correction v3.4.51 — earlier
+  // text wrongly claimed a project-wide fallback; there isn't one in the
+  // code.) Different states have different school-holiday calendars (NSW vs
+  // VIC vs QLD), so cross-org fallback would risk pollinating the wrong
+  // dates. If a tenant has no tafe_holidays row, holidays = [] and no days
+  // are skipped — apprentices get filled even during school breaks. Tenants
+  // must seed their own app_config row; see migrations/
+  // 2026-04-16_tafe_day_and_holidays.sql for the NSW 2026 seed pattern.
   const { data: cfg } = await supabase
     .from("app_config")
     .select("value")

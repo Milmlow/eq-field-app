@@ -49,7 +49,13 @@
     }
     const prev = mgr.digest_opt_in;
     mgr.digest_opt_in = nextVal;          // optimistic
-    renderDigestPanel();                  // reflect immediately
+    // v3.4.57: removed the immediate renderDigestPanel() call here. The
+    // user's click already toggled the native <input type="checkbox">
+    // visually — re-rendering the whole panel was redundant for the
+    // success case AND raced the PATCH (renderDigestPanel does a fresh
+    // sbFetch; if that fetch returned BEFORE the PATCH committed, the
+    // checkbox visibly UNCHECKED for ~50-200ms). On failure path below
+    // we DO re-render to surface the rollback.
     try {
       await sbFetch(`managers?id=eq.${encodeURIComponent(idStr)}`, 'PATCH', { digest_opt_in: nextVal });
       if (typeof showToast === 'function') {
@@ -62,7 +68,7 @@
     } catch (e) {
       console.error('toggleDigest failed:', e);
       mgr.digest_opt_in = prev;
-      renderDigestPanel();
+      renderDigestPanel();              // re-render: native checkbox stuck on the wrong value, fix it
       if (typeof showToast === 'function') {
         showToast('Digest toggle failed — check that the digest migration has been applied.');
       }
@@ -91,11 +97,18 @@
       panel.innerHTML = '<div style="font-size:12px;color:#6B7280">No supervisors with emails — nobody to receive the weekly digest.</div>';
       return;
     }
+    // v3.4.59: BATTLE-TEST #39 — moved from inline onchange="toggleDigest('${m.id}',…)"
+    // to data-attribute + delegated listener. m.id is uuid/bigint today (no
+    // quote-injection risk), but a future schema change that lets ids contain
+    // quotes or backslashes would break the inline string OR open an XSS
+    // surface. data-digest-id goes through escHtmlLocal which already escapes
+    // attribute-context special chars; the listener reads dataset.digestId
+    // which is intrinsically string-safe.
     const items = mgrs.map(m => {
       const on = m.digest_opt_in !== false;
       return `
         <label style="display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:#374151">
-          <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleDigest('${m.id}', this.checked)"
+          <input type="checkbox" ${on ? 'checked' : ''} data-digest-id="${escHtmlLocal(m.id)}"
                  style="width:16px;height:16px;accent-color:#1F335C">
           <span style="font-weight:600">${escHtmlLocal(m.name)}</span>
           <span style="color:#6B7280;font-size:12px">${escHtmlLocal(m.email)}</span>
@@ -109,6 +122,12 @@
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px">${items}</div>`;
+    // Wire the listeners (delegated equivalent: read data-digest-id off each input).
+    panel.querySelectorAll('input[data-digest-id]').forEach(inp => {
+      inp.addEventListener('change', e => {
+        toggleDigest(inp.dataset.digestId, e.target.checked);
+      });
+    });
   }
 
   // v3.4.29: bulletproof render — always fetches fresh from DB on every call.

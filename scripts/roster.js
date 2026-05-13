@@ -229,7 +229,8 @@ function renderRoster() {
   const days        = getVisibleRosterDays();
   const dayLabels   = getVisibleRosterDayLabels();
   const weekDates   = getWeekDates(week);
-  const isMobile    = window.innerWidth <= 768;
+  // v3.4.46: removed dead `const isMobile` — the comment 5 lines below
+  // already notes the renderer is unified, the const had no readers.
 
   renderRosterLegend();
 
@@ -297,13 +298,26 @@ function renderRoster() {
 function fillWeek(name, week) {
   if (!isManager) { showToast('Supervision access required'); return; }
   let entry = STATE.schedule.find(r => r.name === name && r.week === week);
-  if (!entry) { entry = { name, week, mon:'', tue:'', wed:'', thu:'', fri:'', sat:'', sun:'' }; STATE.schedule.push(entry); }
+  // v3.4.52: when creating a new entry, also seed scheduleIndex so
+  // O(1) lookups elsewhere in the code can find it. Matches updateCell.
+  if (!entry) {
+    entry = { name, week, mon:'', tue:'', wed:'', thu:'', fri:'', sat:'', sun:'' };
+    STATE.schedule.push(entry);
+    if (STATE.scheduleIndex) STATE.scheduleIndex[`${name}||${week}`] = entry;
+  }
   const val = entry.mon;
   if (!val) { showToast('No Monday value to fill from'); return; }
   ['tue','wed','thu','fri'].forEach(d => { entry[d] = val; });
+  // v3.4.52: refresh stats + cross-page renders so top-of-page badges
+  // and dashboard widgets don't go stale after a Fill. Matches updateCell.
   renderEditor();
+  updateTopStats();
+  if (currentPage === 'roster') renderRoster();
+  if (currentPage === 'dashboard') renderDashboard();
   saveRowToSB(name, week, { tue: val, wed: val, thu: val, fri: val }).catch(() => {});
   showToast(`Filled Mon–Fri with ${val}`);
+  auditLog(`Filled Mon–Fri with "${val}"`, 'Roster', name, week);
+  updateLastUpdated();
 }
 
 // ── Clear week ──────────────────────────────────────────────
@@ -456,6 +470,8 @@ function renderEditor() {
               data-name="${esc(p.name)}" data-week="${week}" data-day="${d}"
               oninput="handleCellInput(this)"
               onchange="updateCell(this)"
+              onfocus="if (typeof presenceFocus==='function') presenceFocus(this.dataset.name, this.dataset.week, this.dataset.day)"
+              onblur="if (typeof presenceBlur==='function') presenceBlur(this.dataset.name, this.dataset.week, this.dataset.day)"
               autocomplete="off" spellcheck="false">
           </div>`;
           }).join('')}
@@ -474,6 +490,10 @@ function renderEditor() {
 
   document.getElementById('editor-content').innerHTML = html;
   document.querySelectorAll('#editor-content input[type=text]').forEach(inputColor);
+  // v3.4.47: re-apply presence outlines after each editor render so a
+  // remote-driven re-render (e.g. live update from another supervisor)
+  // doesn't drop the indicators.
+  if (typeof _presenceRender === 'function') _presenceRender();
   const sb = document.getElementById('editor-sort-btn');
   if (sb) sb.textContent = editorSort === 'asc' ? 'A–Z ▲' : 'Z–A ▼';
 }

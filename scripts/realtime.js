@@ -61,9 +61,11 @@ function _rtLog(level, msg) {
 
 // ── Connection lifecycle ─────────────────────────────────────
 function startRealtime() {
-  // Gate on tenant — no-op for demo/eq, no-op if no Supabase config.
+  // Gate on tenant — no-op for the in-memory demo, no-op if no Supabase
+  // config. v3.4.47: 'eq' lifted from the gate so the EQ tenant gets
+  // realtime + roster presence too. Demo (in-memory) still skips.
   if (typeof TENANT === 'undefined' || !TENANT || !TENANT.ORG_UUID) return;
-  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') return;
+  if (TENANT.ORG_SLUG === 'demo') return;
   if (!SB_URL || !SB_KEY) return;
   if (_rtSocket && (_rtSocket.readyState === WebSocket.OPEN || _rtSocket.readyState === WebSocket.CONNECTING)) return;
 
@@ -109,6 +111,7 @@ function _rtOnOpen() {
   _rtBackoffMs = 1000;
   _rtJoinChannel('schedule');
   _rtJoinChannel('leave_requests');
+  _rtJoinChannel('roster_presence');  // v3.4.47 — editor cell presence
   _rtHeartbeat = setInterval(_rtSendHeartbeat, 25000);
 }
 
@@ -217,6 +220,10 @@ function _rtOnMessage(ev) {
     _rtApplyChange(evType, record, oldRec);
   } else if (table === 'leave_requests') {
     _rtApplyLeaveChange(evType, record, oldRec);
+  } else if (table === 'roster_presence') {
+    if (typeof _presenceApplyChange === 'function') {
+      _presenceApplyChange(evType, record, oldRec);
+    }
   }
 }
 
