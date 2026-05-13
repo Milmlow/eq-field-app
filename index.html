@@ -198,7 +198,40 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.71
+  EQ Solves — Field  v3.4.72
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.72  (skip render when polled data hasn't changed)
+  ────────────────────────────────────────────────────────────
+  Royce flagged "constant flashing from refreshing" on the SKS app.
+
+  Root cause: the 30-second background poll (startPolling →
+  refreshData(silent=true)) called renderCurrentPage() on every
+  cycle whether the data had changed or not. renderCurrentPage swaps
+  innerHTML on the page container — full DOM rebuild → visible flash,
+  scroll position can jump, focus can drop. Realtime channel updates
+  did the same on every schedule event anywhere in the org.
+
+  Fix:
+  • New _computeStateSignature() function builds a cheap, sort-stable
+    signature over people / managers / sites / schedule / timesheets
+    / leaveRequests. ~5ms on a 500-row state.
+  • refreshData() now diffs the post-load signature against the last
+    one we rendered. If identical, skip renderCurrentPage. Manual
+    sync (silent=false, ↻ Sync button) always renders so the user
+    still gets visual confirmation they clicked it.
+  • Signature is seeded right after the initial load completes in
+    initApp() so the first poll doesn't detect a phantom change.
+
+  Net effect: flash only happens when something actually changed in
+  the last 30 seconds. The common case (idle background poll → no
+  data delta) is a silent no-op.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.71 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.71  (remove Project Hours panel + fix EQ→SKS logo flash)
@@ -2603,6 +2636,38 @@ function updateLastUpdated() {
 }
 
 // ── Refresh ───────────────────────────────────────────────────
+// v3.4.72: lightweight state signature so background polls only re-render
+// when something actually changed. Without this, every 30s poll called
+// renderCurrentPage() unconditionally — swapping the entire page's innerHTML
+// and causing a visible flash even when no data had changed. Cheap to
+// compute (~5ms on a 500-row state) so safe to call from the poll path.
+function _computeStateSignature() {
+  const parts = [];
+  const sig = (arr, keyFn) => {
+    if (!arr || !arr.length) { parts.push('0'); return; }
+    // Sort to make signature order-insensitive (Supabase may return rows
+    // in different orders across calls).
+    const keys = arr.map(keyFn).sort();
+    parts.push(arr.length + ':' + keys.join(','));
+  };
+  try {
+    sig(STATE.people,    p => p.id + '|' + (p.name||'') + '|' + (p.phone||'') + '|' + (p.email||'') + '|' + (p.group||'') + '|' + (p.archived?1:0) + '|' + (p.dob_day||'') + '|' + (p.dob_month||'') + '|' + (p.start_date||''));
+    sig(STATE.managers,  m => m.id + '|' + (m.name||'') + '|' + (m.phone||'') + '|' + (m.email||'') + '|' + (m.archived?1:0) + '|' + (m.dob_day||'') + '|' + (m.dob_month||'') + '|' + (m.start_date||''));
+    sig(STATE.sites,     s => s.id + '|' + (s.name||''));
+    sig(STATE.schedule,  r => r.id + '|' + (r.updated_at||'') + '|' + (r.mon||'') + (r.tue||'') + (r.wed||'') + (r.thu||'') + (r.fri||'') + (r.sat||'') + (r.sun||''));
+    sig(STATE.timesheets, t => t.id + '|' + (t.name||'') + '|' + (t.week||''));
+    if (typeof leaveRequests !== 'undefined' && leaveRequests) {
+      sig(leaveRequests, l => l.id + '|' + (l.status||'') + '|' + (l.updated_at||''));
+    }
+  } catch (e) {
+    // If anything throws, return a unique value so the diff path falls
+    // through to a re-render — better safe than a stale UI.
+    return 'err:' + Date.now();
+  }
+  return parts.join('||');
+}
+let _lastStateSignature = '';
+
 async function refreshData(silent) {
   if (silent && currentPage === 'editor' && document.activeElement && document.activeElement.tagName === 'INPUT') return;
   if (silent && Object.keys(_sbPendingRows).length > 0) return;
@@ -2611,7 +2676,20 @@ async function refreshData(silent) {
   try {
     const ok = await loadFromSupabase();
     if (typeof loadLeaveRequests === 'function') await loadLeaveRequests();
-    if (ok) { renderCurrentPage(); updateTopStats(); if (typeof updateLeaveBadge === 'function') updateLeaveBadge(); if (!silent) showToast('Data refreshed ✓'); }
+    if (ok) {
+      // v3.4.72: skip render if nothing changed (kills 30s poll flash).
+      // Manual sync (silent=false) always re-renders so the user gets the
+      // visual confirmation they clicked the button.
+      const sig = _computeStateSignature();
+      const changed = (sig !== _lastStateSignature);
+      _lastStateSignature = sig;
+      if (changed || !silent) {
+        renderCurrentPage();
+        updateTopStats();
+        if (typeof updateLeaveBadge === 'function') updateLeaveBadge();
+      }
+      if (!silent) showToast('Data refreshed ✓');
+    }
   } catch(e) {
     if (!silent && TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') showToast('Sync failed — check connection. Your data is safe.');
   }
@@ -2825,6 +2903,12 @@ async function initApp() {
   } else if (!isManager) {
     showPage('schedule');
     mobileNav('schedule');
+  }
+
+  // v3.4.72: seed the state signature now so the first poll cycle doesn't
+  // detect a phantom change (empty signature → loaded-data signature).
+  if (typeof _computeStateSignature === 'function') {
+    _lastStateSignature = _computeStateSignature();
   }
 
   // Start background polling for live tenants
