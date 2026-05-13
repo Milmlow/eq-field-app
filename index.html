@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.39'; // cache-buster — bump on icon changes
+    var v = '3.4.40'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -1989,13 +1989,17 @@
         <button class="btn btn-secondary btn-sm" id="help-tab-sup" onclick="showHelpTab('sup')" style="font-size:12px">Supervisor Guide</button>
       </div>
       <div id="help-emp">
-        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Logging In</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Go to <strong>eq-solves-field.netlify.app</strong><br><strong>2.</strong> Select your name<br><strong>3.</strong> Enter your 4-digit access code<br><strong>4.</strong> Tick "Remember me" to stay logged in</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Logging In</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Go to <strong><span id="help-app-url">eq-solves-field.netlify.app</span></strong><br><strong>2.</strong> Select your name<br><strong>3.</strong> Enter your 4-digit access code<br><strong>4.</strong> Tick "Remember me" to stay logged in</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Checking Your Schedule</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Your schedule loads after login<br><strong>2.</strong> Each day shows the site name, address, and site lead<br><strong>3.</strong> Tap ↗ to open in Google Maps<br><strong>4.</strong> Use week arrows to see other weeks</div></div>
-        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Submitting Leave</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Tap <strong>Leave</strong> → <strong>+ New Leave Request</strong><br><strong>2.</strong> Select name, leave type, and dates<br><strong>3.</strong> Choose an approver and submit</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Entering Your Timesheet</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Tap <strong>Timesheets</strong> and pick the week<br><strong>2.</strong> Enter <strong>Start</strong> and <strong>Finish</strong> for each day worked — leave days blank if you weren't on site<br><strong>3.</strong> Daily totals update as you type. A red day means more than 8 hours; a red weekly total means more than 40 hours — double-check before saving<br><strong>4.</strong> Tap <strong>Save</strong>. You'll get a Friday reminder if your week isn't in yet</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Submitting Leave</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Tap <strong>Leave</strong> → <strong>+ New Leave Request</strong><br><strong>2.</strong> Select your name, leave type, and start/end dates<br><strong>3.</strong> Pick an <strong>approver</strong> — they'll get an email straight away<br><strong>4.</strong> Submit. You'll see the status update (Pending → Approved/Rejected) on your Leave page<br><strong>5.</strong> Need to cancel a pending request? Open it and tap <strong>Withdraw</strong></div></div>
       </div>
       <div id="help-sup" style="display:none">
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Supervisor Login</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Enter the supervisor code at the gate, or unlock from the sidebar lock button after logging in as staff.</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Editing the Roster</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Go to <strong>Edit Roster</strong>. Click a cell, type the site abbreviation. Changes save automatically. Use <strong>Copy Last Week</strong> or <strong>Batch Fill</strong> for bulk edits.</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Reviewing Timesheets</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Open <strong>Timesheets</strong> — the top filter switches between staff<br><strong>2.</strong> Red cells flag days over 8 hours; red weekly totals flag weeks over 40 hours. Check these against the roster before approving<br><strong>3.</strong> Anyone who hasn't submitted is listed in the "Outstanding" panel — the Friday digest covers this too<br><strong>4.</strong> Edits you make are saved straight to that person's timesheet</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Approving Leave</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>1.</strong> Email arrives when a staff member nominates you as approver, or open <strong>Leave</strong> and filter to <em>Pending</em><br><strong>2.</strong> Tap <strong>Review</strong> → choose <strong>Approve</strong> or <strong>Reject</strong>, add a note if needed, Submit<br><strong>3.</strong> Approved leave appears on the Calendar and on that person's roster row<br><strong>4.</strong> Use <strong>Archive</strong> to clear old/closed requests from the active list. <strong>Resend email</strong> re-sends the original approver email if it got lost<br><strong>5.</strong> If a request shouldn't have been submitted, the staffer can <strong>Withdraw</strong> it from their side</div></div>
+        <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Friday Digest</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2">Open <strong>Supervision</strong> → your card → tick <strong>Email me the Friday digest</strong>. You'll get the week's roster, outstanding timesheets, and pending leave at 12:00 AEST each Friday. Untick to opt out.</div></div>
         <div class="roster-card" style="padding:20px;margin-bottom:12px"><div style="font-weight:700;color:var(--navy);font-size:14px;margin-bottom:10px">Backup &amp; Security</div><div style="font-size:12.5px;color:var(--ink-2);line-height:2"><strong>Full Backup</strong> — Import / Export page. Download regularly.<br><strong>Audit Log</strong> — sidebar footer. All supervisor actions logged.</div></div>
       </div>
     </div>
@@ -2486,6 +2490,12 @@ function showHelpTab(tab) {
   document.getElementById('help-sup').style.display = tab === 'sup' ? '' : 'none';
   document.getElementById('help-tab-emp').className = tab === 'emp' ? 'btn btn-sm' : 'btn btn-secondary btn-sm';
   document.getElementById('help-tab-sup').className = tab === 'sup' ? 'btn btn-sm' : 'btn btn-secondary btn-sm';
+  // v3.4.40: stamp the actual hostname into the "Logging In" card so SKS
+  // staff see sks-nsw-labour.netlify.app and EQ demo staff see eq-solves-field.
+  try {
+    var urlEl = document.getElementById('help-app-url');
+    if (urlEl) urlEl.textContent = (location.hostname || '').toLowerCase() || 'eq-solves-field.netlify.app';
+  } catch (e) { /* fail-quiet */ }
 }
 
 // ── Print ─────────────────────────────────────────────────────

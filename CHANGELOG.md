@@ -6,6 +6,71 @@ _Consolidated 2026-04-28: all per-version `CHANGELOG-v3.4.X.md` files merged in 
 
 ---
 
+# v3.4.63 — Help tab rewrite (timesheet + leave coverage, tenant-aware URL)
+
+**Date:** 2026-05-13
+**Branch flow:** demo → main (squash)
+**Scope:** Help tab content only. No schema, API, or backend changes.
+
+
+## What changed
+
+### Help tab (`index.html` ~lines 1898–1915)
+
+**Employee Guide** — 3 cards → 4 cards:
+
+1. **Logging In** — URL is now tenant-aware. The hardcoded `eq-solves-field.netlify.app` was wrong for SKS staff. The card now contains `<span id="help-app-url">` which `showHelpTab()` fills with the actual `location.hostname` on view. SKS staff see `sks-nsw-labour.netlify.app`; EQ demo staff see `eq-solves-field.netlify.app`.
+2. **Checking Your Schedule** — unchanged.
+3. **Entering Your Timesheet** *(NEW)* — week picker, Start/Finish entry, the 8h/40h red rule, save flow, Friday reminder note.
+4. **Submitting Leave** — expanded from 3 steps to 5. Now covers approver email, status flow (Pending → Approved/Rejected), and Withdraw.
+
+**Supervisor Guide** — 3 cards → 6 cards:
+
+1. **Supervisor Login** — unchanged.
+2. **Editing the Roster** — unchanged.
+3. **Reviewing Timesheets** *(NEW)* — staff filter, red-cell meaning, Outstanding panel, link to Friday digest.
+4. **Approving Leave** *(NEW)* — Review → Approve/Reject, Calendar/roster reflection, Archive, Resend email, Withdraw note.
+5. **Friday Digest** *(NEW)* — opt-in path via Supervision card, 12:00 AEST send.
+6. **Backup & Security** — unchanged.
+
+### `showHelpTab()` (`index.html` ~line 2397)
+
+Added a 4-line block inside `showHelpTab()` that stamps `location.hostname` into `#help-app-url` each time the tab is shown. Try/catch wrapped so a missing element fails quietly.
+
+## Version stamps
+
+Since v3.4.45 the sidebar version badge is derived from `APP_VERSION` at runtime, so the manual stamp surface has shrunk:
+
+- `scripts/app-state.js` — `APP_VERSION = '3.4.63'`.
+- `sw.js` — header comment + `CACHE = 'eq-field-v3.4.63'`.
+- `index.html` — header comment block only (new `CHANGES IN v3.4.63` entry prepended).
+- New `CHANGELOG-v3.4.63.md` at repo root.
+
+Favicon cache-buster `var v` (index.html line ~23) was left at `3.4.39` upstream; only bump it when icons actually change, which this release doesn't.
+
+## Why this release
+
+Two holes:
+
+1. The hardcoded `eq-solves-field.netlify.app` URL was wrong for SKS staff — they'd see a useless instruction.
+2. The two biggest workflows (timesheets and leave) had only one card each, neither of which covered approval, withdrawal, or red-rule meaning. Royce flagged it for an update on 2026-05-13.
+
+Calendar/Contacts coverage was deliberately scoped out of this pass — Royce asked specifically for Timesheets + Leave. Easy follow-up if needed.
+
+## Deploy
+
+Standard demo-first flow per CLAUDE.md:
+
+1. Push `demo` → eq-solves-field rebuilds.
+2. PR `demo` → `main`, squash-merge.
+3. Sync `demo` with `main` via `git merge -X ours main`.
+4. Hard-refresh both tenants (the SW auto-update toast still isn't shipped).
+
+## Smoke test
+
+- Open Help → Employee Guide → confirm "Logging In" shows the right hostname per tenant.
+- Switch to Supervisor Guide → confirm 6 cards render and the new Timesheets / Leave / Digest copy is present.
+
 ## v3.4.39 — id-coercion sweep + EMAIL_FROM wired up
 
 **Date:** 2026-04-27
