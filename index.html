@@ -198,7 +198,28 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.73
+  EQ Solves — Field  v3.4.74
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.74  (ESC-to-close on modals — accessibility quick-win)
+  ────────────────────────────────────────────────────────────
+  Surfaced by the Night 1 manual audit run (AUDIT-REVIEW.md, usability
+  angle). Modals already closed on backdrop-click and ✕-button. ESC key
+  did nothing — standard keyboard convention violation.
+
+  Fix: added a global keydown listener in scripts/utils.js. Closes only
+  the TOP-MOST open modal per press so confirm-on-top-of-edit stacks
+  peel back rather than blowing both away.
+
+  First step of a broader accessibility pass needed for Melbourne
+  enterprise procurement. See AUDIT-REVIEW.md FINDING #U2 for the
+  full aria-* coverage gap.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.73 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.73  (widen week-picker — "(this week)" no longer truncates)

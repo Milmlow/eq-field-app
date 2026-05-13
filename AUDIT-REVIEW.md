@@ -64,11 +64,65 @@ not yet addressed stay until Royce decides + closes them._
 
 ### Open findings — needs Royce review
 
-_(None yet — first run hasn't fired.)_
+#### FINDING #C1 — code [low] — apprentices.js is 2271 lines (2-3x next biggest)
+- **File:** `scripts/apprentices.js` (whole file; 69 top-level functions)
+- **Evidence:** `wc -l` against all script files. Next biggest: `timesheets.js` (1106), `leave.js` (1135). At ~33 lines/function avg, individual functions are fine — the file as a whole is the smell.
+- **Enterprise tie-in:** At Melbourne scale (~577 people, more apprentices), this file will grow further. Maintaining a 3000+ line module gets risky — onboarding new contributors, code review fatigue, merge conflict surface.
+- **Recommended fix:** split into `apprentices-render.js` (table + cards), `apprentices-data.js` (Supabase + STATE shaping), `apprentices-modal.js` (profile + journal modals). ~3-4 hour refactor, behaviour-preserving.
+- **Decision needed:** schedule for a refactor cycle, or wait until it actively bites?
+
+#### FINDING #C2 — code [low] — stale TODO doc in scripts/
+- **File:** `scripts/analytics-TODO-hooks.md`
+- **Evidence:** markdown file in the scripts/ folder. Some hooks listed in it ARE now implemented in scripts/analytics.js but the doc hasn't been pruned.
+- **Enterprise tie-in:** noise reduction. Keeping stale TODO files in code dirs misleads readers about open work.
+- **Recommended fix:** audit the doc against current analytics.js, mark hooks done/keep, move surviving items to `docs/` or a GitHub issue.
+- **Decision needed:** Royce confirms it's safe to remove (it's a doc, no code references).
+
+#### FINDING #U2 — usability [med] — only 10 aria-* attributes across 3500-line index.html
+- **File:** `index.html` (whole file)
+- **Evidence:** `grep -c "aria-label\|aria-describedby\|role=\|tabindex"` = 10. Modals, action buttons (Edit, Archive, Delete), sortable headers, icon-only buttons all lack labels.
+- **Enterprise tie-in:** WCAG 2.1 AA is increasingly a procurement gate for enterprise customers (Melbourne onboarding clients will ask). SOC 2 doesn't require it directly but accessibility is a compliance-adjacent expectation.
+- **Recommended fix:** progressive pass — first all icon-only buttons (✎ Edit, ✕ Delete, 📦 Archive, ↺ Restore, etc.) get `aria-label`. Then modal `role="dialog"` + `aria-labelledby`. Then sortable headers get `aria-sort`. Estimated ~6-8 hours total for a meaningful pass.
+- **Decision needed:** scope a sprint for this, or treat as gradual?
+
+#### FINDING #S1 — scalability [HIGH] — full-table fetch on schedule + timesheets
+- **File:** `index.html:2517-2521` (loadFromSupabase)
+- **Evidence:** `sbFetch('schedule?select=*')` and `sbFetch('timesheets?select=*')` with NO week filter. At Melbourne scale (577 ppl × 52 weeks = ~30k schedule rows, similar for timesheets), initial load is 5–10MB. Every poll re-pulls it. Already documented in `MELBOURNE-SCALE-DESIGN.md` §6.
+- **Enterprise tie-in:** BLOCKS the Melbourne rollout directly. At ~100 users the current pattern starts to slow noticeably; at 577 it's unusable.
+- **Recommended fix:** scope schedule + timesheets queries to a sliding window of weeks (e.g. current week ± 8). Lazy-load older data when user navigates back. Design in MELBOURNE-SCALE-DESIGN.md §6 already specifies the shape.
+- **Decision needed:** prioritise this for the next sprint? It's the single biggest scaling blocker.
+
+#### FINDING #S2 — scalability [med] — wholesale innerHTML rebuild on render
+- **Files:** `scripts/roster.js:294, 491, 591`, `scripts/leave.js:1004, 1135`, `scripts/timesheets.js:451, 638, 956, 1088`, etc. (~15 sites)
+- **Evidence:** every render swaps the full innerHTML on the page container. v3.4.72's hash-diff reduces frequency but not cost per render.
+- **Enterprise tie-in:** at 500+ rows on contacts/roster pages, the rebuild becomes visibly chunky (~100-300ms freeze). Affects perceived performance even when correctness is fine.
+- **Recommended fix:** virtualisation library (e.g. clusterize.js, ~3KB) for the few big-list views (contacts, roster editor). Alternatively, lit-html for surgical updates. MELBOURNE-SCALE-DESIGN.md §6.1 mentions the gap.
+- **Decision needed:** library vs roll-our-own, and when?
+
+#### FINDING #S3 — scalability [med] — realtime channel is org-scoped, not week-scoped
+- **File:** `scripts/realtime.js:137` — `topic = 'realtime:public:schedule:org_id=eq.' + TENANT.ORG_UUID`
+- **Evidence:** every roster edit in the org fans out to every connected user. Currently fine (SKS has ~20 active users), but at 577 users editing concurrently you'd be fanning out maybe ~50 messages/second to each user, most of which they ignore.
+- **Enterprise tie-in:** Realtime cost on Supabase Pro scales with messages broadcast × subscribers. At Melbourne scale this gets expensive AND drops UX (clients spending CPU on irrelevant events).
+- **Recommended fix:** subscribe per visible-week instead of per-org. When user navigates weeks, unsubscribe old + subscribe new. MELBOURNE-SCALE-DESIGN.md §6.2 mentions this pattern.
+- **Decision needed:** part of the Melbourne sprint, or earlier?
+
+#### FINDING #SEC1 — security [med] — magic-link approve/reject TTL is 7 days
+- **File:** `supabase/functions/supervisor-digest/index.ts:100` — `LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000`
+- **Evidence:** when a supervisor receives a leave email with Approve / Reject buttons, those signed tokens stay valid for 7 days. If a supervisor's mailbox is compromised within that window, the attacker can approve/reject leave on their behalf.
+- **Enterprise tie-in:** action tokens of 7 days are a SOC 2 / enterprise-pentest finding. Industry norm is 24-48 hours for one-click action links.
+- **Recommended fix:** reduce to 48h (or 24h). One-line change. Edge case: supervisor on annual leave > 48h won't be able to click old emails; they'd need to open the app and approve in-UI, which is the desired fallback anyway.
+- **Decision needed:** acceptable to drop to 48h? Or longer (3-5 days)?
+
+#### FINDING #SEC2 — security [low] — verify-pin rate limit is in-memory only
+- **File:** `netlify/functions/verify-pin.js:49-50` — `const attempts = {}; const MAX_ATTEMPTS = 5; const LOCKOUT_MS = 15 * 60 * 1000;`
+- **Evidence:** Netlify Functions are stateless — each cold start resets the in-memory counter. Attacker can spam attempts across cold starts (~every 5min on low traffic).
+- **Enterprise tie-in:** enterprise pen-tests will flag this. Distributed rate limit (Supabase row lock, Upstash Redis, or Netlify Blobs) would be the proper fix.
+- **Recommended fix:** move to Supabase-backed rate limit table OR Netlify Blobs (free tier covers the low write volume). 1-2 hours of work.
+- **Decision needed:** acceptable for now given ~20 active users + 4-char PIN entropy? Defer to closer-to-launch?
 
 ### Closed / shipped findings
 
-_(None yet.)_
+- **FINDING #U1 — usability [med] — modals can't be closed with ESC.** SHIPPED in v3.4.74 this iteration. `scripts/utils.js` keydown listener added. Closes top-most open modal on ESC press. PR auto-merged (behaviour-preserving, <50 lines, no auth/RLS).
 
 ---
 
@@ -90,3 +144,50 @@ _Each nightly run appends a `## Night N — [Date] — [Angle]` section here._
 
 **Look at this first (morning of 2026-05-14):** the first cloud run will land
 overnight. Read the new `## Night 1` entry below.
+
+---
+
+### Night 1 — 2026-05-13 — All four angles (manual test run)
+
+**MORNING SUMMARY**
+- **Angle:** all four (manual test run before cloud schedule fires)
+- **Findings count:** 8 total (1 shipped via auto-merge as v3.4.74, 7 open for Royce review)
+- **Look at this first:** **FINDING #S1** — full-table `schedule?select=*` fetch. High-severity scaling blocker. Will not work at Melbourne scale. The design doc already specifies the fix, so this is now a sequencing question, not a discovery.
+
+**Pre-flight:** ✅ Both deploys live on v3.4.73 before run. Demo carries v3.4.68/69 + v3.4.70–73. SKS carries v3.4.70–73 only.
+
+**What ran (in order):**
+1. WebFetch both deploys → confirm version banner
+2. Branch off `origin/demo`
+3. Code quality angle — recent commits, file sizes, error handling patterns
+4. Usability angle — modal flows, ARIA coverage, ESC handling, mobile parity
+5. Scalability angle — query shapes, render patterns, realtime channels
+6. Security angle — env var leakage, magic-link TTL, rate limiting, XSS surface
+
+**Auto-merged this iteration (v3.4.74):**
+- ESC-to-close on modals — `scripts/utils.js` global keydown listener. Closes top-most open modal. Passes auto-merge bar (small, behaviour-preserving, no auth/RLS/env).
+
+**Findings by angle:**
+| Angle | High | Med | Low | Shipped |
+|-------|------|-----|-----|---------|
+| Code  | 0 | 0 | 2 | 0 |
+| Usability | 0 | 1 (U2) | 0 | 1 (U1 → v3.4.74) |
+| Scalability | 1 (S1) | 2 (S2, S3) | 0 | 0 |
+| Security | 0 | 1 (SEC1) | 1 (SEC2) | 0 |
+
+**Trend observations (after one iteration — qualified, not statistical):**
+- Scalability is the dominant risk class for the Melbourne endgame. 3 of 8 findings, including the only HIGH severity, are scaling blockers. The design doc anticipates these but they're not yet on a sprint plan.
+- Security findings are real but lower stakes — magic-link TTL is the one to act on for SOC 2 prep.
+- Code quality is healthy. apprentices.js file size is the only structural concern and it's a slow-burn issue, not a current pain point.
+- Usability has accessibility debt (FINDING #U2) that becomes a procurement blocker as enterprise customers ask. Worth scoping a sprint.
+
+**Decisions needed from Royce (in priority order):**
+1. **SCHEDULE THE MELBOURNE SCALING SPRINT** — FINDING #S1 is the highest-leverage thing to land before any actual Melbourne customer comes on. Design doc has the fix shape; it's now scheduling, not invention.
+2. **Magic-link TTL** — drop 7d to 48h? FINDING #SEC1. One-line change, decide cutoff.
+3. **Accessibility sprint** — FINDING #U2. Want to start the WCAG pass now (gradually) or wait for first enterprise procurement question?
+4. The 5 other findings (C1, C2, S2, S3, SEC2) are valid but lower-priority — schedule when convenient.
+
+**Process notes for the cloud-scheduled future runs:**
+- This iteration covered ALL FOUR angles in one pass for the test. Cloud schedule will rotate ONE per night per the day-of-week plan.
+- The "Look at this first" pointer at the top of each entry is the most useful summary item for Royce — keep it.
+- The findings table by severity gives a quick visual of where attention is needed — keep it.
