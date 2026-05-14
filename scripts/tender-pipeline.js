@@ -250,7 +250,17 @@
       + '.pl-side h4{margin:0 0 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3,#666);font-weight:700}'
       + '.pl-q-empty{padding:30px;text-align:center;color:var(--ink-3,#666);font-size:14px;background:#f9fafb;border-radius:8px;border:1px dashed var(--border,#e5e7eb)}'
       + '@media(max-width:900px){.pl-kanban{grid-template-columns:1fr 1fr}.pl-queue{grid-template-columns:1fr}.pl-side{position:static;max-height:none}}'
-      + '@media(max-width:600px){.pl-kanban{grid-template-columns:1fr}.pl-panel{width:100%}}';
+      + '@media(max-width:600px){.pl-kanban{grid-template-columns:1fr}.pl-panel{width:100%}}'
+      // v3.4.82 — Pipeline Dashboard
+      + '.pl-dash-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}'
+      + '.pl-stat-card{background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:14px 16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}'
+      + '.pl-stat-val{font-size:22px;font-weight:700;color:var(--navy,#1e3a8a);margin-bottom:2px}'
+      + '.pl-stat-lbl{font-size:11.5px;color:var(--ink-3,#666);text-transform:uppercase;letter-spacing:.4px;font-weight:600}'
+      + '.pl-dash-table{width:100%;border-collapse:collapse;font-size:12.5px}'
+      + '.pl-dash-table th{background:#f9fafb;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-3,#666);font-weight:700;padding:8px 10px;border-bottom:2px solid var(--border,#e5e7eb);white-space:nowrap;text-align:left}'
+      + '.pl-dash-table td{padding:8px 10px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:top}'
+      + '.pl-dash-table tbody tr:hover{background:#f0f7ff}'
+      + '@media(max-width:900px){.pl-dash-stats{grid-template-columns:1fr 1fr}}';
     var s = document.createElement('style');
     s.id = 'eq-pipeline-styles';
     s.textContent = css;
@@ -708,11 +718,11 @@
     var highConf = t.is_high_confidence ? '<span class="pl-tag pl-tag-confidence">90% high confidence</span>' : '';
     var belowFloor = t.below_threshold ? '<span class="pl-tag pl-tag-low">Below floor</span>' : '';
     var promote = t.stage === 'won'
-      ? '<button class="pl-btn pl-btn-primary" style="margin-top:6px;padding:4px 10px;font-size:11.5px" onclick="event.stopPropagation();window.EQ_TENDER_PIPELINE._goConfirmCurve(' + JSON.stringify(S(t.id)) + ')">Promote →</button>'
+      ? '<button class="pl-btn pl-btn-primary" style="margin-top:6px;padding:4px 10px;font-size:11.5px" onclick="event.stopPropagation();window.EQ_TENDER_PIPELINE._goConfirmCurve(\'' + S(t.id) + '\')">Promote →</button>'
       : '';
     return '<div class="pl-tender" draggable="true"'
       + ' data-tender-id="' + escapeHtml(S(t.id)) + '" data-stage="' + escapeHtml(t.stage) + '"'
-      + ' onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">'
+      + ' onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(\'' + S(t.id) + '\')">'
       + '<div class="pl-tender-title">' + escapeHtml(t.job_name || '(no name)') + '</div>'
       + '<div class="pl-tender-meta">' + escapeHtml(t.client || '—')
       + ' · Due ' + fmtDate(t.due_date) + ' · ' + (t.probability_pct == null ? '—' : t.probability_pct + '%') + '</div>'
@@ -729,6 +739,7 @@
   // =====================================================================
 
   var _panelOpenTenderId = null;
+  var _afterPanelSave   = null; // 'confirmCurve' → navigate there after a successful save
 
   function openTenderPanel(tenderId) {
     var tender = STATE.tenders.find(function (t) { return sameId(t.id, tenderId); });
@@ -780,6 +791,10 @@
       + '    <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">'
       + '    <div class="pl-section-title">Enrichment</div>'
       + '    <div class="pl-row">'
+      + '      <div><span class="pl-label">Job Number</span><input class="pl-input" type="text" id="pl-pn-jobnum" placeholder="e.g. SKS-2026-042" value="' + escapeHtml(enrich.job_number || '') + '"></div>'
+      + '      <div><span class="pl-label">Cost Code</span><input class="pl-input" type="text" id="pl-pn-costcode" placeholder="e.g. 5100.002" value="' + escapeHtml(enrich.cost_code || '') + '"></div>'
+      + '    </div>'
+      + '    <div class="pl-row">'
       + '      <div><span class="pl-label">Hours estimated</span><input class="pl-input" type="number" id="pl-pn-hours" value="' + escapeHtml(enrich.hours_estimated || '') + '"></div>'
       + '      <div><span class="pl-label">Peak workers</span><input class="pl-input" type="number" id="pl-pn-peak" value="' + escapeHtml(enrich.peak_workers || '') + '"></div>'
       + '    </div>'
@@ -818,24 +833,28 @@
     var tender = STATE.tenders.find(function (t) { return sameId(t.id, tid); });
     if (!tender) return;
     var prev = STATE.tenderEnrichment[tid] || {};
-    var hours   = parseFloat(document.getElementById('pl-pn-hours').value) || null;
-    var peak    = parseInt(document.getElementById('pl-pn-peak').value, 10);    if (isNaN(peak)) peak = null;
-    var weeks   = parseInt(document.getElementById('pl-pn-weeks').value, 10);   if (isNaN(weeks)) weeks = null;
+    var hours    = parseFloat(document.getElementById('pl-pn-hours').value) || null;
+    var peak     = parseInt(document.getElementById('pl-pn-peak').value, 10);    if (isNaN(peak)) peak = null;
+    var weeks    = parseInt(document.getElementById('pl-pn-weeks').value, 10);   if (isNaN(weeks)) weeks = null;
     var startRaw = document.getElementById('pl-pn-start').value || null;
-    var start   = startRaw ? toMonday(startRaw) : null;
-    var notes   = document.getElementById('pl-pn-notes').value || '';
-    var pmId    = document.getElementById('pl-pn-pm').value || null;
-    var supId   = document.getElementById('pl-pn-sup').value || null;
+    var start    = startRaw ? toMonday(startRaw) : null;
+    var notes    = document.getElementById('pl-pn-notes').value || '';
+    var jobNum   = (document.getElementById('pl-pn-jobnum').value || '').trim() || null;
+    var costCode = (document.getElementById('pl-pn-costcode').value || '').trim() || null;
+    var pmId     = document.getElementById('pl-pn-pm').value || null;
+    var supId    = document.getElementById('pl-pn-sup').value || null;
 
     var endWeek = (start && weeks) ? toMonday(addWeeks(start, weeks - 1)) : null;
 
     var fieldsChanged = [];
-    ['hours_estimated', 'peak_workers', 'duration_weeks', 'start_date_estimated', 'confidence_notes'].forEach(function (k) {
+    ['hours_estimated', 'peak_workers', 'duration_weeks', 'start_date_estimated', 'confidence_notes', 'job_number', 'cost_code'].forEach(function (k) {
       var nv;
       if (k === 'hours_estimated') nv = hours;
       else if (k === 'peak_workers') nv = peak;
       else if (k === 'duration_weeks') nv = weeks;
       else if (k === 'start_date_estimated') nv = start;
+      else if (k === 'job_number') nv = jobNum;
+      else if (k === 'cost_code') nv = costCode;
       else nv = notes;
       if ((prev[k] || null) !== (nv || null)) fieldsChanged.push(k);
     });
@@ -847,6 +866,8 @@
       duration_weeks:        weeks,
       start_date_estimated:  start,
       confidence_notes:      notes,
+      job_number:            jobNum,
+      cost_code:             costCode,
       needs_review:          false,
       updated_at:            new Date().toISOString()
     };
@@ -896,9 +917,18 @@
         ev('tenderEnriched', { tender_id: tid, fields_changed: fieldsChanged });
         toast('Saved', 'success');
         closeTenderPanel();
-        return loadAll();
+        var afterAction = _afterPanelSave;
+        _afterPanelSave = null;
+        return loadAll().then(function () {
+          if (afterAction === 'confirmCurve') {
+            _confirmCurveTenderId = S(tid);
+            _confirmCurveDraft = null;
+            showPage('pipeline-confirm-curve');
+          } else {
+            _renderKanbanGrid();
+          }
+        });
       })
-      .then(_renderKanbanGrid)
       .catch(function (err) {
         console.error('EQ[pipeline] panel save failed', err);
         toast('Save failed', 'error');
@@ -927,7 +957,7 @@
     loadAll().then(function () {
       var queue = _buildDecisionQueue();
       var sessionPill = STATE.reviewSessionId
-        ? '<span class="pl-pill">Session active</span>'
+        ? '<span class="pl-pill">Session active</span> <button class="pl-btn" style="font-size:11.5px;padding:3px 8px" onclick="window.EQ_TENDER_PIPELINE._endSession()">End session</button>'
         : '<button class="pl-btn pl-btn-primary" onclick="window.EQ_TENDER_PIPELINE._startSession()">Start Review Session</button>';
 
       host.innerHTML = ''
@@ -958,6 +988,13 @@
     STATE.reviewSessionId = uuid();
     ev('reviewSessionStarted', { session_id: STATE.reviewSessionId });
     toast('Review session started', 'success');
+    renderReview();
+  }
+
+  function _endSession() {
+    ev('reviewSessionEnded', { session_id: STATE.reviewSessionId });
+    STATE.reviewSessionId = null;
+    toast('Session ended', 'success');
     renderReview();
   }
 
@@ -1092,14 +1129,14 @@
       + '    <div><span class="pl-label">Supervisor</span><select class="pl-select" data-row-sup="' + escapeHtml(S(t.id)) + '">' + personOptions(supervisors, supId) + '</select></div>'
       + '  </div>'
       + '  <div class="pl-q-actions">'
-      + '    <button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">Open</button>'
-      + '    <button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._saveRowPencillings(' + JSON.stringify(S(t.id)) + ')">Save pencillings</button>'
+      + '    <button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(\'' + S(t.id) + '\')">Open</button>'
+      + '    <button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._saveRowPencillings(\'' + S(t.id) + '\')">Save pencillings</button>'
       + (t.stage === 'likely'
-          ? '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._advanceStage(' + JSON.stringify(S(t.id)) + ',\'won\')">Mark as Won</button>'
+          ? '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._advanceStage(\'' + S(t.id) + '\',\'won\')">Mark as Won</button>'
           : '')
       + '    <button class="pl-btn pl-btn-primary"'
       +        (canPush ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="Needs Won stage + start date + duration + peak workers + PM + Supervisor"')
-      +        ' onclick="window.EQ_TENDER_PIPELINE._quickPushToSchedule(' + JSON.stringify(S(t.id)) + ')">Push to roster →</button>'
+      +        ' onclick="window.EQ_TENDER_PIPELINE._quickPushToSchedule(\'' + S(t.id) + '\')">Push to roster →</button>'
       + '  </div>'
       + '</div>';
   }
@@ -1355,7 +1392,25 @@
   var _confirmCurveTenderId = null;
   var _confirmCurveDraft = null; // { siteId, jobNumberId, weeks: [...], people: [...] }
 
+
+  // =====================================================================
+  // Screen 5 — /pipeline/:tender_id/confirm-curve
+  // =====================================================================
+
+  var _confirmCurveTenderId = null;
+  var _confirmCurveDraft = null;
+
   function _goConfirmCurve(tenderId) {
+    // v3.4.82: if enrichment is incomplete, open the slide-over first so the
+    // user can fill in start date + duration before landing on Confirm Curve.
+    var enr = STATE.tenderEnrichment[S(tenderId)] || {};
+    if (!enr.start_date_estimated || !enr.duration_weeks) {
+      toast('Fill in start date + duration first, then Promote →', 'info');
+      _afterPanelSave = 'confirmCurve';
+      openTenderPanel(tenderId);
+      return;
+    }
+    _afterPanelSave = null;
     _confirmCurveTenderId = S(tenderId);
     _confirmCurveDraft = null;
     showPage('pipeline-confirm-curve');
@@ -1391,7 +1446,7 @@
         host.innerHTML = '<div class="pl-wrap"><div class="pl-card">'
           + '<h3 style="margin:0 0 6px">Enrichment missing</h3>'
           + '<div style="font-size:13px">Add a Start date and Duration in the tender panel before promoting.</div>'
-          + '<button class="pl-btn pl-btn-primary" style="margin-top:8px" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(tender.id)) + ')">Open tender</button>'
+          + '<button class="pl-btn pl-btn-primary" style="margin-top:8px" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(\'' + S(tender.id) + '\')">Open tender</button>'
           + '</div></div>';
         return;
       }
@@ -1411,13 +1466,13 @@
         + '    <div class="pl-row">'
         + '      <div><span class="pl-label">Site</span><select class="pl-select" id="pl-cc-site">' + siteOpts + '</select></div>'
         + '      <div><span class="pl-label">Or create new site (abbr)</span><input class="pl-input" id="pl-cc-newsite" placeholder="e.g. DDCB" maxlength="12"></div>'
-        + '      <div><span class="pl-label">Job number</span><input class="pl-input" id="pl-cc-jobno" placeholder="e.g. 16404"></div>'
+        + '      <div><span class="pl-label">Job number</span><input class="pl-input" id="pl-cc-jobno" placeholder="e.g. 16404" value="' + escapeHtml(enr.job_number || '') + '"></div>'
         + '    </div>'
         + '    <div style="font-size:11.5px;color:var(--ink-3);margin-top:4px">Pick an existing site OR type an abbr to create a new one on confirm. Job number is optional.</div>'
         + '  </div>'
         + '  <div class="pl-card">'
         + '    <h4 style="margin:0 0 6px">Draft curve — ' + _confirmCurveDraft.weeks.length + ' weeks × ' + _confirmCurveDraft.rows.length + ' people</h4>'
-        + '    <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:6px">Each cell holds the site abbr written into the live schedule. Blank cells stay blank. Placeholder rows (Worker 1…N) need a real person assigned via the dropdown before push.</div>'
+        + '    <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:6px">Each cell holds the site abbr written into the live schedule. Blank cells stay blank. Placeholder rows need a real person assigned before push.</div>'
         + _renderCurveGrid()
         + '  </div>'
         + '  <div style="display:flex;gap:8px;justify-content:flex-end">'
@@ -1461,7 +1516,6 @@
         cells:    weeks.map(function () { return { mon: '', tue: '', wed: '', thu: '', fri: '', sat: '', sun: '' }; })
       });
     }
-    // Pre-fill mon–fri of every cell with the existing site abbr (if linked) or the tender external_ref short tag.
     var existingSite = STATE.sites.find(function (s) { return sameId(s.id, tender.site_id); });
     var fillAbbr = (existingSite && existingSite.abbr) || (tender.external_ref || '').slice(0, 8);
     peopleRows.forEach(function (r) {
@@ -1473,7 +1527,7 @@
       siteId:      tender.site_id || null,
       newSiteAbbr: '',
       newSiteName: tender.job_name || '',
-      jobNumber:   '',
+      jobNumber:   enr.job_number || '',
       weeks:       weeks,
       rows:        peopleRows,
       fillAbbr:    fillAbbr
@@ -1509,7 +1563,6 @@
     }).join('');
     var rows = draft.rows.map(function (r, ri) {
       var cells = r.cells.map(function (c, ci) {
-        // For the grid, just show Mon–Fri abbr; sat/sun stay blank.
         return '<td><input class="pl-curve-cell" data-r="' + ri + '" data-c="' + ci + '" value="' + escapeHtml(c.mon || '') + '"></td>';
       }).join('');
       var personCell;
@@ -1524,7 +1577,6 @@
       return '<tr><td>' + personCell + '</td>' + cells + '</tr>';
     }).join('');
     var html = '<table class="pl-curve-grid"><thead><tr>' + header + '</tr></thead><tbody>' + rows + '</tbody></table>';
-    // Attach listeners after render
     setTimeout(function () {
       document.querySelectorAll('.pl-curve-cell').forEach(function (el) {
         el.addEventListener('input', function () {
@@ -1559,11 +1611,9 @@
     var newSiteAbbr = (document.getElementById('pl-cc-newsite').value || '').trim();
     var jobNo = (document.getElementById('pl-cc-jobno').value || '').trim();
 
-    // Block confirm if placeholders unassigned.
     var unassigned = draft.rows.some(function (r) { return r.placeholder; });
     if (unassigned) { toast('Assign all placeholder rows before confirming'); return; }
 
-    // Step 1: ensure site exists
     function ensureSite() {
       if (draft.siteId) return Promise.resolve(draft.siteId);
       if (!newSiteAbbr) {
@@ -1585,7 +1635,6 @@
     ensureSite().then(function (siteId) {
       if (!siteId) throw new Error('site creation failed');
 
-      // Step 2: write pending_schedule rows (one per person/week)
       var pendingRows = [];
       draft.rows.forEach(function (r) {
         r.cells.forEach(function (c, ci) {
@@ -1605,7 +1654,6 @@
         ? sbFetch('pending_schedule', 'POST', pendingRows, 'return=minimal')
         : Promise.resolve();
 
-      // Step 3: copy into schedule directly (one row per person/week — schedule's existing shape)
       var scheduleRows = pendingRows.map(function (r) {
         return {
           person_id: r.person_id,
@@ -1617,21 +1665,16 @@
         ? sbFetch('schedule', 'POST', scheduleRows, 'return=minimal')
         : Promise.resolve();
 
-      // Step 4: patch tender to confirmed + link site + job
       var jobNumberPromise = jobNo
         ? sbFetch('job_numbers', 'POST', { number: jobNo, client: tender.client || null, site_name: tender.job_name || null, status: 'active' }, 'return=representation').then(function (jr) { return jr && jr[0] && jr[0].id; })
         : Promise.resolve(null);
 
       return Promise.all([pendingPromise, schedulePromise, jobNumberPromise]).then(function (results) {
         var jobNumberId = results[2];
-        var patch = {
-          stage:   'confirmed',
-          site_id: siteId
-        };
+        var patch = { stage: 'confirmed', site_id: siteId };
         if (jobNumberId) patch.job_number_id = jobNumberId;
         return Promise.all([
           sbFetch('tenders?id=eq.' + encodeURIComponent(tender.id), 'PATCH', patch, 'return=minimal'),
-          // Flip nominations to confirmed
           sbFetch('nominations?tender_id=eq.' + encodeURIComponent(tender.id), 'PATCH', { status: 'confirmed' }, 'return=minimal')
         ]).then(function () {
           ev('tenderPromoted', { tender_id: tender.id, from_stage: tender.stage });
@@ -1649,36 +1692,148 @@
   }
 
   // =====================================================================
+  // Screen 6 — /pipeline/dashboard  (v3.4.82 new)
+  // =====================================================================
+
+  function renderPipelineDashboard() {
+    ensureStyles();
+    var host = document.getElementById('pipeline-dashboard-content');
+    if (!host) return;
+    if (tenantDisabled()) {
+      host.innerHTML = '<div class="pl-wrap"><div class="pl-card">Pipeline unavailable on this tenant.</div></div>';
+      return;
+    }
+    loadAll().then(function () {
+      var tenders = STATE.tenders.filter(function (t) { return !t.archived_at; });
+      var confirmed = tenders.filter(function (t) { return t.stage === 'confirmed'; });
+      var active = tenders.filter(function (t) { return t.stage !== 'confirmed' && t.stage !== 'lost'; });
+
+      var totalPipelineValue = active.reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
+      var confirmedValue = confirmed.reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
+      var confirmedHours = confirmed.reduce(function (s, t) {
+        var e = STATE.tenderEnrichment[S(t.id)];
+        return s + (e && e.hours_estimated ? Number(e.hours_estimated) : 0);
+      }, 0);
+
+      // Weekly hours forecast: spread each tender's hours evenly over its duration
+      var weekBuckets = {};
+      tenders.forEach(function (t) {
+        if (t.stage === 'lost') return;
+        var enr = STATE.tenderEnrichment[S(t.id)];
+        if (!enr || !enr.start_date_estimated || !enr.duration_weeks || !enr.hours_estimated) return;
+        var hoursPerWeek = Number(enr.hours_estimated) / enr.duration_weeks;
+        var start = toMonday(enr.start_date_estimated);
+        for (var w = 0; w < enr.duration_weeks; w++) {
+          var wk = isoWeekKey(addWeeks(start, w));
+          weekBuckets[wk] = (weekBuckets[wk] || 0) + hoursPerWeek;
+        }
+      });
+      var sortedWeeks = Object.keys(weekBuckets).sort().slice(0, 26);
+      var maxHours = sortedWeeks.reduce(function (m, k) { return Math.max(m, weekBuckets[k]); }, 1);
+
+      // Build bar chart SVG
+      var barW = 20, gap = 4, svgH = 100, labelH = 18;
+      var svgW = sortedWeeks.length * (barW + gap);
+      var bars = sortedWeeks.map(function (wk, i) {
+        var h = Math.round((weekBuckets[wk] / maxHours) * (svgH - labelH));
+        var x = i * (barW + gap);
+        var y = svgH - labelH - h;
+        var label = wk.slice(5); // "W18"
+        var hrs = Math.round(weekBuckets[wk]);
+        return '<rect x="' + x + '" y="' + y + '" width="' + barW + '" height="' + h + '" fill="var(--navy,#1e3a8a)" rx="2" opacity=".8"><title>' + escapeHtml(wk) + ': ' + hrs + 'h</title></rect>'
+          + '<text x="' + (x + barW / 2) + '" y="' + (svgH - 2) + '" text-anchor="middle" font-size="7" fill="var(--ink-3,#666)">' + escapeHtml(label) + '</text>';
+      }).join('');
+      var chartHtml = sortedWeeks.length
+        ? '<svg width="' + svgW + '" height="' + svgH + '" style="display:block;overflow:visible">' + bars + '</svg>'
+        : '<div style="color:var(--ink-3);font-size:13px;padding:12px 0">No enriched tenders with start dates yet.</div>';
+
+      // Stage order + colours
+      var stageOrder = ['watch', 'likely', 'won', 'confirmed', 'lost'];
+      var stageColour = { watch: '#6b7280', likely: '#2563eb', won: '#d97706', confirmed: '#16a34a', lost: '#dc2626' };
+      var stageLabel  = { watch: 'Watch (50%)', likely: 'Likely (70–90%)', won: 'Awaiting Promotion', confirmed: 'Confirmed', lost: 'Lost' };
+
+      var tableRows = tenders.slice().sort(function (a, b) {
+        return stageOrder.indexOf(a.stage) - stageOrder.indexOf(b.stage) || _sortDueDate(a, b);
+      }).map(function (t) {
+        var enr = STATE.tenderEnrichment[S(t.id)] || {};
+        var noms = STATE.nominations.filter(function (n) { return sameId(n.tender_id, t.id); });
+        var pmNom = noms.find(function (n) { return n.role === 'pm'; });
+        var supNom = noms.find(function (n) { return n.role === 'supervisor'; });
+        var pmPerson = pmNom && STATE.people.find(function (p) { return sameId(p.id, pmNom.person_id); });
+        var supPerson = supNom && STATE.people.find(function (p) { return sameId(p.id, supNom.person_id); });
+        var finishDate = (enr.start_date_estimated && enr.duration_weeks)
+          ? addWeeks(enr.start_date_estimated, enr.duration_weeks)
+          : null;
+        var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (stageColour[t.stage] || '#999') + ';margin-right:4px"></span>';
+        return '<tr style="cursor:pointer" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(\'' + S(t.id) + '\')">'
+          + '<td style="font-weight:600">' + escapeHtml(t.job_name || '—') + (enr.job_number ? '<div style="font-size:10px;color:var(--ink-3)">' + escapeHtml(enr.job_number) + '</div>' : '') + '</td>'
+          + '<td>' + escapeHtml(t.client || '—') + '</td>'
+          + '<td>' + dot + escapeHtml(stageLabel[t.stage] || t.stage) + '</td>'
+          + '<td style="text-align:right;font-weight:600">' + fmtMoney(t.quote_value) + '</td>'
+          + '<td style="text-align:center">' + (t.probability_pct != null ? t.probability_pct + '%' : '—') + '</td>'
+          + '<td>' + fmtDate(enr.start_date_estimated) + '</td>'
+          + '<td>' + fmtDate(finishDate) + '</td>'
+          + '<td style="text-align:center">' + (enr.duration_weeks ? enr.duration_weeks + 'w' : '—') + '</td>'
+          + '<td style="text-align:right">' + (enr.hours_estimated ? Math.round(enr.hours_estimated) + 'h' : '—') + '</td>'
+          + '<td>' + escapeHtml(pmPerson ? pmPerson.name : '—') + '</td>'
+          + '<td>' + escapeHtml(supPerson ? supPerson.name : '—') + '</td>'
+          + '<td>' + escapeHtml(t.department || '—') + '</td>'
+          + '</tr>';
+      }).join('');
+
+      host.innerHTML = ''
+        + '<div class="pl-wrap">'
+        + '  <h2 style="margin:0 0 14px">Pipeline Dashboard</h2>'
+        + '  <div class="pl-dash-stats">'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + fmtMoney(totalPipelineValue) + '</div><div class="pl-stat-lbl">Active pipeline value</div></div>'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + fmtMoney(confirmedValue) + '</div><div class="pl-stat-lbl">Confirmed value</div></div>'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + Math.round(confirmedHours) + 'h</div><div class="pl-stat-lbl">Committed hours</div></div>'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + active.length + '</div><div class="pl-stat-lbl">Active tenders</div></div>'
+        + '  </div>'
+        + '  <div class="pl-card" style="margin-bottom:16px">'
+        + '    <div class="pl-section-title" style="margin-bottom:8px">Weekly hours forecast (next 26 weeks)</div>'
+        + '    <div style="overflow-x:auto">' + chartHtml + '</div>'
+        + '  </div>'
+        + '  <div class="pl-card" style="padding:0;overflow:hidden">'
+        + '    <table class="pl-dash-table">'
+        + '      <thead><tr>'
+        + '        <th>Job</th><th>Client</th><th>Stage</th><th style="text-align:right">Value</th>'
+        + '        <th style="text-align:center">Prob</th><th>Start</th><th>Finish</th>'
+        + '        <th style="text-align:center">Dur</th><th style="text-align:right">Hours</th>'
+        + '        <th>PM</th><th>Supervisor</th><th>Dept</th>'
+        + '      </tr></thead>'
+        + '      <tbody>' + tableRows + '</tbody>'
+        + '    </table>'
+        + '  </div>'
+        + '</div>';
+    });
+  }
+
+  // =====================================================================
   // Exports
   // =====================================================================
 
   window.EQ_TENDER_PIPELINE = {
-    // Loaders
-    loadAll:            loadAll,
-    // Screen entry points
-    renderImport:       renderImport,
-    renderKanban:       renderKanban,
-    renderReview:       renderReview,
-    renderConfirmCurve: renderConfirmCurve,
-    // Slide-over panel
-    openTenderPanel:    openTenderPanel,
-    closeTenderPanel:   closeTenderPanel,
-    // Internal action handlers (exposed for inline onclick)
-    _applyImport:       _applyImport,
-    _cancelImport:      _cancelImport,
-    _savePanel:         _savePanel,
-    _startSession:      _startSession,
-    _logDecision:       _logDecision,
-    _quickDecision:     _quickDecision,
-    _goConfirmCurve:    _goConfirmCurve,
-    _confirmCurveSubmit:_confirmCurveSubmit,
-    // v3.4.82 — drag-and-drop on kanban + decision queue actions on Review
-    _handleStageDrop:   _handleStageDrop,
-    _saveTenderStage:   _saveTenderStage,
-    _saveRowPencillings:_saveRowPencillings,
-    _quickPushToSchedule:_quickPushToSchedule,
-    _advanceStage:      _advanceStage,
-    // Helpers (exposed for tests / console debugging)
+    loadAll:              loadAll,
+    renderImport:         renderImport,
+    renderKanban:         renderKanban,
+    renderReview:         renderReview,
+    renderConfirmCurve:   renderConfirmCurve,
+    renderPipelineDashboard: renderPipelineDashboard,
+    openTenderPanel:      openTenderPanel,
+    closeTenderPanel:     closeTenderPanel,
+    _applyImport:         _applyImport,
+    _cancelImport:        _cancelImport,
+    _savePanel:           _savePanel,
+    _startSession:        _startSession,
+    _endSession:          _endSession,
+    _logDecision:         _logDecision,
+    _quickDecision:       _quickDecision,
+    _goConfirmCurve:      _goConfirmCurve,
+    _confirmCurveSubmit:  _confirmCurveSubmit,
+    _saveRowPencillings:  _saveRowPencillings,
+    _advanceStage:        _advanceStage,
+    _quickPushToSchedule: _quickPushToSchedule,
     _helpers: {
       toMonday: toMonday, addWeeks: addWeeks, isoWeekKey: isoWeekKey,
       fmtMoney: fmtMoney, fmtDate: fmtDate, deptValueFloor: deptValueFloor

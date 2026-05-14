@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.82'; // cache-buster — bump on icon changes
+    var v = '3.4.83'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -206,48 +206,8 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.82
+  EQ Solves — Field  v3.4.83
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
-
-  CHANGES IN v3.4.82  (Pipeline drag-and-drop + Review = decision queue)
-  ────────────────────────────────────────────────────────────
-  • KANBAN DRAG-AND-DROP — Pipeline cards are now draggable.
-    Drop into Watch / Likely / Awaiting Promotion to update
-    tenders.stage in one PATCH. Drop into Confirmed auto-routes
-    to the Confirm Labour Curve screen (preserves the gate;
-    the CM still has to fill the weeks×people grid and click
-    Confirm). Visual: dashed-blue drop target, faded source card.
-  • REVIEW SCREEN REBUILT AS A DECISION QUEUE — Was 4 panels of
-    "click Open to act" (which sent you to the slide-over for
-    every change). Now: one ranked queue. Each row has inline
-    PM + Supervisor pickers and a "Save pencillings" button —
-    the meeting flow doesn't context-switch. Reasons-for-listing
-    show as tags (Red clash / Starts <2w / Stale 4w+ / etc.)
-    with an urgency stripe on the left edge.
-  • PUSH TO ROSTER FROM REVIEW — Won-stage rows with full
-    enrichment (start + duration + peak workers) AND a chosen
-    PM + Supervisor get a "Push to roster →" primary button.
-    Click → confirm prompt → writes the PM + Sup onto the live
-    schedule for the full duration, flips nominations to
-    confirmed, sets tenders.stage='confirmed'. Skips the full
-    Confirm Curve grid for the common case; remaining team slots
-    can still be filled later via Confirm Curve.
-  • ANALYTICS — 2 new PostHog events (tender_stage_dragged,
-    pencillings_saved_review). tender_promoted and
-    labour_curve_confirmed gain a `path` property
-    (confirm_curve | review_quick_push) so the funnel separates.
-  • FILES TOUCHED
-    - scripts/tender-pipeline.js (~+450 / -180; Review screen
-      rebuilt; new functions: _attachKanbanDnd, _handleStageDrop,
-      _saveTenderStage, _buildDecisionQueue, _renderQueueRow,
-      _saveRowPencillings, _quickPushToSchedule, _advanceStage,
-      _renderNotesSiderail. Old _renderPanel1..4 + _renderNotesLog
-      removed.)
-    - scripts/analytics.js (2 new events; path field on 2 existing)
-    - scripts/app-state.js (APP_VERSION 3.4.81 → 3.4.82)
-    - sw.js (CACHE bump)
-    - index.html (favicon cache-buster + this banner)
-    - CHANGELOG-v3.4.82.md (NEW)
 
   CHANGES IN v3.4.81  (Tender Sync actually working + What's New refresh)
   ────────────────────────────────────────────────────────────
@@ -2186,9 +2146,10 @@
          Supervisor+manager visible; pipeline data lives in demo tenant only for now. -->
     <div class="nav-section" id="nav-section-pipeline">
       <div class="nav-label">Pipeline</div>
-      <button class="nav-item" onclick="showPage('pipeline-import')" id="nav-pipeline-import"><span class="nav-icon">⇧</span> Tender Sync <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
+      <button class="nav-item" onclick="showPage('pipeline-dashboard')" id="nav-pipeline-dashboard"><span class="nav-icon">📊</span> Dashboard</button>
       <button class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">▦</span> Pipeline <span class="nav-badge" id="badge-pipeline-clash" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('pipeline-review')" id="nav-pipeline-review"><span class="nav-icon">⌖</span> Fortnightly Review</button>
+      <button class="nav-item" onclick="showPage('pipeline-import')" id="nav-pipeline-import"><span class="nav-icon">⇧</span> Tender Sync <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Testing (DO NOT USE)</div>
@@ -2612,6 +2573,9 @@
   <!-- v3.4.79 — Tender Pipeline module pages.
        Container is empty on load; tender-pipeline.js renders into it
        lazily on showPage(). Keeps initial paint cheap. -->
+  <div class="page hidden" id="page-pipeline-dashboard">
+    <div id="pipeline-dashboard-content"></div>
+  </div>
   <div class="page hidden" id="page-pipeline-import">
     <div id="pipeline-import-content"></div>
   </div>
@@ -2914,6 +2878,7 @@ const PAGE_TITLES = {
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
   prestart:'Prestart Briefings', toolbox:'Toolbox Talks', diary:'Daily Site Diary',
   // v3.4.79 — Tender Pipeline
+  'pipeline-dashboard':     'Pipeline Dashboard',
   'pipeline-import':        'Tender Sync',
   'pipeline':               'Pipeline',
   'pipeline-review':        'Fortnightly Review',
@@ -2970,6 +2935,7 @@ function renderCurrentPage() {
   // v3.4.79 — Tender Pipeline pages dispatch through EQ_TENDER_PIPELINE so
   // the loader can lazy-fetch + render. Each is a no-op on SKS (the module
   // checks _isDisabledTable internally).
+  else if (currentPage === 'pipeline-dashboard')     { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderPipelineDashboard(); }
   else if (currentPage === 'pipeline-import')        { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderImport(); }
   else if (currentPage === 'pipeline')               { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderKanban(); }
   else if (currentPage === 'pipeline-review')        { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderReview(); }
@@ -3865,10 +3831,4 @@ const eqAgent = (function() {
 
 
 <!-- TAFE holidays modal -->
-<div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="addTafeHoliday()">Add range</button></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="closeModal('modal-tafe-holidays')">Done</button></div></div></div>
-
-<!-- v3.4.71: Project Hours panel removed from dashboard. Backend column
-     sites.track_hours stays in EQ schema; revival = restore this block +
-     re-add scripts/project-hours.js script tag. -->
-</body>
-</html>
+<div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content
