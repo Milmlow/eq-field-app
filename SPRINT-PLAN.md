@@ -145,10 +145,19 @@ S1 is the single biggest blocker for Melbourne customer onboarding. Design doc a
 
 **This sprint: design only (~1h). Implementation deferred to Phase D.**
 
+**Status:**
+- ✅ **Phase 1 (design)** shipped 2026-05-15 — schema captured verbatim
+  in [`migrations/2026-05-15_rate_limit_buckets_v1.sql`](migrations/2026-05-15_rate_limit_buckets_v1.sql).
+  File is PENDING (not applied to any Supabase) per SPRINT-QUESTIONS Q9 default.
+- ⏳ **Phase D (implementation)** — when server-side role checks land, that
+  workstream grabs the migration file, applies it via MCP (demo first,
+  then SKS prod on explicit "SKS live"), and wires `bump_rate_limit()`
+  into `verify-pin.js` + role-gated endpoints.
+
 ### Recommendation: Supabase counter table, ship as part of Phase D
 NOT as a standalone fix. Phase D is the moment you start adding server-side role checks anyway — same migration adds both the role-check and the rate-limit infrastructure.
 
-### Schema design (do this sprint, don't apply yet)
+### Schema design (captured verbatim in migrations/2026-05-15_rate_limit_buckets_v1.sql)
 
 ```sql
 -- migrations/<future-date>_rate_limit_buckets.sql
