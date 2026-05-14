@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.4'; // cache-buster — bump on icon changes
+    var v = '3.5.5'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -215,8 +215,47 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.4
+  EQ Solves — Field  v3.5.5
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.5  (S2 Phase 2 — Supervisors page virtualisation)
+  ────────────────────────────────────────────────────────────
+  • Extends FINDING #S2 fix from Contacts (v3.5.4) to the
+    Supervisors page (scripts/managers.js renderManagers).
+    Same EQVirtualTable shim, same 150-row threshold, same
+    destroy/remount pattern on filter/sort changes.
+  • SHAPE DIFFERENCE — renderManagers interleaves category-
+    header <tr>s (Executive / Operations / Project Management
+    / Construction / Supervisor / Internal / Other) with
+    manager rows. Phase 2 flattens this into a single rowHtmls
+    array so EQVirtualTable.mount sees a flat list. Headers
+    + manager rows scroll together; sticky-header behaviour
+    isn't introduced here (premature given typical scale).
+  • TYPICAL SCALE — Supervisors page is ~20 rows (SKS) to
+    ~50 rows (Melbourne future). Virtualisation rarely bites
+    in practice; the wiring is for future-proofing + parity
+    with Contacts. Below threshold the innerHTML path runs.
+  • TEAR-DOWN — `window._managersVirtual.destroy()` is called
+    before the innerHTML swap so dangling scroll/resize
+    listeners can't leak across re-renders.
+  • SCOPE NOT TOUCHED — Roster editor virtualisation (the
+    third surface in SPRINT-PLAN §S2) is Phase 3 for a
+    SEPARATE PR. Roster editor has week-cell shape (not flat
+    list) + is the most-edited surface = highest blast radius.
+    Wants its own deep-dive review, not bundled here.
+  • FILES TOUCHED
+    - scripts/managers.js       (renderManagers desktop branch)
+    - scripts/app-state.js      (APP_VERSION 3.5.4 → 3.5.5)
+    - sw.js                     (CACHE bump only — managers.js
+                                 already in PRECACHE)
+    - index.html                (favicon cache-bust, this banner)
+  • TEST PLAN — same `?seed500` URL param trick from v3.5.4
+    works on Contacts; Supervisors page won't trigger virtual
+    mode without a bigger manager dataset. Verify:
+      (a) Supervisors page renders identically to v3.5.4 with
+          the default 2 managers (innerHTML path),
+      (b) category headers + manager rows interleave correctly,
+      (c) edit/archive/delete buttons fire as before.
 
   CHANGES IN v3.5.4  (S2 contacts virtualisation — Phase 1)
   ────────────────────────────────────────────────────────────
