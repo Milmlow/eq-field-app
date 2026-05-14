@@ -85,13 +85,6 @@ not yet addressed stay until Royce decides + closes them._
 - **Recommended fix:** virtualisation library (e.g. clusterize.js, ~3KB) for the few big-list views (contacts, roster editor). Alternatively, lit-html for surgical updates. MELBOURNE-SCALE-DESIGN.md §6.1 mentions the gap.
 - **Decision needed:** library vs roll-our-own, and when?
 
-#### FINDING #SEC2 — security [low] — verify-pin rate limit is in-memory only
-- **File:** `netlify/functions/verify-pin.js:49-50` — `const attempts = {}; const MAX_ATTEMPTS = 5; const LOCKOUT_MS = 15 * 60 * 1000;`
-- **Evidence:** Netlify Functions are stateless — each cold start resets the in-memory counter. Attacker can spam attempts across cold starts (~every 5min on low traffic).
-- **Enterprise tie-in:** enterprise pen-tests will flag this. Distributed rate limit (Supabase row lock, Upstash Redis, or Netlify Blobs) would be the proper fix.
-- **Recommended fix:** move to Supabase-backed rate limit table OR Netlify Blobs (free tier covers the low write volume). 1-2 hours of work.
-- **Decision needed:** acceptable for now given ~20 active users + 4-char PIN entropy? Defer to closer-to-launch?
-
 ### Parked findings — acknowledged, deliberately deferred
 
 - **FINDING #S3 — scalability [med] — realtime channel is org-scoped, not week-scoped.**
@@ -99,9 +92,10 @@ not yet addressed stay until Royce decides + closes them._
 - **FINDING #SEC1 — security [med] — magic-link approve/reject TTL is 7 days.**
   PARKED 2026-05-13 by Royce. Risk accepted: if a supervisor's email is compromised, the leave-approval blast radius is bounded (approving direct-report leave is not a financial transaction; the move can be reversed in-app; audit log captures the action). Revisit if SOC 2 audit demands shorter TTL, or if leave-approval scope ever widens beyond same-team direct reports.
 
-### Tracked findings — open as GitHub issues for scheduled work
+### Tracked findings — open as GitHub issues / migration files for scheduled work
 
 - **FINDING #C1 — code [low] — apprentices.js is 2271 lines.** Tracked via [issue #74](https://github.com/Milmlow/eq-field-app/issues/74) for scheduled refactor when convenient.
+- **FINDING #SEC2 — security [low] — verify-pin rate limit is in-memory only.** Phase 1 (schema design) shipped 2026-05-15 via [`migrations/2026-05-15_rate_limit_buckets_v1.sql`](migrations/2026-05-15_rate_limit_buckets_v1.sql) — PENDING, unapplied (per SPRINT-QUESTIONS Q9 default). Phase D will apply the migration and wire `bump_rate_limit()` into `netlify/functions/verify-pin.js` alongside server-side role checks. Original evidence: `verify-pin.js:49-50` uses an in-memory `attempts = {}` map, reset on every Netlify cold start.
 
 ### Closed / shipped findings
 
@@ -229,3 +223,24 @@ Three of the draft's count functions were wired against fields that don't exist 
 - AUDIT-REVIEW's prior findings (append-only; this session added one new entry below Night 1, no restructure)
 
 **Substrate hygiene:** not updated (eq-context substrate not visible from this worktree).
+
+---
+
+### Session — 2026-05-15 — SEC2 design + 2026-05-15 backlog merge
+
+**Look at this first:** Demo backlog cleared — six PRs landed in this session (v3.5.0 → v3.5.3). Mission B Item 1 (S1 SKS port to main) is now **unblocked from a code perspective** but still gated on **3–5 days clean soak of v3.5.3 on demo** per SPRINT-QUESTIONS Q5 default. Next check-in: 2026-05-18 to 2026-05-20.
+
+**Shipped this session:**
+- **SEC2 Phase 1 (design-only)** — `migrations/2026-05-15_rate_limit_buckets_v1.sql` created PENDING, SQL lifted verbatim from SPRINT-PLAN.md §SEC2 per SPRINT-QUESTIONS Q9 default. **File NOT applied** to EQ demo or SKS prod Supabase. Phase D will apply + wire.
+- FINDING #SEC2 moved from "Open findings" → "Tracked findings" with pointer to the migration file.
+- SPRINT-PLAN.md §SEC2 updated with status block (Phase 1 ✅ shipped, Phase D ⏳ pending).
+- **Backlog merge:** PRs #83 (v3.5.1 supervisor home), #84 (this entry's predecessor), #85 (v3.5.2 Site Reports HUB), #86 (audit slash command), #87 (axe-core CI scaffold), #89 (v3.5.3 S1 sliding-window) all merged into demo.
+- **PR #88 closed** (not merged) as superseded by #89 — confirmed in #89's body ("Supersedes PR #88").
+- Version-tuple conflicts on `sw.js` CACHE + `index.html` banner/cache-buster + `scripts/app-state.js` APP_VERSION between #85/#89 and prior merges were resolved locally taking the higher version each time. The `eqGetPrestartsTodayCount` (v3.5.2) and `eqGetPrestartsDraftCount` (v3.5.1) accessors in `scripts/site-reports.js` were both kept — different callers, different semantics.
+
+**Decisions punted for Royce:**
+1. **S1 SKS port (Mission B Item 1)** — runs as v3.5.4 on main after demo soak. Set a reminder for ~2026-05-18 to check demo health and green-light the port.
+2. **Mission B Item 2 (S2 virtualisation v3.5.5)** — now unblocked. STATE shape is settled in v3.5.3. Ready to start when you give the word.
+3. **Mission B Item 3 (S3 realtime window)** — still parked per AUDIT-REVIEW; needs explicit green-light.
+
+**FINDING status changes:** #SEC2 → tracked (migration file landed PENDING). #S1 → effectively closed by v3.5.3 (PR #89). The Closed/Shipped findings section below should pick up #S1 once you confirm demo soak.
