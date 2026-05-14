@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.79'; // cache-buster — bump on icon changes
+    var v = '3.4.80'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -206,8 +206,40 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.79
+  EQ Solves — Field  v3.4.80
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.80  (CSP hotfix — unblock SheetJS for Tender Sync)
+  ────────────────────────────────────────────────────────────
+  • THE BUG — Tender Sync (v3.4.79) import was DOA on the live
+    demo site: SheetJS CDN script blocked by CSP, parser dropped
+    to its "SheetJS (window.XLSX) not loaded" error path.
+  • ROOT CAUSE — Two CSP definitions live in the repo:
+      - _headers              (Netlify file-based headers)
+      - netlify.toml          ([[headers]] block)
+    netlify.toml takes precedence when both exist. v3.4.79 added
+    cdnjs.cloudflare.com to _headers but missed netlify.toml, so
+    the live CSP never trusted the SheetJS host.
+  • THE FIX — added `https://cdnjs.cloudflare.com` to the
+    script-src directive in netlify.toml. Both _headers and
+    netlify.toml now trust the same external origin.
+  • TODO (not done here) — two-CSP-source drift is the real
+    smell. Future cleanup should unify on netlify.toml and
+    delete _headers, or vice versa. Not urgent — both files now
+    say the same thing.
+  • FILES TOUCHED
+    - netlify.toml (script-src += https://cdnjs.cloudflare.com,
+      comment line updated to mention cdnjs)
+    - scripts/app-state.js (APP_VERSION 3.4.79 → 3.4.80)
+    - sw.js (CACHE bump + header comment)
+    - index.html (favicon cache-buster + this banner)
+    - CHANGELOG-v3.4.80.md (NEW)
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.79 (history)
 
   CHANGES IN v3.4.79  (Tender Pipeline — 5 screens + SheetJS parser + RLS)
   ────────────────────────────────────────────────────────────
