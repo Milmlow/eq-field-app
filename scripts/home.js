@@ -2,37 +2,48 @@
 // ─────────────────────────────────────────────────────────────
 // scripts/home.js  —  EQ Solves Field
 // v3.5.0 — Mobile-first home tile screen for staff role.
+// v3.5.1 — Role branch: same surface now renders a supervisor
+//          variant (6 tiles + action strip) when isManager === true.
 //
 // Gated by:
-//   - PostHog flag 'home_screen_v1' (default OFF, see scripts/flags.js)
-//   - role === 'staff' (i.e. !isManager)
-//   - viewport width < 768px (CSS media query in styles/home.css also
-//     enforces this; the JS check belt-and-braces against post-resize)
+//   - PostHog flag 'home_screen_v1' (default ON since v3.5.0).
+//   - Viewport width < 768px (CSS media query in styles/home.css
+//     also enforces this; the JS check belt-and-braces against
+//     post-resize).
+//   - Role:
+//       staff      (!isManager) → renderStaffHomeScreen
+//       supervisor (isManager)  → renderSupervisorHomeScreen
 //
 // Public API (called from index.html initApp() and PAGE_TITLES dispatch):
-//   window.renderHomeScreen()  — main render
-//   window.eqhTileTap(target)  — tile tap router (analytics + showPage)
-//   window.eqhOpenDrawer()     — open cog drawer
-//   window.eqhCloseDrawer()    — close cog drawer
+//   window.renderHomeScreen()    — top-level render; branches by role.
+//   window.eqhTileTap(target)    — tile tap router (analytics + showPage).
+//   window.eqhOpenDrawer()       — open cog drawer (builds the right one).
+//   window.eqhCloseDrawer()      — close any open drawer.
+//   window.eqhsActionStripTap()  — supervisor-only: tap the action strip.
 //
 // Load order: AFTER app-state.js (for STATE / TENANT), AFTER analytics.js
-// (for EQ_ANALYTICS.events), AFTER flags.js (for EQ_FLAGS), AFTER auth.js.
+// (for EQ_ANALYTICS.events), AFTER flags.js (for EQ_FLAGS), AFTER auth.js,
+// AFTER leave.js + site-reports.js (for window.eqGetPendingLeaveCount /
+// eqGetPrestartsDraftCount accessors used by the supervisor variant).
 // Plain JS, no bundler.
 //
 // Decisions baked in (see _proposals/mobile-first-nav/MOBILE-FIRST-NAV-PROPOSAL.md):
-//   A1 — staff mobile only (this file). Supervisor variant = Phase 2.
-//   B1 — Next-shift pill shown.
+//   A1 — staff mobile (v3.5.0). A2 — supervisor mobile (this version).
+//   B1 — Next-shift pill shown on staff. Supervisors get an action strip.
 //   C1 — Pre-starts tile hidden on SKS via TENANT_DISABLED_TABLES.sks.
-//   D  — Labels as proposed ("My schedule", "Timesheets", "Leave", "Pre-starts").
+//   D  — Labels as proposed.
 //   E  — Greeting "G'day, {name}" personality kept.
-//   H1 — Greeting shown once per day, then date line.
-//   I1 — Live counts on Schedule + Timesheets only.
+//   G1 — Supervisor tiles carry STATUS badges (e.g. "New") not COUNT
+//        badges. Counts live only in the action strip.
+//   H1 — Greeting shown once per day, then date line. Shared key
+//        'eqh_last_greet_day' for both roles.
+//   I1 — Live counts on Schedule + Timesheets (staff variant).
 // ─────────────────────────────────────────────────────────────
 
 (function () {
   'use strict';
 
-  // ── Helpers ──────────────────────────────────────────────────
+  // ── Shared helpers ───────────────────────────────────────────
 
   function getLoggedInName() {
     try { return sessionStorage.getItem('eq_logged_in_name') || ''; } catch (e) { return ''; }
@@ -60,9 +71,34 @@
     return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()];
   }
 
-  // Find this user's person row by case-insensitive name match. STATE.people is
-  // the source of truth; falls back to empty if it isn't loaded yet (loading
-  // state covers that).
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // isManager is a top-level let in auth.js; read it through window with
+  // a defensive fallback so this module never crashes if auth hasn't
+  // populated yet (cold-boot ordering).
+  function isManagerSession() {
+    try { return typeof window.isManager !== 'undefined' && window.isManager === true; }
+    catch (e) { return false; }
+  }
+
+  function isPrestartsAllowed() {
+    try {
+      const slug = (window.TENANT && TENANT.ORG_SLUG) ? TENANT.ORG_SLUG : 'eq';
+      if (slug !== 'sks') return true;
+      const disabled = (window.TENANT_DISABLED_TABLES && TENANT_DISABLED_TABLES.sks) || [];
+      return disabled.indexOf('prestarts') === -1;
+    } catch (e) { return true; }
+  }
+
+  // ── Staff-only helpers (schedule lookup, next-shift pill) ────
+
   function findCurrentPerson() {
     try {
       const name = (getLoggedInName() || '').toLowerCase().trim();
@@ -76,9 +112,6 @@
     return null;
   }
 
-  // Pull this user's upcoming shifts from STATE.schedule. STATE.schedule rows
-  // are roster cells keyed by person_id + week + day. We coerce ids via
-  // String() per the project-wide bigint/uuid drift rule.
   function getUserShifts() {
     try {
       const person = findCurrentPerson();
@@ -93,8 +126,6 @@
     } catch (e) { return []; }
   }
 
-  // Returns the Monday-format string ('DD.MM.YY') for the current week,
-  // matching STATE.currentWeek's format used elsewhere.
   function currentWeekKey() {
     if (window.STATE && STATE.currentWeek) return STATE.currentWeek;
     const d = new Date(), mon = new Date(d);
@@ -112,20 +143,17 @@
     return n;
   }
 
-  // Friday-of-current-week awareness for the Timesheets "Due Fri" badge.
   function isTimesheetDueSoon() {
-    const today = new Date().getDay(); // 0=Sun, 5=Fri
-    return today >= 3 && today <= 5;   // Wed-Fri shows the badge
+    const today = new Date().getDay();
+    return today >= 3 && today <= 5;
   }
 
-  // Best-effort "next shift" — the soonest shift this week or next week.
-  // Returns { site, day, week } or null. Day strings are 'mon'..'sun'.
   function findNextShift() {
     try {
       const all = getUserShifts();
       const wk = currentWeekKey();
       const dayOrder = ['mon','tue','wed','thu','fri','sat','sun'];
-      const todayIdx = ((new Date().getDay() + 6) % 7); // mon=0..sun=6
+      const todayIdx = ((new Date().getDay() + 6) % 7);
       let best = null;
       let bestScore = 1e9;
       for (let i = 0; i < all.length; i++) {
@@ -136,7 +164,7 @@
         const sameWeek = String(r.week) === wk;
         const score = sameWeek
           ? (dIdx < todayIdx ? 1e6 : dIdx)
-          : 100 + dIdx; // next week, push behind this week's remaining
+          : 100 + dIdx;
         if (score < bestScore) { bestScore = score; best = r; }
       }
       return best;
@@ -150,23 +178,92 @@
     return d + ' · ' + (shift.site || '');
   }
 
-  // Pre-starts visibility — hidden on SKS until module ships there (decision C1).
-  function isPrestartsAllowed() {
+  // ── Supervisor-only helpers (action strip + roster summary) ──
+
+  function countPendingLeave() {
     try {
-      const slug = (window.TENANT && TENANT.ORG_SLUG) ? TENANT.ORG_SLUG : 'eq';
-      if (slug !== 'sks') return true;
-      // SKS — check if prestart table is gated off
-      const disabled = (window.TENANT_DISABLED_TABLES && TENANT_DISABLED_TABLES.sks) || [];
-      return disabled.indexOf('prestarts') === -1;
-    } catch (e) { return true; }
+      if (typeof window.eqGetPendingLeaveCount === 'function') {
+        return window.eqGetPendingLeaveCount();
+      }
+    } catch (e) {}
+    return 0;
   }
 
-  // ── Render ───────────────────────────────────────────────────
+  function countPrestartsToSign() {
+    try {
+      if (!isPrestartsAllowed()) return 0;
+      if (typeof window.eqGetPrestartsDraftCount === 'function') {
+        return window.eqGetPrestartsDraftCount();
+      }
+    } catch (e) {}
+    return 0;
+  }
 
-  function renderHomeScreen() {
-    const mount = document.getElementById('page-home');
-    if (!mount) return; // guard against missing mount
+  // Roster summary line for the supervisor's Schedule tile subtitle.
+  function describeScheduleThisWeek() {
+    try {
+      const wk = (window.STATE && STATE.currentWeek) ? STATE.currentWeek : null;
+      const rows = (window.STATE && Array.isArray(STATE.schedule)) ? STATE.schedule : [];
+      const ppl = new Set(), sites = new Set();
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (wk && String(r.week) !== wk) continue;
+        if (r.site && String(r.site).trim() !== '') {
+          ppl.add(String(r.person_id));
+          sites.add(String(r.site).trim());
+        }
+      }
+      const p = ppl.size, s = sites.size;
+      if (p === 0) return 'No-one rostered yet';
+      return p + ' staff · ' + s + ' site' + (s === 1 ? '' : 's');
+    } catch (e) { return 'Roster overview'; }
+  }
 
+  function actionStripHTML() {
+    const leave = countPendingLeave();
+    const ps    = countPrestartsToSign();
+    const total = leave + ps;
+
+    if (total === 0) {
+      return '<div class="eqh-shift eqh-shift-allclear" aria-label="All clear">' +
+               '<div class="eqh-shift-icon eqh-shift-icon-ok" aria-hidden="true">✓</div>' +
+               '<div style="flex:1">' +
+                 '<div class="eqh-shift-label">All clear</div>' +
+                 '<div class="eqh-shift-value">Nothing waiting on you today</div>' +
+               '</div>' +
+             '</div>';
+    }
+
+    const parts = [];
+    if (leave > 0) parts.push(leave + ' leave to approve');
+    if (ps > 0)    parts.push(ps + ' pre-start' + (ps === 1 ? '' : 's'));
+    const line = parts.join(' · ');
+
+    return '<button class="eqh-shift eqh-shift-warn" onclick="eqhsActionStripTap()" aria-label="Needs your attention today">' +
+             '<div class="eqh-shift-icon eqh-shift-icon-warn" aria-hidden="true">⚠</div>' +
+             '<div style="flex:1;text-align:left">' +
+               '<div class="eqh-shift-label">Needs you today</div>' +
+               '<div class="eqh-shift-value">' + escapeHtml(line) + '</div>' +
+             '</div>' +
+             '<span class="eqh-shift-chev" aria-hidden="true">›</span>' +
+           '</button>';
+  }
+
+  // Tap the action strip — open the most-pressing queue. Order:
+  // leave (most time-sensitive) → pre-starts.
+  function eqhsActionStripTap() {
+    try {
+      if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.capture) {
+        window.EQ_ANALYTICS.capture('home_supervisor_action_tapped', {});
+      }
+    } catch (e) {}
+    if (countPendingLeave() > 0 && typeof window.showPage === 'function') return window.showPage('leave');
+    if (countPrestartsToSign() > 0 && typeof window.showPage === 'function') return window.showPage('prestart');
+  }
+
+  // ── Render: staff (v3.5.0 body, unchanged) ──────────────────
+
+  function renderStaffHomeScreen(mount) {
     const name = getLoggedInName();
     const firstName = (name || 'mate').split(/\s+/)[0];
     const showGreeting = isFirstSessionOfDay();
@@ -264,7 +361,6 @@
       '</div>' +
       '<div class="eqh-footer">EQ Field · v' + escapeHtml(version) + '</div>';
 
-    // PostHog page view (matches the showPage() pattern)
     try {
       if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events && window.EQ_ANALYTICS.events.pageViewed) {
         window.EQ_ANALYTICS.events.pageViewed({ page: 'home' });
@@ -272,58 +368,184 @@
     } catch (e) { /* never break boot */ }
   }
 
-  // ── Tile tap router ─────────────────────────────────────────
+  // ── Render: supervisor (v3.5.1) ──────────────────────────────
+
+  function renderSupervisorHomeScreen(mount) {
+    const name = getLoggedInName();
+    const firstName = (name || 'boss').split(/\s+/)[0];
+    const greetingHTML = isFirstSessionOfDay()
+      ? "G'day, " + escapeHtml(firstName)
+      : escapeHtml(formatToday());
+
+    const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+    const offlineBanner = offline
+      ? '<div class="eqh-offline" role="status"><span>⚠</span><span>You\'re offline — counts may be stale.</span></div>'
+      : '';
+
+    const scheduleSub = describeScheduleThisWeek();
+    const showPrestart = isPrestartsAllowed();
+    const version = (typeof APP_VERSION !== 'undefined') ? APP_VERSION : '?';
+
+    const prestartTile = showPrestart
+      ? '<button class="eqh-tile eqh-t-prestart" onclick="eqhTileTap(\'prestart\')" aria-label="Pre-starts">' +
+          '<span class="eqh-badge eqh-badge-new">New</span>' +
+          '<div class="eqh-tile-icon" aria-hidden="true">📋</div>' +
+          '<div>' +
+            '<div class="eqh-tile-title">Pre-starts</div>' +
+            '<div class="eqh-tile-sub">Sign off today</div>' +
+          '</div>' +
+        '</button>'
+      : '';
+
+    mount.innerHTML =
+      '<div class="eqh-header">' +
+        '<div>' +
+          '<div class="eqh-brand">EQ Field <span class="eqh-role-chip">SUPERVISOR</span></div>' +
+          '<div class="eqh-greeting">' + greetingHTML + '</div>' +
+        '</div>' +
+        '<button class="eqh-cog" onclick="eqhOpenDrawer()" aria-label="Settings and more">' +
+          '<span aria-hidden="true">⚙</span>' +
+        '</button>' +
+      '</div>' +
+      offlineBanner +
+      actionStripHTML() +
+      '<div class="eqh-tiles">' +
+        '<button class="eqh-tile eqh-t-schedule" onclick="eqhTileTap(\'roster\')" aria-label="Schedule">' +
+          '<div class="eqh-tile-icon" aria-hidden="true">📅</div>' +
+          '<div>' +
+            '<div class="eqh-tile-title">Schedule</div>' +
+            '<div class="eqh-tile-sub">' + escapeHtml(scheduleSub) + '</div>' +
+          '</div>' +
+        '</button>' +
+        '<button class="eqh-tile eqh-t-time" onclick="eqhTileTap(\'timesheets\')" aria-label="Timesheets">' +
+          '<div class="eqh-tile-icon" aria-hidden="true">⏱</div>' +
+          '<div>' +
+            '<div class="eqh-tile-title">Timesheets</div>' +
+            '<div class="eqh-tile-sub">Review &amp; approve</div>' +
+          '</div>' +
+        '</button>' +
+        '<button class="eqh-tile eqh-t-leave" onclick="eqhTileTap(\'leave\')" aria-label="Leave">' +
+          '<div class="eqh-tile-icon" aria-hidden="true">✈</div>' +
+          '<div>' +
+            '<div class="eqh-tile-title">Leave</div>' +
+            '<div class="eqh-tile-sub">Requests &amp; balance</div>' +
+          '</div>' +
+        '</button>' +
+        prestartTile +
+        '<button class="eqh-tile eqh-t-team" onclick="eqhTileTap(\'contacts\')" aria-label="Team">' +
+          '<div class="eqh-tile-icon" aria-hidden="true">👥</div>' +
+          '<div>' +
+            '<div class="eqh-tile-title">Team</div>' +
+            '<div class="eqh-tile-sub">Roster &amp; contacts</div>' +
+          '</div>' +
+        '</button>' +
+        '<button class="eqh-tile eqh-t-reports" onclick="eqhTileTap(\'dashboard\')" aria-label="Reports">' +
+          '<div class="eqh-tile-icon" aria-hidden="true">📊</div>' +
+          '<div>' +
+            '<div class="eqh-tile-title">Reports</div>' +
+            '<div class="eqh-tile-sub">Weekly hours &amp; site</div>' +
+          '</div>' +
+        '</button>' +
+      '</div>' +
+      '<div class="eqh-footer">EQ Field · v' + escapeHtml(version) + ' · Supervisor</div>';
+
+    try {
+      if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.events && window.EQ_ANALYTICS.events.pageViewed) {
+        window.EQ_ANALYTICS.events.pageViewed({ page: 'home-supervisor' });
+      }
+    } catch (e) { /* never break boot */ }
+  }
+
+  // ── Top-level render: pick by role ───────────────────────────
+
+  function renderHomeScreen() {
+    const mount = document.getElementById('page-home');
+    if (!mount) return;
+    if (isManagerSession()) return renderSupervisorHomeScreen(mount);
+    return renderStaffHomeScreen(mount);
+  }
+
+  // ── Tile tap router (shared) ────────────────────────────────
 
   function eqhTileTap(target) {
-    // Fire analytics first so we capture tile engagement even if the
-    // destination function throws.
     try {
       if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.capture) {
-        window.EQ_ANALYTICS.capture('home_tile_tapped', { tile: target });
+        const evt = isManagerSession() ? 'home_supervisor_tile_tapped' : 'home_tile_tapped';
+        window.EQ_ANALYTICS.capture(evt, { tile: target });
       }
     } catch (e) { /* swallow */ }
 
     if (typeof window.showPage === 'function') {
       window.showPage(target);
     } else {
-      // Last-resort fallback — should never fire in production.
       window.location.hash = '#' + target;
     }
   }
 
-  // ── Cog drawer (slide-up sheet) ─────────────────────────────
+  // ── Cog drawer (role-aware) ─────────────────────────────────
+  // One DOM node, rebuilt per open based on role. The role can change
+  // mid-session (PIN unlock), so we always recompute the content.
 
-  function buildDrawer() {
-    let host = document.getElementById('eqh-drawer');
-    if (host) return host;
-    host = document.createElement('div');
-    host.id = 'eqh-drawer';
-    host.className = 'eqh-drawer';
-    host.setAttribute('role', 'dialog');
-    host.setAttribute('aria-modal', 'true');
-    host.setAttribute('aria-label', 'More options');
-    host.innerHTML =
+  function drawerContentForRole(role) {
+    const close = role === 'supervisor' ? 'eqhCloseDrawer()' : 'eqhCloseDrawer()';
+    if (role === 'supervisor') {
+      return (
+        '<div class="eqh-drawer-sheet" onclick="event.stopPropagation()">' +
+          '<div class="eqh-drawer-handle"></div>' +
+          '<div class="eqh-drawer-title">More</div>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'editor\')"><span class="eqh-drawer-item-icon">✎</span> Edit roster</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'contacts\')"><span class="eqh-drawer-item-icon">👥</span> Contacts</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'sites\')"><span class="eqh-drawer-item-icon">📍</span> Sites</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'jobnumbers\')"><span class="eqh-drawer-item-icon">#</span> Job numbers</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'apprentices\')"><span class="eqh-drawer-item-icon">🎓</span> Apprentices</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'managers\')"><span class="eqh-drawer-item-icon">🛡</span> Supervision</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'data\')"><span class="eqh-drawer-item-icon">⇅</span> Import / Export</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'help\')"><span class="eqh-drawer-item-icon">❓</span> Help</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';if(typeof openAuditLog===\'function\')openAuditLog()"><span class="eqh-drawer-item-icon">📜</span> Audit log</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';if(typeof openPrivacyNotice===\'function\')openPrivacyNotice()"><span class="eqh-drawer-item-icon">🔒</span> Privacy notice</button>' +
+          '<button class="eqh-drawer-item" onclick="' + close + ';if(typeof logoutUser===\'function\')logoutUser()"><span class="eqh-drawer-item-icon">↪</span> Log out</button>' +
+          '<button class="eqh-drawer-close" onclick="' + close + '">Close</button>' +
+        '</div>'
+      );
+    }
+    return (
       '<div class="eqh-drawer-sheet" onclick="event.stopPropagation()">' +
         '<div class="eqh-drawer-handle"></div>' +
         '<div class="eqh-drawer-title">More</div>' +
-        '<button class="eqh-drawer-item" onclick="eqhCloseDrawer();showPage(\'contacts\')"><span class="eqh-drawer-item-icon">👥</span> Contacts</button>' +
-        '<button class="eqh-drawer-item" onclick="eqhCloseDrawer();showPage(\'calendar\')"><span class="eqh-drawer-item-icon">🗓</span> Calendar</button>' +
-        '<button class="eqh-drawer-item" onclick="eqhCloseDrawer();showPage(\'help\')"><span class="eqh-drawer-item-icon">❓</span> Help</button>' +
-        '<button class="eqh-drawer-item" onclick="eqhCloseDrawer();if(typeof openPrivacyNotice===\'function\')openPrivacyNotice()"><span class="eqh-drawer-item-icon">🔒</span> Privacy notice</button>' +
-        '<button class="eqh-drawer-item" onclick="eqhCloseDrawer();if(typeof logoutUser===\'function\')logoutUser()"><span class="eqh-drawer-item-icon">↪</span> Log out</button>' +
-        '<button class="eqh-drawer-close" onclick="eqhCloseDrawer()">Close</button>' +
-      '</div>';
-    host.addEventListener('click', function () { eqhCloseDrawer(); });
-    document.body.appendChild(host);
+        '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'contacts\')"><span class="eqh-drawer-item-icon">👥</span> Contacts</button>' +
+        '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'calendar\')"><span class="eqh-drawer-item-icon">🗓</span> Calendar</button>' +
+        '<button class="eqh-drawer-item" onclick="' + close + ';showPage(\'help\')"><span class="eqh-drawer-item-icon">❓</span> Help</button>' +
+        '<button class="eqh-drawer-item" onclick="' + close + ';if(typeof openPrivacyNotice===\'function\')openPrivacyNotice()"><span class="eqh-drawer-item-icon">🔒</span> Privacy notice</button>' +
+        '<button class="eqh-drawer-item" onclick="' + close + ';if(typeof logoutUser===\'function\')logoutUser()"><span class="eqh-drawer-item-icon">↪</span> Log out</button>' +
+        '<button class="eqh-drawer-close" onclick="' + close + '">Close</button>' +
+      '</div>'
+    );
+  }
+
+  function ensureDrawer() {
+    let host = document.getElementById('eqh-drawer');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'eqh-drawer';
+      host.className = 'eqh-drawer';
+      host.setAttribute('role', 'dialog');
+      host.setAttribute('aria-modal', 'true');
+      host.setAttribute('aria-label', 'More options');
+      host.addEventListener('click', function () { eqhCloseDrawer(); });
+      document.body.appendChild(host);
+    }
     return host;
   }
 
   function eqhOpenDrawer() {
-    const host = buildDrawer();
+    const role = isManagerSession() ? 'supervisor' : 'staff';
+    const host = ensureDrawer();
+    host.innerHTML = drawerContentForRole(role);
     host.classList.add('open');
     try {
       if (window.EQ_ANALYTICS && window.EQ_ANALYTICS.capture) {
-        window.EQ_ANALYTICS.capture('home_cog_opened', {});
+        const evt = role === 'supervisor' ? 'home_supervisor_cog_opened' : 'home_cog_opened';
+        window.EQ_ANALYTICS.capture(evt, {});
       }
     } catch (e) {}
   }
@@ -333,20 +555,7 @@
     if (host) host.classList.remove('open');
   }
 
-  // ── Util ─────────────────────────────────────────────────────
-
-  function escapeHtml(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   // ── Online/offline re-render ────────────────────────────────
-  // Re-render on connectivity flip so the banner appears/disappears
-  // without the user having to navigate away and back.
   window.addEventListener('online',  function () {
     if (typeof currentPage !== 'undefined' && currentPage === 'home') renderHomeScreen();
   });
@@ -355,8 +564,9 @@
   });
 
   // ── Expose ───────────────────────────────────────────────────
-  window.renderHomeScreen = renderHomeScreen;
-  window.eqhTileTap      = eqhTileTap;
-  window.eqhOpenDrawer   = eqhOpenDrawer;
-  window.eqhCloseDrawer  = eqhCloseDrawer;
+  window.renderHomeScreen   = renderHomeScreen;
+  window.eqhTileTap         = eqhTileTap;
+  window.eqhOpenDrawer      = eqhOpenDrawer;
+  window.eqhCloseDrawer     = eqhCloseDrawer;
+  window.eqhsActionStripTap = eqhsActionStripTap;
 })();

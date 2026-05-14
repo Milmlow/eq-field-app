@@ -313,3 +313,29 @@
   cursor: pointer;
   font-family: inherit;
 }
+
+/* ── v3.5.1 — Supervisor variant additions ─────────────────── */
+
+/* SUPERVISOR role chip next to the EQ Field brand mark. */
+.eqh-role-chip {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-lt);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.4px;
+  vertical-align: 1px;
+}
+
+/* Action strip: "All clear" (success) and "Needs you today" (warn). */
+.eqh-shift-allclear { cursor: default; }
+.eqh-shift-warn     { /* button-styled; uses default eqh-shift bg */ }
+.eqh-shift-icon-ok    { background: var(--green-lt); color: var(--green); }
+.eqh-shift-icon-warn  { background: var(--amber-lt); color: var(--amber); }
+
+/* Supervisor-only tile colour variants (Team + Reports). */
+.eqh-tile.eqh-t-team    .eqh-tile-icon { background: var(--blue-lt);  color: var(--blue);  }
+.eqh-tile.eqh-t-reports .eqh-tile-icon { background: var(--green-lt); color: var(--green); }
