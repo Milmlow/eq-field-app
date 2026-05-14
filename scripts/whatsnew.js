@@ -8,24 +8,24 @@
 // (e.g. next time there's a meaningful set of features to surface).
 // ─────────────────────────────────────────────────────────────
 
-const WHATSNEW_KEY     = 'eq.whatsnew.v3.4.22.seen';
-const WHATSNEW_VERSION = 'v3.4.22';
+const WHATSNEW_KEY     = 'eq.whatsnew.v3.4.81.seen';
+const WHATSNEW_VERSION = 'v3.4.81';
 
 // Highlights to surface — keep terse, role-relevant, action-relevant.
 // One line per row; 5–7 rows max so the card stays scannable.
 const WHATSNEW_HIGHLIGHTS = [
+  { icon: '📊', title: 'Tender Pipeline (NEW)',
+    body: 'Sync the SKS Smartsheet xlsx, pencil PMs and supervisors against likely jobs, spot clashes, then confirm the labour curve when a job lands.' },
+  { icon: '📝', title: 'Daily Site Diary',
+    body: 'Capture daily site activity, photos, and signatures. Lives under Site Reports alongside Toolbox Talks.' },
+  { icon: '🦺', title: 'Toolbox Talks',
+    body: 'Run and record toolbox talks with attendees, photos, and signoff. Queued for upload when offline.' },
   { icon: '✉', title: 'Friday supervisor digest',
     body: 'Auto-emails subscribed managers a weekly summary at noon Fridays. Opt out in your profile.' },
-  { icon: '🎂', title: 'Birthdays & work anniversaries',
-    body: 'New dashboard card lists who has a birthday or work milestone in the next 30 days.' },
   { icon: '⏱', title: 'Timesheet progress + reminders',
-    body: 'Inline progress bar shows weekly completion. Per-row "Send reminder" button on the pending list.' },
-  { icon: '🔓', title: 'Leave approvals show whose creds are unlocked',
-    body: 'Lock area now displays the active supervisor name — fixes the wrong-approver attribution bug.' },
-  { icon: '📅', title: 'Multi-day leave writes every day',
-    body: 'Approving a 3-day leave request now blocks all 3 days on the roster, not just the first.' },
-  { icon: '🧭', title: 'Nav reshuffle',
-    body: 'Timesheets moved out of Testing. Apprentices flagged BETA. Testing renamed "DO NOT USE".' },
+    body: 'Inline progress bar shows weekly completion. Per-row "Send reminder" button on the pending list. 8h/40h red-flag rule for outliers.' },
+  { icon: '🔓', title: 'Leave flow fixes',
+    body: 'Multi-day leave now blocks every day on the roster. Approver attribution shows the active supervisor. Withdraw / Resend / Archive all work on older rows.' },
 ];
 
 function _renderWhatsNew() {
@@ -51,7 +51,7 @@ function _renderWhatsNew() {
       <div style="display:flex;align-items:flex-start;gap:12px">
         <div style="flex:1;min-width:0">
           <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">What's new — ${WHATSNEW_VERSION}</div>
-          <div style="font-size:14px;font-weight:600;color:var(--navy);margin-top:2px">12 releases of updates landed in this version</div>
+          <div style="font-size:14px;font-weight:600;color:var(--navy);margin-top:2px">Major features since you last saw this card</div>
         </div>
         <button onclick="dismissWhatsNew()" title="Dismiss"
           style="background:none;border:none;font-size:18px;color:var(--ink-3);cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0">✕</button>
