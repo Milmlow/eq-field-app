@@ -1134,3 +1134,16 @@ function renderLeaveCalendar() {
   html += '</div>';
   document.getElementById('leave-cal-grid').innerHTML = html;
 }
+
+// v3.5.1: small accessor for the supervisor mobile home action strip.
+// `leaveRequests` is module-local so home.js can't reach it directly.
+window.eqGetPendingLeaveCount = function () {
+  try {
+    if (!Array.isArray(leaveRequests)) return 0;
+    let n = 0;
+    for (let i = 0; i < leaveRequests.length; i++) {
+      if (leaveRequests[i] && leaveRequests[i].status === 'Pending' && !leaveRequests[i].archived) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+};
