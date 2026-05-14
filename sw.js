@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.4.81
-const CACHE = 'eq-field-v3.4.83';
+// EQ Solves — Field  ·  Service Worker  v3.5.0
+const CACHE = 'eq-field-v3.5.0';
 
 const PRECACHE = [
   '/',
@@ -37,6 +37,9 @@ const PRECACHE = [
   '/scripts/site-reports.js',
   '/scripts/toolbox.js',
   '/scripts/diary.js',
+  // v3.5.0 — Mobile-first home tile screen (staff role, mobile viewport)
+  '/scripts/home.js',
+  '/styles/home.css',
 ];
 
 // Static assets that rarely change — cache-first is safe
@@ -100,10 +103,4 @@ self.addEventListener('fetch', event => {
         // v3.4.58: only cache successful responses. See cache-first branch.
         if (res.ok) {
           const c = res.clone();
-          caches.open(CACHE).then(cache => cache.put(event.request, c));
-        }
-        return res;
-      })
-      .catch(() => caches.match(event.request))
-  );
-});
+          caches.open(CACHE).then(cache => cache.p

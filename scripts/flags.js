@@ -28,7 +28,12 @@
     // Forward-looking — stay false until Phase 2 fires:
     'mt_tenant_resolver_v2': false,
     'mt_rls_strict':         false,
-    'mt_self_serve_signup':  false
+    'mt_self_serve_signup':  false,
+    // v3.5.0 — mobile-first home tile screen for staff role.
+    // Stays FALSE until per-tenant rollout. Flip true via PostHog
+    // (or override here) to enable. Affects only mobile viewport
+    // (< 768px) for users with role==='staff'. Desktop unchanged.
+    'home_screen_v1':        false
   };
 
   function isEnabled(flagKey) {

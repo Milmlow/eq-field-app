@@ -532,6 +532,13 @@
   var _kanbanShowBelowFloor = false;
   var _kanbanDeptFilter = ''; // '' = all depts
 
+  // v3.4.84 — Dashboard filter state
+  var _dashStageFilter = ''; // '' = all non-archived
+  var _dashDeptFilter  = ''; // '' = all depts
+
+  // v3.4.84 — Review stage filter: 'action' (likely+won) or 'all'
+  var _reviewStageFilter = 'action';
+
   function renderKanban() {
     ensureStyles();
     var host = document.getElementById('pipeline-content');
@@ -700,7 +707,8 @@
     var enrich = STATE.tenderEnrichment[S(t.id)];
     var noms = STATE.nominations.filter(function (n) { return sameId(n.tender_id, t.id); });
     var nomNames = noms.map(function (n) {
-      var p = STATE.people.find(function (q) { return sameId(q.id, n.person_id); });
+      var p = (STATE.people || []).find(function (q) { return sameId(q.id, n.person_id); })
+           || (STATE.managers || []).find(function (q) { return sameId(q.id, n.person_id); });
       var name = p ? p.name : (n.capacity_tag || '?');
       return '<span style="font-size:11px;color:var(--ink-2)">' + escapeHtml(name) + (n.role === 'pm' ? ' (PM)' : ' (Sup)') + '</span>';
     }).join(' · ');
@@ -751,8 +759,14 @@
     var pmNoms = noms.filter(function (n) { return n.role === 'pm'; });
     var supNoms = noms.filter(function (n) { return n.role === 'supervisor'; });
 
-    var managers = (STATE.people || []).filter(function (p) { return p.role === 'manager' && !p.archived; });
-    var supervisors = (STATE.people || []).filter(function (p) { return p.role === 'supervisor' && !p.archived; });
+    // v3.4.84 — use managers table (Contacts/Supervision) not people roster.
+    // PM → category 'Project Management'; Supervisor → category 'Supervisor'.
+    // Falls back to all non-archived contacts if the category bucket is empty.
+    var _allContacts = (STATE.managers || []).filter(function (m) { return !m.archived; });
+    var managers = _allContacts.filter(function (m) { return m.category === 'Project Management'; });
+    if (!managers.length) managers = _allContacts;
+    var supervisors = _allContacts.filter(function (m) { return m.category === 'Supervisor'; });
+    if (!supervisors.length) supervisors = _allContacts;
 
     function personOptions(list, selected) {
       return ['<option value="">— pick —</option>'].concat(list.map(function (p) {
@@ -960,6 +974,14 @@
         ? '<span class="pl-pill">Session active</span> <button class="pl-btn" style="font-size:11.5px;padding:3px 8px" onclick="window.EQ_TENDER_PIPELINE._endSession()">End session</button>'
         : '<button class="pl-btn pl-btn-primary" onclick="window.EQ_TENDER_PIPELINE._startSession()">Start Review Session</button>';
 
+      // v3.4.84 — stage filter for review queue
+      var reviewFilterOptions = [
+        { v: 'action', l: 'Likely + Won (action items)' },
+        { v: 'all',    l: 'All active stages' }
+      ].map(function (o) {
+        return '<option value="' + o.v + '"' + (o.v === _reviewStageFilter ? ' selected' : '') + '>' + o.l + '</option>';
+      }).join('');
+
       host.innerHTML = ''
         + '<div class="pl-wrap">'
         + '  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap;gap:12px">'
@@ -969,7 +991,10 @@
         + '        Ranked queue. Pencil PM and Supervisor inline. Push fully-enriched Won tenders straight to the roster — no full Confirm Curve trip required.'
         + '      </p>'
         + '    </div>'
-        + '    ' + sessionPill
+        + '    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+        + '      <select class="pl-select" id="pl-review-stage-filter" style="max-width:240px">' + reviewFilterOptions + '</select>'
+        + '      ' + sessionPill
+        + '    </div>'
         + '  </div>'
         + '  <div class="pl-queue">'
         + '    <div>'
@@ -981,6 +1006,13 @@
         + '    <aside class="pl-side">' + _renderNotesSiderail() + '</aside>'
         + '  </div>'
         + '</div>';
+
+      // Wire stage filter
+      var rfEl = document.getElementById('pl-review-stage-filter');
+      if (rfEl) rfEl.addEventListener('change', function () {
+        _reviewStageFilter = this.value;
+        renderReview();
+      });
     });
   }
 
@@ -1022,6 +1054,8 @@
     STATE.tenders.forEach(function (t) {
       if (t.archived_at) return;
       if (t.stage !== 'watch' && t.stage !== 'likely' && t.stage !== 'won' && t.stage !== 'confirmed') return;
+      // v3.4.84 — apply stage filter. 'action' = likely + won only (default; reduces watch/confirmed noise)
+      if (_reviewStageFilter === 'action' && t.stage !== 'likely' && t.stage !== 'won') return;
 
       var enr  = STATE.tenderEnrichment[S(t.id)] || null;
       var noms = STATE.nominations.filter(function (n) { return sameId(n.tender_id, t.id); });
@@ -1082,8 +1116,12 @@
 
   function _renderQueueRow(item) {
     var t = item.tender, enr = item.enrichment;
-    var managers    = (STATE.people || []).filter(function (p) { return p.role === 'manager'    && !p.archived; });
-    var supervisors = (STATE.people || []).filter(function (p) { return p.role === 'supervisor' && !p.archived; });
+    // v3.4.84 — managers table (same logic as openTenderPanel)
+    var _allContacts   = (STATE.managers || []).filter(function (m) { return !m.archived; });
+    var managers    = _allContacts.filter(function (m) { return m.category === 'Project Management'; });
+    if (!managers.length) managers = _allContacts;
+    var supervisors = _allContacts.filter(function (m) { return m.category === 'Supervisor'; });
+    if (!supervisors.length) supervisors = _allContacts;
 
     function personOptions(list, selected) {
       return ['<option value="">— pick —</option>'].concat(list.map(function (p) {
@@ -1704,9 +1742,32 @@
       return;
     }
     loadAll().then(function () {
-      var tenders = STATE.tenders.filter(function (t) { return !t.archived_at; });
+      // v3.4.84 — build dept options for filter
+      var _allNonArchived = STATE.tenders.filter(function (t) { return !t.archived_at; });
+      var deptSet = new Set();
+      _allNonArchived.forEach(function (t) { if (t.department) deptSet.add(t.department); });
+      var deptOptions = ['<option value="">All depts</option>'];
+      Array.from(deptSet).sort().forEach(function (d) {
+        deptOptions.push('<option value="' + escapeHtml(d) + '"' + (d === _dashDeptFilter ? ' selected' : '') + '>' + escapeHtml(d) + '</option>');
+      });
+      var stageOptions = [
+        { v: '', l: 'All stages' }, { v: 'watch', l: 'Watch (50%)' },
+        { v: 'likely', l: 'Likely (70–90%)' }, { v: 'won', l: 'Awaiting Promotion' },
+        { v: 'confirmed', l: 'Confirmed' }
+      ].map(function (o) {
+        return '<option value="' + o.v + '"' + (o.v === _dashStageFilter ? ' selected' : '') + '>' + o.l + '</option>';
+      }).join('');
+
+      // Apply filters
+      var tenders = _allNonArchived.filter(function (t) {
+        if (t.stage === 'lost') return false;
+        if (_dashStageFilter && t.stage !== _dashStageFilter) return false;
+        if (_dashDeptFilter  && t.department !== _dashDeptFilter) return false;
+        return true;
+      });
+
       var confirmed = tenders.filter(function (t) { return t.stage === 'confirmed'; });
-      var active = tenders.filter(function (t) { return t.stage !== 'confirmed' && t.stage !== 'lost'; });
+      var active = tenders.filter(function (t) { return t.stage !== 'confirmed'; });
 
       var totalPipelineValue = active.reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
       var confirmedValue = confirmed.reduce(function (s, t) { return s + (t.quote_value || 0); }, 0);
@@ -1759,8 +1820,15 @@
         var noms = STATE.nominations.filter(function (n) { return sameId(n.tender_id, t.id); });
         var pmNom = noms.find(function (n) { return n.role === 'pm'; });
         var supNom = noms.find(function (n) { return n.role === 'supervisor'; });
-        var pmPerson = pmNom && STATE.people.find(function (p) { return sameId(p.id, pmNom.person_id); });
-        var supPerson = supNom && STATE.people.find(function (p) { return sameId(p.id, supNom.person_id); });
+        // v3.4.84 — nominations now reference managers table; keep people fallback for old rows
+        var pmPerson = pmNom && (
+          (STATE.managers || []).find(function (m) { return sameId(m.id, pmNom.person_id); }) ||
+          (STATE.people   || []).find(function (p) { return sameId(p.id, pmNom.person_id); })
+        );
+        var supPerson = supNom && (
+          (STATE.managers || []).find(function (m) { return sameId(m.id, supNom.person_id); }) ||
+          (STATE.people   || []).find(function (p) { return sameId(p.id, supNom.person_id); })
+        );
         var finishDate = (enr.start_date_estimated && enr.duration_weeks)
           ? addWeeks(enr.start_date_estimated, enr.duration_weeks)
           : null;
@@ -1771,72 +1839,4 @@
           + '<td>' + dot + escapeHtml(stageLabel[t.stage] || t.stage) + '</td>'
           + '<td style="text-align:right;font-weight:600">' + fmtMoney(t.quote_value) + '</td>'
           + '<td style="text-align:center">' + (t.probability_pct != null ? t.probability_pct + '%' : '—') + '</td>'
-          + '<td>' + fmtDate(enr.start_date_estimated) + '</td>'
-          + '<td>' + fmtDate(finishDate) + '</td>'
-          + '<td style="text-align:center">' + (enr.duration_weeks ? enr.duration_weeks + 'w' : '—') + '</td>'
-          + '<td style="text-align:right">' + (enr.hours_estimated ? Math.round(enr.hours_estimated) + 'h' : '—') + '</td>'
-          + '<td>' + escapeHtml(pmPerson ? pmPerson.name : '—') + '</td>'
-          + '<td>' + escapeHtml(supPerson ? supPerson.name : '—') + '</td>'
-          + '<td>' + escapeHtml(t.department || '—') + '</td>'
-          + '</tr>';
-      }).join('');
-
-      host.innerHTML = ''
-        + '<div class="pl-wrap">'
-        + '  <h2 style="margin:0 0 14px">Pipeline Dashboard</h2>'
-        + '  <div class="pl-dash-stats">'
-        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + fmtMoney(totalPipelineValue) + '</div><div class="pl-stat-lbl">Active pipeline value</div></div>'
-        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + fmtMoney(confirmedValue) + '</div><div class="pl-stat-lbl">Confirmed value</div></div>'
-        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + Math.round(confirmedHours) + 'h</div><div class="pl-stat-lbl">Committed hours</div></div>'
-        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + active.length + '</div><div class="pl-stat-lbl">Active tenders</div></div>'
-        + '  </div>'
-        + '  <div class="pl-card" style="margin-bottom:16px">'
-        + '    <div class="pl-section-title" style="margin-bottom:8px">Weekly hours forecast (next 26 weeks)</div>'
-        + '    <div style="overflow-x:auto">' + chartHtml + '</div>'
-        + '  </div>'
-        + '  <div class="pl-card" style="padding:0;overflow:hidden">'
-        + '    <table class="pl-dash-table">'
-        + '      <thead><tr>'
-        + '        <th>Job</th><th>Client</th><th>Stage</th><th style="text-align:right">Value</th>'
-        + '        <th style="text-align:center">Prob</th><th>Start</th><th>Finish</th>'
-        + '        <th style="text-align:center">Dur</th><th style="text-align:right">Hours</th>'
-        + '        <th>PM</th><th>Supervisor</th><th>Dept</th>'
-        + '      </tr></thead>'
-        + '      <tbody>' + tableRows + '</tbody>'
-        + '    </table>'
-        + '  </div>'
-        + '</div>';
-    });
-  }
-
-  // =====================================================================
-  // Exports
-  // =====================================================================
-
-  window.EQ_TENDER_PIPELINE = {
-    loadAll:              loadAll,
-    renderImport:         renderImport,
-    renderKanban:         renderKanban,
-    renderReview:         renderReview,
-    renderConfirmCurve:   renderConfirmCurve,
-    renderPipelineDashboard: renderPipelineDashboard,
-    openTenderPanel:      openTenderPanel,
-    closeTenderPanel:     closeTenderPanel,
-    _applyImport:         _applyImport,
-    _cancelImport:        _cancelImport,
-    _savePanel:           _savePanel,
-    _startSession:        _startSession,
-    _endSession:          _endSession,
-    _logDecision:         _logDecision,
-    _quickDecision:       _quickDecision,
-    _goConfirmCurve:      _goConfirmCurve,
-    _confirmCurveSubmit:  _confirmCurveSubmit,
-    _saveRowPencillings:  _saveRowPencillings,
-    _advanceStage:        _advanceStage,
-    _quickPushToSchedule: _quickPushToSchedule,
-    _helpers: {
-      toMonday: toMonday, addWeeks: addWeeks, isoWeekKey: isoWeekKey,
-      fmtMoney: fmtMoney, fmtDate: fmtDate, deptValueFloor: deptValueFloor
-    }
-  };
-})();
+          + '<td>' + fmtDate(en

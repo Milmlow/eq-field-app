@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.83'; // cache-buster — bump on icon changes
+    var v = '3.5.0'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -45,6 +45,8 @@
 <link rel="stylesheet" href="styles/print.css">
 <link rel="stylesheet" href="styles/mobile.css">
 <link rel="stylesheet" href="styles/apprentices.css">
+<!-- v3.5.0 — Mobile-first home tile screen (gated by 'home_screen_v1' flag) -->
+<link rel="stylesheet" href="styles/home.css">
 
 <!-- ── Script load order matters — do not reorder ── -->
 <script src="scripts/app-state.js"></script>
@@ -78,6 +80,9 @@
 <script src="scripts/toolbox.js"></script>
 <script src="scripts/diary.js"></script>
 <script src="scripts/auth.js"></script>
+<!-- v3.5.0 — Mobile home tile screen. Must load after app-state.js,
+     analytics.js, flags.js, auth.js. Renders into #page-home. -->
+<script src="scripts/home.js"></script>
 <script src="scripts/apprentices.js"></script>
 <script src="scripts/journal.js"></script>
 <script src="scripts/tafe.js"></script>
@@ -206,8 +211,61 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.83
+  EQ Solves — Field  v3.5.0
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.0  (Mobile-first home tile screen — staff role, flag-gated)
+  ────────────────────────────────────────────────────────────
+  • First non-patch release since v3.0. Adds a mobile-first home
+    screen for the staff role: four tiles (My Schedule, Timesheets,
+    Leave, Pre-starts), a Next-shift pill, and a cog drawer for
+    everything else. Existing sidebar shell remains untouched for
+    supervisors and desktop users — flag-gated, default OFF, no
+    visible change on first deploy until the flag is flipped per
+    tenant.
+  • SCOPE — Phase 1 of the mobile-first navigation proposal in
+    _proposals/mobile-first-nav/. Supervisor variant + desktop role
+    shell are Phase 2 / Phase 3. Decisions A1/B1/C1/D/E/F/G1/H1/I1
+    baked in — see CHANGELOG-v3.5.0.md for the audit trail.
+  • FEATURE FLAG — 'home_screen_v1' in scripts/flags.js, default
+    FALSE. Routing only fires when:
+      (a) flag enabled (PostHog or DEFAULTS override)
+      (b) role==='staff' (i.e. !isManager)
+      (c) viewport < 768px (matchMedia check)
+    Anything else falls through to the existing schedule landing.
+  • FILES TOUCHED
+    - scripts/home.js                 (NEW)
+    - styles/home.css                 (NEW)
+    - scripts/flags.js                (add 'home_screen_v1': false)
+    - scripts/app-state.js            (APP_VERSION 3.4.84 → 3.5.0)
+    - index.html                      (link, script tag, #page-home
+                                       mount, PAGE_TITLES, render
+                                       dispatch, initApp routing,
+                                       favicon cache-buster)
+    - sw.js                           (CACHE bump + home.js/home.css
+                                       in PRECACHE)
+    - CHANGELOG-v3.5.0.md             (NEW)
+
+  CHANGES IN v3.4.84  (Pipeline UI polish — dropdowns, filters)
+  ────────────────────────────────────────────────────────────
+  • Enrichment slide-over PM + Supervisor dropdowns now pull from
+    STATE.managers (Contacts / Supervision screen) instead of the
+    labour-hire roster (STATE.people). PM bucket = category
+    'Project Management'; Supervisor = category 'Supervisor'.
+    Falls back to all non-archived contacts if either bucket is empty.
+  • Same fix applied to the Review queue inline PM/Supervisor pickers.
+  • Nomination name lookups updated in kanban cards + dashboard table
+    to check STATE.managers first, then STATE.people (backward compat
+    for any rows written against old people IDs).
+  • Pipeline Dashboard: added Stage + Dept filter controls. Defaults
+    to all non-archived/non-lost. Count badge shows filtered count.
+  • Review queue: added stage filter (default: Likely + Won only).
+    Reduces watch noise during fortnightly review meeting.
+  • FILES TOUCHED
+    - scripts/tender-pipeline.js (dropdowns, lookups, filters)
+    - scripts/app-state.js (APP_VERSION 3.4.83 → 3.4.84)
+    - sw.js (CACHE bump)
+    - CHANGELOG-v3.4.84.md (NEW)
 
   CHANGES IN v3.4.81  (Tender Sync actually working + What's New refresh)
   ────────────────────────────────────────────────────────────
@@ -2220,6 +2278,8 @@
   </div>
 
   <!-- Pages — content injected by render functions -->
+  <!-- v3.5.0 — Mobile-first home tile screen. Populated by scripts/home.js -->
+  <div class="page hidden" id="page-home"></div>
   <div class="page print-active" id="page-dashboard">
     <!-- v3.4.23: "What's new" banner — populated by scripts/whatsnew.js, dismissed via localStorage -->
     <div id="whatsnew-banner" style="display:none"></div>
@@ -2877,6 +2937,8 @@ const PAGE_TITLES = {
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
   prestart:'Prestart Briefings', toolbox:'Toolbox Talks', diary:'Daily Site Diary',
+  // v3.5.0 — Mobile-first home tile screen (staff role, mobile viewport)
+  home:'Home',
   // v3.4.79 — Tender Pipeline
   'pipeline-dashboard':     'Pipeline Dashboard',
   'pipeline-import':        'Tender Sync',
@@ -2915,7 +2977,8 @@ function showPage(id) {
 }
 
 function renderCurrentPage() {
-  if      (currentPage === 'dashboard')  renderDashboard();
+  if      (currentPage === 'home')       { if (typeof renderHomeScreen === 'function') renderHomeScreen(); }
+  else if (currentPage === 'dashboard')  renderDashboard();
   else if (currentPage === 'roster')     { renderRosterWeekNav(); renderRoster(); }
   else if (currentPage === 'schedule')   renderSchedule();
   else if (currentPage === 'contacts')   renderContacts();
@@ -3258,8 +3321,23 @@ async function initApp() {
   if (typeof agencyMode !== 'undefined' && agencyMode) {
     if (typeof applyAgencyMode === 'function') applyAgencyMode();
   } else if (!isManager) {
-    showPage('schedule');
-    mobileNav('schedule');
+    // v3.5.0 — route mobile staff to the home tile screen if the flag is on.
+    // Falls through to the existing schedule landing for desktop, flag-off,
+    // or if home.js failed to load. Safe defaults.
+    const _eqhWantsHome = (function () {
+      try {
+        if (!window.EQ_FLAGS || !window.EQ_FLAGS.isEnabled('home_screen_v1')) return false;
+        if (typeof window.renderHomeScreen !== 'function') return false;
+        if (typeof window.matchMedia !== 'function') return false;
+        return window.matchMedia('(max-width: 767px)').matches;
+      } catch (e) { return false; }
+    })();
+    if (_eqhWantsHome) {
+      showPage('home');
+    } else {
+      showPage('schedule');
+      mobileNav('schedule');
+    }
   }
 
   // v3.4.72: seed the state signature now so the first poll cycle doesn't
@@ -3757,78 +3835,4 @@ const eqAgent = (function() {
       </div>
       <div class="form-group">
         <label class="form-label">💼 Professional Goal</label>
-        <select class="form-input" id="ap-goal-prof-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('prof')"></select>
-        <textarea class="form-input" id="ap-goal-prof" rows="2" placeholder="Workplace behaviour, communication, leadership..."></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">🌱 Personal Goal</label>
-        <select class="form-input" id="ap-goal-personal-suggest" style="background:var(--surface);margin-bottom:6px" onchange="applyGoalSuggestion('personal')"></select>
-        <textarea class="form-input" id="ap-goal-personal" rows="2" placeholder="Something personal they want to achieve..."></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Notes</label>
-        <textarea class="form-input" id="ap-notes" rows="2" placeholder="Any extra context for supervisors"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-profile');document.getElementById('ap-person').disabled=false;">Cancel</button>
-      <button class="btn btn-primary" onclick="saveApprenticeProfile()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- Rotation modal -->
-<div class="modal-overlay" id="modal-apprentice-rotation">
-  <div class="modal" style="max-width:460px">
-    <div class="modal-header">
-      <h3 id="modal-rot-title">Add Rotation</h3>
-      <button class="modal-close" onclick="closeModal('modal-apprentice-rotation')">✕</button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="rot-apprentice-id">
-      <div class="form-group">
-        <label class="form-label">Project / Site Name</label>
-        <div id="rot-site-wrap"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Project Type</label>
-        <select class="form-input" id="rot-type" style="background:var(--surface)">
-          <option>Commercial</option>
-          <option>Data Centre</option>
-          <option>Healthcare</option>
-          <option>Industrial</option>
-          <option>Residential</option>
-          <option>Infrastructure</option>
-          <option>Other</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Start Date</label>
-          <input class="form-input" id="rot-start" type="date">
-        </div>
-        <div class="form-group">
-          <label class="form-label">End Date (optional)</label>
-          <input class="form-input" id="rot-end" type="date">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Supervising Tradesman</label>
-        <div id="rot-supervisor-wrap"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Main Work Performed</label>
-        <textarea class="form-input" id="rot-main-work" rows="2" placeholder="What did they mainly work on?"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('modal-apprentice-rotation')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveRotation()">Save</button>
-    </div>
-  </div>
-</div>
-
-
-
-<!-- TAFE holidays modal -->
-<div class="modal-overlay" id="modal-tafe-holidays"><div class="modal" style="max-width:520px"><div class="modal-header"><h3>📆 TAFE Holiday Ranges</h3><button class="modal-close" onclick="closeModal('modal-tafe-holidays')">✕</button></div><div class="modal-body"><p style="font-size:12px;color:var(--ink-3);margin-bottom:14px">Apprentice TAFE follows school holidays. "Apply TAFE Day" skips any date inside these ranges so apprentices stay rostered for work.</p><div id="tafe-holidays-list" style="margin-bottom:14px"></div><div style="display:flex;gap:6px;flex-wrap:wrap"><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">Start</label><input class="form-input" id="tafe-holiday-start" type="date"></div><div class="form-group" style="flex:1;margin:0;min-width:120px"><label class="form-label">End</label><input class="form-input" id="tafe-holiday-end" type="date"></div></div><div class="form-group" style="margin-top:8px"><label class="form-label">Label <span style="font-size:10px;color:var(--ink-3);font-weight:400">(optional, e.g. "Term 2 break")</span></label><input class="form-input" id="tafe-holiday-label" placeholder="e.g. Term 2 break"></div><div style="display:flex;justify-content
+      
