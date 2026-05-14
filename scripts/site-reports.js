@@ -1,9 +1,13 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
 // scripts/site-reports.js  —  EQ Solves Field
-// Site Reports module — v1 covers Prestart only.
-// v2 will add Toolbox; v3 Daily Diary; v4 Weekly Report + DOCX export.
-// Depends on: app-state.js, utils.js, supabase.js, audit.js, permissions.js
+// Site Reports v1 — Prestart Briefings.
+// v3.4.76 refactor: photos / signature pad / offline queue extracted
+// to scripts/site-reports-shared.js. This module keeps only Prestart-
+// specific logic: HRCW categories, crew sign-off shape, dual-source
+// notice pointing users away from sks-field-reports.netlify.app.
+// Depends on: app-state.js, utils.js, supabase.js, audit.js,
+//             permissions.js, site-reports-shared.js
 // ─────────────────────────────────────────────────────────────
 
 // ── Module state ────────────────────────────────────────────
@@ -11,9 +15,7 @@ let prestartCache       = [];
 let prestartDraft       = null;
 let prestartCurrentId   = null;
 
-// v3.4.54 pattern: per-action inflight guard. Prevents iPad double-tap
-// from firing duplicate Save / Submit (which would write duplicate
-// audit entries and, after v2 emails ship, duplicate notifications).
+// v3.4.54 pattern: per-action inflight guard against iPad double-tap.
 const _prestartInflight = new Set();
 
 // ── HRCW categories ─────────────────────────────────────────
@@ -42,6 +44,41 @@ const HRCW_CATEGORIES = [
   { id: 'press',  label: 'Pressure vessels' }
 ];
 
+// ── Shared controllers (v3.4.76) ────────────────────────────
+const prestartPhotos = window.SiteReportsShared.createPhotoController({
+  getDraft:  function () { return prestartDraft; },
+  onChange:  renderPrestartForm,
+  prefix:    'prestart',
+  maxPhotos: 8,
+  callbackNames: {
+    add:        'addPrestartPhoto',
+    remove:     'removePrestartPhoto',
+    setCaption: 'setPrestartPhotoCaption',
+    lightbox:   'openPrestartPhotoLightbox',
+  },
+});
+
+const prestartSignature = window.SiteReportsShared.createSignatureController({
+  getDraft:      function () { return prestartDraft; },
+  attendanceKey: 'crew',
+  onChange:      renderPrestartForm,
+  prefix:        'prestart',
+  workflowLabel: 'Prestart',
+});
+
+const prestartQueue = window.SiteReportsShared.createOfflineQueue({
+  storageKey:    'eq_prestart_offline_queue_v1',
+  pillElementId: 'prestart-offline-pill',
+  pageName:      'prestart',
+  table:         'prestarts',
+  reloadAndRender: async function () {
+    await loadPrestarts();
+    if (typeof currentPage !== 'undefined' && currentPage === 'prestart') renderPrestart();
+  },
+});
+
+prestartQueue.startReplayListener(1500);
+
 // ── Load ─────────────────────────────────────────────────────
 async function loadPrestarts() {
   try {
@@ -69,8 +106,8 @@ function renderPrestart() {
   const el = document.getElementById('page-prestart-list');
   if (!el) return;
 
-  // v3.4.68: ensure the mobile + notice stylesheet is in the DOM, once
-  _injectPrestartStyleOnce();
+  window.SiteReportsShared.injectMobileStyle('prestart');
+  _injectPrestartNoticeStyleOnce();
 
   if (!window.EQ_PERMS || !window.EQ_PERMS.can('reports.prestart.view')) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">🔒</div><p>Supervision access required.</p></div>';
@@ -81,7 +118,6 @@ function renderPrestart() {
   const todays = prestartCache.filter(r => r.briefing_date === today);
   const past   = prestartCache.filter(r => r.briefing_date !== today);
 
-  // v3.4.68: dual-source notice prepended; dismissible via localStorage
   let html = _renderPrestartDualSourceNotice();
   html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface)">';
   html +=   '<div>';
@@ -140,7 +176,7 @@ function openPrestartForm(id) {
   if (id) {
     const existing = prestartCache.find(r => String(r.id) === String(id));
     prestartDraft = existing
-      ? JSON.parse(JSON.stringify(existing))   // deep clone — never mutate the cache directly
+      ? JSON.parse(JSON.stringify(existing))
       : _prestartFresh();
   } else {
     prestartDraft = _prestartFresh();
@@ -149,12 +185,11 @@ function openPrestartForm(id) {
   if (typeof openModal === 'function') openModal('modal-prestart');
 }
 
-// Called by the list — id-coerce String for tenant-portability (v3.4.55 lesson).
 function openPrestart(id) { openPrestartForm(id); }
 
 function _prestartFresh() {
   return {
-    site_abbr:          '',
+    site_abbr:        '',
     briefing_date:    _prestartTodayIso(),
     briefing_time:    _prestartNowHHMM(),
     sks_rep:          (typeof currentManagerName !== 'undefined' && currentManagerName) || '',
@@ -166,6 +201,7 @@ function _prestartFresh() {
     swms_refs:        '',
     hazards:          '',
     permits:          '',
+    photos:           [],
     status:           'draft'
   };
 }
@@ -249,9 +285,9 @@ function renderPrestartForm() {
     + '<div style="padding:12px 14px;border-top:1px solid var(--border)">'
     +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
     +     '<div style="font-weight:600;font-size:12px;color:var(--ink)">Photos</div>'
-    +     '<div style="font-size:10px;color:var(--ink-3)">' + (d.photos || []).length + ' / ' + PRESTART_MAX_PHOTOS + '</div>'
+    +     '<div style="font-size:10px;color:var(--ink-3)">' + (d.photos || []).length + ' / ' + prestartPhotos.maxPhotos + '</div>'
     +   '</div>'
-    +   _renderPrestartPhotos(d)
+    +   prestartPhotos.renderList(d)
     + '</div>'
 
     + '<div style="padding:12px 14px;border-top:1px solid var(--border)">'
@@ -268,8 +304,7 @@ function renderPrestartForm() {
     +   '<button class="btn" onclick="submitPrestart()"' + (submitOK ? '' : ' disabled style="opacity:.5;cursor:not-allowed"') + '>Submit</button>'
     + '</div>';
 
-  // v3.4.68: refresh the offline pill any time the form re-renders
-  _updatePrestartOfflineBadge();
+  prestartQueue.updateBadge();
 }
 
 function _renderPrestartCrew(d) {
@@ -281,8 +316,6 @@ function _renderPrestartCrew(d) {
     + '</div>';
   }
   const rows = d.crew.map(function (c, i) {
-    // v3.4.68: render the actual signature image when present;
-    // fall back to ✓ for legacy tap-to-sign records.
     let tick;
     if (c.signed_at && c.signature_image) {
       tick = '<img src="' + esc(c.signature_image) + '" alt="signed" style="height:34px;width:auto;max-width:90px;background:#fff;border:1px solid var(--border);border-radius:3px;padding:2px;flex-shrink:0">';
@@ -329,17 +362,13 @@ function addPrestartCrewFromRoster() {
     if (typeof showToast === 'function') showToast('Pick a site first');
     return;
   }
-  // site_abbr IS the join key — no lookup needed beyond confirming
-  // the roster has people on that abbr for the chosen day.
   const siteAbbr = prestartDraft.site_abbr;
-  // Roster weeks are dd.mm.yy Monday-keyed. Reuse leave.js's getWeekForDate.
   const wk     = (typeof getWeekForDate === 'function') ? getWeekForDate(prestartDraft.briefing_date) : null;
   const dayKey = _prestartDayKey(prestartDraft.briefing_date);
   if (!wk || !dayKey) {
     if (typeof showToast === 'function') showToast('Could not resolve roster day from date');
     return;
   }
-
   const matches = (STATE.schedule || []).filter(function (s) {
     return s.week === wk && s[dayKey] === siteAbbr;
   });
@@ -347,9 +376,6 @@ function addPrestartCrewFromRoster() {
     if (typeof showToast === 'function') showToast('No one rostered to ' + siteAbbr + ' on ' + dayKey.toUpperCase() + ' for week ' + wk);
     return;
   }
-
-  // Merge: keep existing signatures, add any new names from the roster.
-  // person_id matching is id-coerced via String() for tenant portability (v3.4.55 lesson).
   const existing = new Set((prestartDraft.crew || []).map(function (c) { return c.name; }));
   matches.forEach(function (m) {
     if (!existing.has(m.name)) {
@@ -365,8 +391,6 @@ function addPrestartCrewFromRoster() {
 }
 
 function addPrestartCrewManual() {
-  // v3.4.51 lesson: HTML-escape anything that flows to a textContent slot
-  // OR to an email body. Names go to both, so trim + clamp length here.
   const raw = prompt('Crew member name (e.g. visiting subbie, late add)');
   if (!raw) return;
   const name = String(raw).trim().slice(0, 80);
@@ -377,10 +401,7 @@ function addPrestartCrewManual() {
 }
 
 function signPrestartCrew(i) {
-  // v3.4.68: opens signature canvas instead of immediate-stamping.
-  // openPrestartSignatureModal handles the idempotency guard.
-  if (!prestartDraft || !prestartDraft.crew || !prestartDraft.crew[i]) return;
-  openPrestartSignatureModal(i);
+  prestartSignature.openModal(i);
 }
 
 function removePrestartCrew(i) {
@@ -395,9 +416,6 @@ function canSubmitPrestart(d) {
   if (!d.site_abbr) return false;
   if (!d.works_scope || !d.works_scope.trim()) return false;
   if (!d.crew || !d.crew.length) return false;
-  // Require at least one signed crew member before submit — guards against
-  // an accidental "Submit" tap when the supervisor hasn't actually run the
-  // brief. v2 will tighten to "all crew signed."
   return d.crew.some(function (c) { return c && c.signed_at; });
 }
 
@@ -461,8 +479,6 @@ async function submitPrestart() {
 }
 
 async function _persistPrestart(record) {
-  // org_id is stamped automatically by sbFetch via ORG_TABLES (app-state.js).
-  // No manual org_id here — single source of truth.
   const payload = {
     site_abbr:        record.site_abbr || null,
     briefing_date:    record.briefing_date,
@@ -482,32 +498,7 @@ async function _persistPrestart(record) {
     submitted_by:     record.submitted_by || null,
     created_by:       record.created_by || (typeof currentManagerName !== 'undefined' && currentManagerName) || 'unknown'
   };
-
-  const method = prestartCurrentId ? 'PATCH' : 'POST';
-  const path = prestartCurrentId
-    ? 'prestarts?id=eq.' + encodeURIComponent(prestartCurrentId)
-    : 'prestarts';
-
-  // v3.4.68: offline-first write path. Honest detection via navigator.onLine;
-  // if offline, queue and return a synthetic local id so the UX continues.
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    const localId = prestartCurrentId || ('local_' + Date.now() + '_' + Math.floor(Math.random() * 1000));
-    _enqueuePrestartWrite(method, path, payload, localId);
-    if (typeof showToast === 'function') showToast('Offline — saved locally, will sync when connected');
-    return { id: localId, _offline: true };
-  }
-
-  try {
-    const ret = await sbFetch(path, method, payload, 'return=representation');
-    if (Array.isArray(ret) && ret[0]) return ret[0];
-    return prestartCurrentId ? { id: prestartCurrentId } : { id: null };
-  } catch (e) {
-    // Online-but-failed (transient network hiccup, 5xx). Queue rather than lose work.
-    const localId = prestartCurrentId || ('local_' + Date.now() + '_' + Math.floor(Math.random() * 1000));
-    _enqueuePrestartWrite(method, path, payload, localId);
-    if (typeof showToast === 'function') showToast('Network hiccup — saved locally, will sync');
-    return { id: localId, _offline: true };
-  }
+  return prestartQueue.persist(record, prestartCurrentId, payload);
 }
 
 // ── Internal helpers ────────────────────────────────────────
@@ -539,7 +530,6 @@ function _formatAuTime(iso) {
 function _prestartDayKey(iso) {
   if (!iso) return null;
   const d = new Date(iso);
-  // JS getDay() — Sun=0..Sat=6. Roster uses Mon-first keys.
   const map = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
   return map[d.getDay()];
 }
@@ -549,317 +539,15 @@ function _siteLabelForLog(d) {
   return site ? site.name : (d.site_abbr || 'no site');
 }
 
-// ══════════════════════════════════════════════════════════════
-// v3.4.68 — MVP additions to bring prestart up to "Ben can use it
-// daily" parity with sks-field-reports v29:
-//   1. Photos (max 8 per prestart, resized + JPEG-compressed,
-//      stored inline as base64 in prestarts.photos JSONB)
-//   2. Signature pad (HTML5 canvas, base64 PNG stored on the
-//      crew[i].signature_image alongside signed_at/signed_by)
-//   3. Offline write queue (localStorage-backed, replays on
-//      navigator 'online' + page load)
-//   4. Mobile-responsive CSS for form + signature modal
-//   5. Dual-source notice ("EQ Field is the new home for prestarts")
-// ══════════════════════════════════════════════════════════════
-
-// ── 1. Photos ─────────────────────────────────────────────────
-const PRESTART_MAX_PHOTOS    = 8;
-const PRESTART_PHOTO_MAX_DIM = 1600;
-const PRESTART_PHOTO_QUALITY = 0.7;
-
-function addPrestartPhoto(fileInput) {
-  if (!prestartDraft) return;
-  if (!fileInput.files || !fileInput.files[0]) return;
-  if ((prestartDraft.photos || []).length >= PRESTART_MAX_PHOTOS) {
-    if (typeof showToast === 'function') showToast('Max ' + PRESTART_MAX_PHOTOS + ' photos');
-    return;
-  }
-  const file = fileInput.files[0];
-  if (!/^image\//.test(file.type)) {
-    if (typeof showToast === 'function') showToast('Image files only');
-    return;
-  }
-  _resizeImageToBase64(file, function (base64) {
-    if (!base64) {
-      if (typeof showToast === 'function') showToast('Photo too large or unreadable');
-      return;
-    }
-    if (!Array.isArray(prestartDraft.photos)) prestartDraft.photos = [];
-    prestartDraft.photos.push({
-      id:       'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      caption:  '',
-      base64:   base64,
-      taken_at: new Date().toISOString(),
-      taken_by: (typeof currentManagerName !== 'undefined' && currentManagerName) || null
-    });
-    fileInput.value = '';
-    renderPrestartForm();
-  });
-}
-
-function _resizeImageToBase64(file, callback) {
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const img = new Image();
-    img.onload = function () {
-      let width = img.width;
-      let height = img.height;
-      const max = PRESTART_PHOTO_MAX_DIM;
-      if (width > max || height > max) {
-        const scale = Math.min(max / width, max / height);
-        width  = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      try { callback(canvas.toDataURL('image/jpeg', PRESTART_PHOTO_QUALITY)); }
-      catch (err) { callback(null); }
-    };
-    img.onerror = function () { callback(null); };
-    img.src = e.target.result;
-  };
-  reader.onerror = function () { callback(null); };
-  reader.readAsDataURL(file);
-}
-
-function removePrestartPhoto(i) {
-  if (!prestartDraft || !prestartDraft.photos) return;
-  prestartDraft.photos.splice(i, 1);
-  renderPrestartForm();
-}
-
-function setPrestartPhotoCaption(i, caption) {
-  // No re-render — would lose textarea focus mid-typing
-  if (!prestartDraft || !prestartDraft.photos || !prestartDraft.photos[i]) return;
-  prestartDraft.photos[i].caption = caption;
-}
-
-function openPrestartPhotoLightbox(i) {
-  if (!prestartDraft || !prestartDraft.photos || !prestartDraft.photos[i]) return;
-  const p = prestartDraft.photos[i];
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;cursor:zoom-out';
-  overlay.onclick = function () { overlay.remove(); };
-  const img = document.createElement('img');
-  img.src = p.base64;
-  img.style.cssText = 'max-width:100%;max-height:90vh;object-fit:contain';
-  overlay.appendChild(img);
-  document.body.appendChild(overlay);
-}
-
-function _renderPrestartPhotos(d) {
-  const photos = d.photos || [];
-  const grid = photos.map(function (p, i) {
-    const cap = p.caption
-      ? '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);color:#fff;font-size:9px;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(p.caption) + '</div>'
-      : '';
-    return '<div style="position:relative;width:84px;height:84px;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;flex-shrink:0">'
-      + '<img src="' + esc(p.base64) + '" style="width:100%;height:100%;object-fit:cover" onclick="openPrestartPhotoLightbox(' + i + ')">'
-      + '<button onclick="removePrestartPhoto(' + i + ');event.stopPropagation()" title="Remove" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center">✕</button>'
-      + cap
-    + '</div>';
-  }).join('');
-  const addBtn = photos.length < PRESTART_MAX_PHOTOS
-    ? '<label style="width:84px;height:84px;border:1px dashed var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:var(--surface);font-size:10px;color:var(--ink-3);user-select:none;flex-shrink:0">'
-      + '<span style="font-size:22px;line-height:1">📷</span>'
-      + '<span style="margin-top:2px">Add photo</span>'
-      + '<input type="file" accept="image/*" capture="environment" onchange="addPrestartPhoto(this)" style="display:none">'
-    + '</label>'
-    : '';
-  const captionInputs = photos.length
-    ? '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'
-      + photos.map(function (p, i) {
-        return '<input type="text" placeholder="Caption photo ' + (i + 1) + '" value="' + esc(p.caption || '') + '" oninput="setPrestartPhotoCaption(' + i + ', this.value)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit">';
-      }).join('')
-    + '</div>'
-    : '';
-  return '<div style="display:flex;flex-wrap:wrap;gap:6px">' + grid + addBtn + '</div>' + captionInputs;
-}
-
-// ── 2. Signature pad ──────────────────────────────────────────
-let _sigCanvasState = null;
-
-function openPrestartSignatureModal(crewIndex) {
-  if (!prestartDraft || !prestartDraft.crew[crewIndex]) return;
-  if (prestartDraft.crew[crewIndex].signed_at) return; // idempotent
-  const name = prestartDraft.crew[crewIndex].name;
-  let modal = document.getElementById('modal-prestart-signature');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'modal-prestart-signature';
-    modal.innerHTML =
-        '<div class="modal" style="max-width:480px;width:92vw">'
-      +   '<div class="modal-header">'
-      +     '<h3 id="sig-title" style="margin:0">Sign — </h3>'
-      +     '<button class="modal-close" onclick="closePrestartSignature()">✕</button>'
-      +   '</div>'
-      +   '<div class="modal-body" style="padding:14px">'
-      +     '<div style="font-size:11px;color:var(--ink-3);margin-bottom:6px">Sign with your finger or mouse — stamps signed_at + signed_by onto the briefing.</div>'
-      +     '<canvas id="sig-canvas" style="width:100%;height:200px;background:#fff;border:1px solid var(--border);border-radius:8px;touch-action:none;display:block"></canvas>'
-      +     '<div style="display:flex;gap:8px;align-items:center;margin-top:12px">'
-      +       '<button class="btn btn-secondary btn-sm" onclick="clearPrestartSignature()">Clear</button>'
-      +       '<div style="flex:1"></div>'
-      +       '<button class="btn btn-secondary btn-sm" onclick="closePrestartSignature()">Cancel</button>'
-      +       '<button class="btn" id="sig-save-btn">Save signature</button>'
-      +     '</div>'
-      +   '</div>'
-      + '</div>';
-    document.body.appendChild(modal);
-  }
-  document.getElementById('sig-title').textContent = 'Sign — ' + name;
-  const saveBtn = document.getElementById('sig-save-btn');
-  if (saveBtn) saveBtn.onclick = function () { savePrestartSignature(crewIndex); };
-  if (typeof openModal === 'function') openModal('modal-prestart-signature');
-  setTimeout(_initSignatureCanvas, 30);
-}
-
-function _initSignatureCanvas() {
-  const canvas = document.getElementById('sig-canvas');
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width  = rect.width  * dpr;
-  canvas.height = rect.height * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.lineWidth   = 2.2;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.strokeStyle = '#1A1A2E';
-  _sigCanvasState = { canvas: canvas, ctx: ctx, drawing: false, hasInk: false };
-  function pos(evt) {
-    const r = canvas.getBoundingClientRect();
-    const t = evt.touches ? evt.touches[0] : evt;
-    return { x: t.clientX - r.left, y: t.clientY - r.top };
-  }
-  function start(evt) { evt.preventDefault(); _sigCanvasState.drawing = true; const p = pos(evt); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
-  function move(evt)  { if (!_sigCanvasState.drawing) return; evt.preventDefault(); const p = pos(evt); ctx.lineTo(p.x, p.y); ctx.stroke(); _sigCanvasState.hasInk = true; }
-  function end(evt)   { if (evt) evt.preventDefault(); _sigCanvasState.drawing = false; }
-  canvas.addEventListener('mousedown',  start);
-  canvas.addEventListener('mousemove',  move);
-  canvas.addEventListener('mouseup',    end);
-  canvas.addEventListener('mouseleave', end);
-  canvas.addEventListener('touchstart', start);
-  canvas.addEventListener('touchmove',  move);
-  canvas.addEventListener('touchend',   end);
-}
-
-function clearPrestartSignature() {
-  if (!_sigCanvasState) return;
-  const c = _sigCanvasState.canvas;
-  _sigCanvasState.ctx.clearRect(0, 0, c.width, c.height);
-  _sigCanvasState.hasInk = false;
-}
-
-function savePrestartSignature(crewIndex) {
-  if (!_sigCanvasState || !_sigCanvasState.hasInk) {
-    if (typeof showToast === 'function') showToast('Sign first — empty signatures don\'t count');
-    return;
-  }
-  const dataUri = _sigCanvasState.canvas.toDataURL('image/png');
-  if (!prestartDraft || !prestartDraft.crew[crewIndex]) return;
-  prestartDraft.crew[crewIndex].signature_image = dataUri;
-  prestartDraft.crew[crewIndex].signed_at = new Date().toISOString();
-  prestartDraft.crew[crewIndex].signed_by = (typeof currentManagerName !== 'undefined' && currentManagerName) || null;
-  closePrestartSignature();
-  renderPrestartForm();
-}
-
-function closePrestartSignature() {
-  if (typeof closeModal === 'function') closeModal('modal-prestart-signature');
-  _sigCanvasState = null;
-}
-
-// ── 3. Offline write queue ────────────────────────────────────
-const PRESTART_QUEUE_KEY = 'eq_prestart_offline_queue_v1';
-
-function _readPrestartQueue() {
-  try { return JSON.parse(localStorage.getItem(PRESTART_QUEUE_KEY) || '[]'); }
-  catch (e) { return []; }
-}
-function _writePrestartQueue(items) {
-  try { localStorage.setItem(PRESTART_QUEUE_KEY, JSON.stringify(items || [])); }
-  catch (e) { console.warn('EQ[prestart] queue write failed (storage full?):', e); }
-}
-
-function _enqueuePrestartWrite(method, path, payload, localId) {
-  const queue = _readPrestartQueue();
-  queue.push({
-    qid:       'q_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-    localId:   localId,
-    queued_at: new Date().toISOString(),
-    tenant:    (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) || 'unknown',
-    method:    method,
-    path:      path,
-    payload:   payload
-  });
-  _writePrestartQueue(queue);
-  _updatePrestartOfflineBadge();
-}
-
-function _updatePrestartOfflineBadge() {
-  const myTenant = (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) || 'unknown';
-  const queue = _readPrestartQueue().filter(function (q) { return q.tenant === myTenant; });
-  const el = document.getElementById('prestart-offline-pill');
-  if (el) {
-    if (queue.length) {
-      el.style.display = '';
-      el.textContent = '⏳ ' + queue.length + ' offline write' + (queue.length === 1 ? '' : 's') + ' pending';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-}
-
-async function _replayPrestartQueue() {
-  if (!navigator.onLine) return;
-  const all = _readPrestartQueue();
-  if (!all.length) return;
-  const myTenant = (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) || 'unknown';
-  const remaining = [];
-  let synced = 0;
-  for (const item of all) {
-    if (item.tenant !== myTenant) { remaining.push(item); continue; }
-    try {
-      await sbFetch(item.path, item.method, item.payload, 'return=minimal');
-      synced++;
-    } catch (e) {
-      console.warn('EQ[prestart] replay failed for', item.qid, e && e.message || e);
-      remaining.push(item);
-    }
-  }
-  _writePrestartQueue(remaining);
-  _updatePrestartOfflineBadge();
-  if (synced > 0) {
-    if (typeof showToast === 'function') showToast('Synced ' + synced + ' offline prestart' + (synced === 1 ? '' : 's'));
-    await loadPrestarts();
-    if (typeof currentPage !== 'undefined' && currentPage === 'prestart') renderPrestart();
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', _replayPrestartQueue);
-  setTimeout(_replayPrestartQueue, 1500);
-}
-
-// ── 4 + 5. Mobile CSS + dual-source notice ────────────────────
-function _injectPrestartStyleOnce() {
-  if (document.getElementById('prestart-mvp-style')) return;
+// ── Dual-source notice (Prestart-specific) ──────────────────
+// Banner pointing users away from sks-field-reports.netlify.app
+// during the absorption period. Dismissible via localStorage.
+// Retires when Path C completes and Ben + Royce sign off.
+function _injectPrestartNoticeStyleOnce() {
+  if (document.getElementById('prestart-notice-style')) return;
   const s = document.createElement('style');
-  s.id = 'prestart-mvp-style';
+  s.id = 'prestart-notice-style';
   s.textContent = ''
-    + '@media (max-width: 640px) {'
-    +   '#modal-prestart .modal { max-width:100vw !important; width:100vw !important; height:100vh !important; max-height:100vh !important; border-radius:0 !important; }'
-    +   '#prestart-form-body div[style*="grid-template-columns:1fr 1fr"],'
-    +   '#prestart-form-body div[style*="grid-template-columns: 1fr 1fr"]'
-    +   ' { grid-template-columns:1fr !important; }'
-    +   '#modal-prestart-signature .modal { max-width:100vw !important; width:100vw !important; }'
-    +   '#modal-prestart-signature canvas { height:260px !important; }'
-    + '}'
     + '.prestart-dual-source-notice {'
     +   'background:linear-gradient(180deg,#FEF3C7 0%,#FDE68A 100%);'
     +   'border-bottom:1px solid #F59E0B; padding:8px 14px; font-size:11px;'
@@ -882,3 +570,9 @@ function dismissPrestartDualNotice() {
   try { localStorage.setItem('eq_prestart_dual_dismissed', '1'); } catch (e) {}
   if (typeof currentPage !== 'undefined' && currentPage === 'prestart') renderPrestart();
 }
+
+// ── Shims for inline onclick="..." in shared HTML ──────────
+function addPrestartPhoto(fileInput)          { return prestartPhotos.add(fileInput); }
+function removePrestartPhoto(i)               { return prestartPhotos.remove(i); }
+function setPrestartPhotoCaption(i, caption)  { return prestartPhotos.setCaption(i, caption); }
+function openPrestartPhotoLightbox(i)         { return prestartPhotos.lightbox(i); }

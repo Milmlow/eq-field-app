@@ -2,20 +2,12 @@
 // ─────────────────────────────────────────────────────────────
 // scripts/toolbox.js  —  EQ Solves Field
 // Site Reports v2 — Toolbox Talks.
-// Sibling module to scripts/site-reports.js (Prestart). Mirrors that
-// file's shape so Diary (v3) and Weekly (v4) can follow the same pattern.
-// Depends on: app-state.js, utils.js, supabase.js, audit.js, permissions.js
-//
-// Why a separate file (not appended to site-reports.js):
-//   site-reports.js is already 885 lines. Four workflows in one file
-//   pushes it past 3,000 — painful merges, harder PR reviews. One
-//   file per workflow keeps each module under 1k lines and lets us
-//   extract shared helpers (photo, signature, offline queue) into a
-//   future scripts/site-report-shared.js once Diary lands.
-//
-// For v1, the photo / signature / offline-queue helpers are copy-pasted
-// from site-reports.js with `toolbox` / `_tbx` prefixes. Refactor target:
-// once Diary lands and the pattern repeats a third time, extract.
+// Sibling module to scripts/site-reports.js (Prestart). Refactored
+// in v3.4.76 to consume scripts/site-reports-shared.js for photos /
+// signature pad / offline queue — the helpers that had been copy-
+// pasted between Prestart and Toolbox now live in one place.
+// Depends on: app-state.js, utils.js, supabase.js, audit.js,
+//             permissions.js, site-reports-shared.js
 // ─────────────────────────────────────────────────────────────
 
 // ── Module state ────────────────────────────────────────────
@@ -27,6 +19,48 @@ let toolboxCurrentId   = null;
 // from firing duplicate Save / Submit (which would write duplicate
 // audit entries and, after v2 emails ship, duplicate notifications).
 const _toolboxInflight = new Set();
+
+// ── Shared controllers (v3.4.76) ────────────────────────────
+// Photo / signature / offline-queue logic lives in site-reports-shared.js.
+// Per-workflow global shim functions (addToolboxPhoto, etc.) are
+// declared near the bottom of this file — they exist so the HTML
+// rendered by SiteReportsShared.createPhotoController().renderList()
+// can call back into the right workflow via plain `onclick="..."`.
+const toolboxPhotos = window.SiteReportsShared.createPhotoController({
+  getDraft:  function () { return toolboxDraft; },
+  onChange:  renderToolboxForm,
+  prefix:    'toolbox',
+  maxPhotos: 8,
+  callbackNames: {
+    add:        'addToolboxPhoto',
+    remove:     'removeToolboxPhoto',
+    setCaption: 'setToolboxPhotoCaption',
+    lightbox:   'openToolboxPhotoLightbox',
+  },
+});
+
+const toolboxSignature = window.SiteReportsShared.createSignatureController({
+  getDraft:      function () { return toolboxDraft; },
+  attendanceKey: 'attendance',
+  onChange:      renderToolboxForm,
+  prefix:        'toolbox',
+  workflowLabel: 'Toolbox',
+});
+
+const toolboxQueue = window.SiteReportsShared.createOfflineQueue({
+  storageKey:    'eq_toolbox_offline_queue_v1',
+  pillElementId: 'toolbox-offline-pill',
+  pageName:      'toolbox',
+  table:         'toolbox_talks',
+  reloadAndRender: async function () {
+    await loadToolboxTalks();
+    if (typeof currentPage !== 'undefined' && currentPage === 'toolbox') renderToolbox();
+  },
+});
+
+// Stagger replay 300ms after Prestart's so two workflows on the same
+// page don't fire simultaneous queue replays.
+toolboxQueue.startReplayListener(1800);
 
 // ── Load ─────────────────────────────────────────────────────
 async function loadToolboxTalks() {
@@ -55,7 +89,7 @@ function renderToolbox() {
   const el = document.getElementById('page-toolbox-list');
   if (!el) return;
 
-  _injectToolboxStyleOnce();
+  window.SiteReportsShared.injectMobileStyle('toolbox');
 
   if (!window.EQ_PERMS || !window.EQ_PERMS.can('reports.toolbox.view')) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">🔒</div><p>Supervision access required.</p></div>';
@@ -226,9 +260,9 @@ function renderToolboxForm() {
     + '<div style="padding:12px 14px;border-top:1px solid var(--border)">'
     +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
     +     '<div style="font-weight:600;font-size:12px;color:var(--ink)">Photos</div>'
-    +     '<div style="font-size:10px;color:var(--ink-3)">' + (d.photos || []).length + ' / ' + TOOLBOX_MAX_PHOTOS + '</div>'
+    +     '<div style="font-size:10px;color:var(--ink-3)">' + (d.photos || []).length + ' / ' + toolboxPhotos.maxPhotos + '</div>'
     +   '</div>'
-    +   _renderToolboxPhotos(d)
+    +   toolboxPhotos.renderList(d)
     + '</div>'
 
     + '<div style="padding:12px 14px;border-top:1px solid var(--border)">'
@@ -245,7 +279,7 @@ function renderToolboxForm() {
     +   '<button class="btn" onclick="submitToolbox()"' + (submitOK ? '' : ' disabled style="opacity:.5;cursor:not-allowed"') + '>Submit</button>'
     + '</div>';
 
-  _updateToolboxOfflineBadge();
+  toolboxQueue.updateBadge();
 }
 
 function _renderToolboxAttendance(d) {
@@ -333,8 +367,7 @@ function addToolboxAttendeeManual() {
 }
 
 function signToolboxAttendee(i) {
-  if (!toolboxDraft || !toolboxDraft.attendance || !toolboxDraft.attendance[i]) return;
-  openToolboxSignatureModal(i);
+  toolboxSignature.openModal(i);
 }
 
 function removeToolboxAttendee(i) {
@@ -434,30 +467,7 @@ async function _persistToolbox(record) {
     submitted_by:     record.submitted_by || null,
     created_by:       record.created_by || (typeof currentManagerName !== 'undefined' && currentManagerName) || 'unknown'
   };
-
-  const method = toolboxCurrentId ? 'PATCH' : 'POST';
-  const path = toolboxCurrentId
-    ? 'toolbox_talks?id=eq.' + encodeURIComponent(toolboxCurrentId)
-    : 'toolbox_talks';
-
-  // Offline-first write path (same pattern as prestart).
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    const localId = toolboxCurrentId || ('local_' + Date.now() + '_' + Math.floor(Math.random() * 1000));
-    _enqueueToolboxWrite(method, path, payload, localId);
-    if (typeof showToast === 'function') showToast('Offline — saved locally, will sync when connected');
-    return { id: localId, _offline: true };
-  }
-
-  try {
-    const ret = await sbFetch(path, method, payload, 'return=representation');
-    if (Array.isArray(ret) && ret[0]) return ret[0];
-    return toolboxCurrentId ? { id: toolboxCurrentId } : { id: null };
-  } catch (e) {
-    const localId = toolboxCurrentId || ('local_' + Date.now() + '_' + Math.floor(Math.random() * 1000));
-    _enqueueToolboxWrite(method, path, payload, localId);
-    if (typeof showToast === 'function') showToast('Network hiccup — saved locally, will sync');
-    return { id: localId, _offline: true };
-  }
+  return toolboxQueue.persist(record, toolboxCurrentId, payload);
 }
 
 // ── Internal helpers ────────────────────────────────────────
@@ -498,309 +508,11 @@ function _toolboxSiteLabelForLog(d) {
   return site ? site.name : (d.site_abbr || 'no site');
 }
 
-// ══════════════════════════════════════════════════════════════
-// Photos / signature pad / offline queue / mobile CSS.
-// Mirrors site-reports.js Prestart helpers with toolbox-namespaced
-// state. Refactor target: extract to scripts/site-report-shared.js
-// once Diary lands and the pattern repeats a third time.
-// ══════════════════════════════════════════════════════════════
-
-// ── 1. Photos ─────────────────────────────────────────────────
-const TOOLBOX_MAX_PHOTOS    = 8;
-const TOOLBOX_PHOTO_MAX_DIM = 1600;
-const TOOLBOX_PHOTO_QUALITY = 0.7;
-
-function addToolboxPhoto(fileInput) {
-  if (!toolboxDraft) return;
-  if (!fileInput.files || !fileInput.files[0]) return;
-  if ((toolboxDraft.photos || []).length >= TOOLBOX_MAX_PHOTOS) {
-    if (typeof showToast === 'function') showToast('Max ' + TOOLBOX_MAX_PHOTOS + ' photos');
-    return;
-  }
-  const file = fileInput.files[0];
-  if (!/^image\//.test(file.type)) {
-    if (typeof showToast === 'function') showToast('Image files only');
-    return;
-  }
-  _toolboxResizeImageToBase64(file, function (base64) {
-    if (!base64) {
-      if (typeof showToast === 'function') showToast('Photo too large or unreadable');
-      return;
-    }
-    if (!Array.isArray(toolboxDraft.photos)) toolboxDraft.photos = [];
-    toolboxDraft.photos.push({
-      id:       'p_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      caption:  '',
-      base64:   base64,
-      taken_at: new Date().toISOString(),
-      taken_by: (typeof currentManagerName !== 'undefined' && currentManagerName) || null
-    });
-    fileInput.value = '';
-    renderToolboxForm();
-  });
-}
-
-function _toolboxResizeImageToBase64(file, callback) {
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    const img = new Image();
-    img.onload = function () {
-      let width = img.width;
-      let height = img.height;
-      const max = TOOLBOX_PHOTO_MAX_DIM;
-      if (width > max || height > max) {
-        const scale = Math.min(max / width, max / height);
-        width  = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      try { callback(canvas.toDataURL('image/jpeg', TOOLBOX_PHOTO_QUALITY)); }
-      catch (err) { callback(null); }
-    };
-    img.onerror = function () { callback(null); };
-    img.src = e.target.result;
-  };
-  reader.onerror = function () { callback(null); };
-  reader.readAsDataURL(file);
-}
-
-function removeToolboxPhoto(i) {
-  if (!toolboxDraft || !toolboxDraft.photos) return;
-  toolboxDraft.photos.splice(i, 1);
-  renderToolboxForm();
-}
-
-function setToolboxPhotoCaption(i, caption) {
-  if (!toolboxDraft || !toolboxDraft.photos || !toolboxDraft.photos[i]) return;
-  toolboxDraft.photos[i].caption = caption;
-}
-
-function openToolboxPhotoLightbox(i) {
-  if (!toolboxDraft || !toolboxDraft.photos || !toolboxDraft.photos[i]) return;
-  const p = toolboxDraft.photos[i];
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;cursor:zoom-out';
-  overlay.onclick = function () { overlay.remove(); };
-  const img = document.createElement('img');
-  img.src = p.base64;
-  img.style.cssText = 'max-width:100%;max-height:90vh;object-fit:contain';
-  overlay.appendChild(img);
-  document.body.appendChild(overlay);
-}
-
-function _renderToolboxPhotos(d) {
-  const photos = d.photos || [];
-  const grid = photos.map(function (p, i) {
-    const cap = p.caption
-      ? '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);color:#fff;font-size:9px;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(p.caption) + '</div>'
-      : '';
-    return '<div style="position:relative;width:84px;height:84px;border-radius:6px;overflow:hidden;border:1px solid var(--border);background:var(--surface-2);cursor:pointer;flex-shrink:0">'
-      + '<img src="' + esc(p.base64) + '" style="width:100%;height:100%;object-fit:cover" onclick="openToolboxPhotoLightbox(' + i + ')">'
-      + '<button onclick="removeToolboxPhoto(' + i + ');event.stopPropagation()" title="Remove" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center">✕</button>'
-      + cap
-    + '</div>';
-  }).join('');
-  const addBtn = photos.length < TOOLBOX_MAX_PHOTOS
-    ? '<label style="width:84px;height:84px;border:1px dashed var(--border);border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:var(--surface);font-size:10px;color:var(--ink-3);user-select:none;flex-shrink:0">'
-      + '<span style="font-size:22px;line-height:1">📷</span>'
-      + '<span style="margin-top:2px">Add photo</span>'
-      + '<input type="file" accept="image/*" capture="environment" onchange="addToolboxPhoto(this)" style="display:none">'
-    + '</label>'
-    : '';
-  const captionInputs = photos.length
-    ? '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'
-      + photos.map(function (p, i) {
-        return '<input type="text" placeholder="Caption photo ' + (i + 1) + '" value="' + esc(p.caption || '') + '" oninput="setToolboxPhotoCaption(' + i + ', this.value)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit">';
-      }).join('')
-    + '</div>'
-    : '';
-  return '<div style="display:flex;flex-wrap:wrap;gap:6px">' + grid + addBtn + '</div>' + captionInputs;
-}
-
-// ── 2. Signature pad ──────────────────────────────────────────
-let _tbxSigCanvasState = null;
-
-function openToolboxSignatureModal(attendeeIndex) {
-  if (!toolboxDraft || !toolboxDraft.attendance[attendeeIndex]) return;
-  if (toolboxDraft.attendance[attendeeIndex].signed_at) return; // idempotent
-  const name = toolboxDraft.attendance[attendeeIndex].name;
-  let modal = document.getElementById('modal-toolbox-signature');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.className = 'modal-overlay';
-    modal.id = 'modal-toolbox-signature';
-    modal.innerHTML =
-        '<div class="modal" style="max-width:480px;width:92vw">'
-      +   '<div class="modal-header">'
-      +     '<h3 id="tbx-sig-title" style="margin:0">Sign — </h3>'
-      +     '<button class="modal-close" onclick="closeToolboxSignature()">✕</button>'
-      +   '</div>'
-      +   '<div class="modal-body" style="padding:14px">'
-      +     '<div style="font-size:11px;color:var(--ink-3);margin-bottom:6px">Sign with your finger or mouse — stamps signed_at + signed_by onto the talk.</div>'
-      +     '<canvas id="tbx-sig-canvas" style="width:100%;height:200px;background:#fff;border:1px solid var(--border);border-radius:8px;touch-action:none;display:block"></canvas>'
-      +     '<div style="display:flex;gap:8px;align-items:center;margin-top:12px">'
-      +       '<button class="btn btn-secondary btn-sm" onclick="clearToolboxSignature()">Clear</button>'
-      +       '<div style="flex:1"></div>'
-      +       '<button class="btn btn-secondary btn-sm" onclick="closeToolboxSignature()">Cancel</button>'
-      +       '<button class="btn" id="tbx-sig-save-btn">Save signature</button>'
-      +     '</div>'
-      +   '</div>'
-      + '</div>';
-    document.body.appendChild(modal);
-  }
-  document.getElementById('tbx-sig-title').textContent = 'Sign — ' + name;
-  const saveBtn = document.getElementById('tbx-sig-save-btn');
-  if (saveBtn) saveBtn.onclick = function () { saveToolboxSignature(attendeeIndex); };
-  if (typeof openModal === 'function') openModal('modal-toolbox-signature');
-  setTimeout(_initToolboxSignatureCanvas, 30);
-}
-
-function _initToolboxSignatureCanvas() {
-  const canvas = document.getElementById('tbx-sig-canvas');
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width  = rect.width  * dpr;
-  canvas.height = rect.height * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.lineWidth   = 2.2;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.strokeStyle = '#1A1A2E';
-  _tbxSigCanvasState = { canvas: canvas, ctx: ctx, drawing: false, hasInk: false };
-  function pos(evt) {
-    const r = canvas.getBoundingClientRect();
-    const t = evt.touches ? evt.touches[0] : evt;
-    return { x: t.clientX - r.left, y: t.clientY - r.top };
-  }
-  function start(evt) { evt.preventDefault(); _tbxSigCanvasState.drawing = true; const p = pos(evt); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
-  function move(evt)  { if (!_tbxSigCanvasState.drawing) return; evt.preventDefault(); const p = pos(evt); ctx.lineTo(p.x, p.y); ctx.stroke(); _tbxSigCanvasState.hasInk = true; }
-  function end(evt)   { if (evt) evt.preventDefault(); _tbxSigCanvasState.drawing = false; }
-  canvas.addEventListener('mousedown',  start);
-  canvas.addEventListener('mousemove',  move);
-  canvas.addEventListener('mouseup',    end);
-  canvas.addEventListener('mouseleave', end);
-  canvas.addEventListener('touchstart', start);
-  canvas.addEventListener('touchmove',  move);
-  canvas.addEventListener('touchend',   end);
-}
-
-function clearToolboxSignature() {
-  if (!_tbxSigCanvasState) return;
-  const c = _tbxSigCanvasState.canvas;
-  _tbxSigCanvasState.ctx.clearRect(0, 0, c.width, c.height);
-  _tbxSigCanvasState.hasInk = false;
-}
-
-function saveToolboxSignature(attendeeIndex) {
-  if (!_tbxSigCanvasState || !_tbxSigCanvasState.hasInk) {
-    if (typeof showToast === 'function') showToast('Sign first — empty signatures don\'t count');
-    return;
-  }
-  const dataUri = _tbxSigCanvasState.canvas.toDataURL('image/png');
-  if (!toolboxDraft || !toolboxDraft.attendance[attendeeIndex]) return;
-  toolboxDraft.attendance[attendeeIndex].signature_image = dataUri;
-  toolboxDraft.attendance[attendeeIndex].signed_at = new Date().toISOString();
-  toolboxDraft.attendance[attendeeIndex].signed_by = (typeof currentManagerName !== 'undefined' && currentManagerName) || null;
-  closeToolboxSignature();
-  renderToolboxForm();
-}
-
-function closeToolboxSignature() {
-  if (typeof closeModal === 'function') closeModal('modal-toolbox-signature');
-  _tbxSigCanvasState = null;
-}
-
-// ── 3. Offline write queue ────────────────────────────────────
-const TOOLBOX_QUEUE_KEY = 'eq_toolbox_offline_queue_v1';
-
-function _readToolboxQueue() {
-  try { return JSON.parse(localStorage.getItem(TOOLBOX_QUEUE_KEY) || '[]'); }
-  catch (e) { return []; }
-}
-function _writeToolboxQueue(items) {
-  try { localStorage.setItem(TOOLBOX_QUEUE_KEY, JSON.stringify(items || [])); }
-  catch (e) { console.warn('EQ[toolbox] queue write failed (storage full?):', e); }
-}
-
-function _enqueueToolboxWrite(method, path, payload, localId) {
-  const queue = _readToolboxQueue();
-  queue.push({
-    qid:       'q_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-    localId:   localId,
-    queued_at: new Date().toISOString(),
-    tenant:    (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) || 'unknown',
-    method:    method,
-    path:      path,
-    payload:   payload
-  });
-  _writeToolboxQueue(queue);
-  _updateToolboxOfflineBadge();
-}
-
-function _updateToolboxOfflineBadge() {
-  const myTenant = (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) || 'unknown';
-  const queue = _readToolboxQueue().filter(function (q) { return q.tenant === myTenant; });
-  const el = document.getElementById('toolbox-offline-pill');
-  if (el) {
-    if (queue.length) {
-      el.style.display = '';
-      el.textContent = '⏳ ' + queue.length + ' offline write' + (queue.length === 1 ? '' : 's') + ' pending';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-}
-
-async function _replayToolboxQueue() {
-  if (!navigator.onLine) return;
-  const all = _readToolboxQueue();
-  if (!all.length) return;
-  const myTenant = (typeof TENANT !== 'undefined' && TENANT.ORG_SLUG) || 'unknown';
-  const remaining = [];
-  let synced = 0;
-  for (const item of all) {
-    if (item.tenant !== myTenant) { remaining.push(item); continue; }
-    try {
-      await sbFetch(item.path, item.method, item.payload, 'return=minimal');
-      synced++;
-    } catch (e) {
-      console.warn('EQ[toolbox] replay failed for', item.qid, e && e.message || e);
-      remaining.push(item);
-    }
-  }
-  _writeToolboxQueue(remaining);
-  _updateToolboxOfflineBadge();
-  if (synced > 0) {
-    if (typeof showToast === 'function') showToast('Synced ' + synced + ' offline toolbox talk' + (synced === 1 ? '' : 's'));
-    await loadToolboxTalks();
-    if (typeof currentPage !== 'undefined' && currentPage === 'toolbox') renderToolbox();
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', _replayToolboxQueue);
-  setTimeout(_replayToolboxQueue, 1800);  // staggered slightly behind prestart's 1500
-}
-
-// ── 4. Mobile CSS ─────────────────────────────────────────────
-function _injectToolboxStyleOnce() {
-  if (document.getElementById('toolbox-mvp-style')) return;
-  const s = document.createElement('style');
-  s.id = 'toolbox-mvp-style';
-  s.textContent = ''
-    + '@media (max-width: 640px) {'
-    +   '#modal-toolbox .modal { max-width:100vw !important; width:100vw !important; height:100vh !important; max-height:100vh !important; border-radius:0 !important; }'
-    +   '#toolbox-form-body div[style*="grid-template-columns:1fr 1fr"],'
-    +   '#toolbox-form-body div[style*="grid-template-columns: 1fr 1fr"]'
-    +   ' { grid-template-columns:1fr !important; }'
-    +   '#modal-toolbox-signature .modal { max-width:100vw !important; width:100vw !important; }'
-    +   '#modal-toolbox-signature canvas { height:260px !important; }'
-    + '}';
-  document.head.appendChild(s);
-}
+// ── Shims for inline onclick="..." in shared HTML ──────────
+// Photo HTML from SiteReportsShared.createPhotoController().renderList()
+// calls these by name. Same for the manual-attendance prompt. Each is
+// a one-line delegator to the shared controller.
+function addToolboxPhoto(fileInput)          { return toolboxPhotos.add(fileInput); }
+function removeToolboxPhoto(i)               { return toolboxPhotos.remove(i); }
+function setToolboxPhotoCaption(i, caption)  { return toolboxPhotos.setCaption(i, caption); }
+function openToolboxPhotoLightbox(i)         { return toolboxPhotos.lightbox(i); }
