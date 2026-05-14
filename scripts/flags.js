@@ -33,7 +33,7 @@
     // Stays FALSE until per-tenant rollout. Flip true via PostHog
     // (or override here) to enable. Affects only mobile viewport
     // (< 768px) for users with role==='staff'. Desktop unchanged.
-    'home_screen_v1':        false
+    'home_screen_v1':        true  // enabled for EQ demo — PostHog flag also set 100%
   };
 
   function isEnabled(flagKey) {
