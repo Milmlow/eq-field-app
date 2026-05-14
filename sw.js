@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.5.3
-const CACHE = 'eq-field-v3.5.3';
+// EQ Solves — Field  ·  Service Worker  v3.5.4
+const CACHE = 'eq-field-v3.5.4';
 
 const PRECACHE = [
   '/',
@@ -13,6 +13,9 @@ const PRECACHE = [
   '/scripts/utils.js',
   '/scripts/supabase.js',
   '/scripts/roster.js',
+  // v3.5.4 — EQ Virtual Table (FINDING #S2). Load order: before people.js
+  // so renderContacts can detect window.EQVirtualTable at first paint.
+  '/scripts/virtual-table.js',
   '/scripts/people.js',
   '/scripts/sites.js',
   '/scripts/managers.js',

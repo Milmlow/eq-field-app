@@ -503,19 +503,20 @@ function renderContacts() {
   // Desktop table
   const cSort = contactsSort;
   const th = (c, label) => `<th class="sortable${cSort.col === c ? ' sort-' + cSort.dir : ''}" onclick="setContactsSort('${c}')" style="cursor:pointer;user-select:none">${label}</th>`;
-  const html = `<div class="roster-card"><div class="table-scroll"><table style="width:100%">
-    <thead><tr>
-      ${th('name', 'Name')}${th('group', 'Group')}${th('phone', 'Phone')}${th('email', 'Email')}${th('agency', 'Agency')}
-      <th class="center" style="width:90px">Actions</th>
-    </tr></thead>
-    <tbody>${people.map(p => {
-      // v3.4.70: archived rows get faint tint + chip in desktop table too.
-      const rowStyle = p.archived ? 'background:#F8FAFC;opacity:.7' : '';
-      const archChip = p.archived
-        ? '<span style="background:#E5E7EB;color:#6B7280;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px">ARCHIVED</span>'
-        : '';
-      return `
-      <tr style="${rowStyle}">
+
+  // v3.5.4 (S2): build row HTML once. Below threshold we splat into innerHTML
+  // as before (cheaper for small tables). Above threshold we hand the row
+  // array to EQVirtualTable which renders only the visible window + buffer.
+  // Threshold of 150 matches SPRINT-PLAN §S2 ("real benefit only kicks in
+  // around 200+ rows") with headroom for active filtering down from a larger
+  // base list.
+  const rowHtmls = people.map(p => {
+    // v3.4.70: archived rows get faint tint + chip in desktop table too.
+    const rowStyle = p.archived ? 'background:#F8FAFC;opacity:.7' : '';
+    const archChip = p.archived
+      ? '<span style="background:#E5E7EB;color:#6B7280;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px">ARCHIVED</span>'
+      : '';
+    return `<tr style="${rowStyle}">
         <td class="name-col">${esc(p.name)}${archChip}</td>
         <td style="white-space:nowrap">${groupBadge[p.group] || p.group}${yearPill(p)}${tafeBadge(p)}${todayBadges(p)}</td>
         <td class="phone-col">${_personPhone(p, 'desktop')}</td>
@@ -523,8 +524,44 @@ function renderContacts() {
         <td class="meta-col">${p.agency || '—'}</td>
         <td class="center" style="white-space:nowrap">${_personActions(p)}</td>
       </tr>`;
-    }).join('')}
-    </tbody>
+  });
+
+  const VIRTUAL_THRESHOLD = 150;
+  const useVirtual = rowHtmls.length > VIRTUAL_THRESHOLD && window.EQVirtualTable;
+
+  if (useVirtual) {
+    const html = `<div class="roster-card"><div class="table-scroll" id="contacts-virtual-scroll" style="overflow-y:auto;max-height:calc(100vh - 220px)"><table style="width:100%">
+      <thead><tr>
+        ${th('name', 'Name')}${th('group', 'Group')}${th('phone', 'Phone')}${th('email', 'Email')}${th('agency', 'Agency')}
+        <th class="center" style="width:90px">Actions</th>
+      </tr></thead>
+      <tbody id="contacts-virtual-tbody"></tbody>
+    </table></div></div>`;
+    document.getElementById('contacts-content').innerHTML = html;
+
+    if (window._contactsVirtual) window._contactsVirtual.destroy();
+    window._contactsVirtual = window.EQVirtualTable.mount({
+      scrollEl: document.getElementById('contacts-virtual-scroll'),
+      tbodyEl:  document.getElementById('contacts-virtual-tbody'),
+      rows:     rowHtmls,
+      rowHeight: 38,  // measured: ~36-40px per contact row in current CSS
+      colspan:  6,
+      bufferRows: 20
+    });
+    return;
+  }
+
+  // Non-virtual path (≤ threshold rows) — destroy any stale instance first.
+  if (window._contactsVirtual) {
+    window._contactsVirtual.destroy();
+    window._contactsVirtual = null;
+  }
+  const html = `<div class="roster-card"><div class="table-scroll"><table style="width:100%">
+    <thead><tr>
+      ${th('name', 'Name')}${th('group', 'Group')}${th('phone', 'Phone')}${th('email', 'Email')}${th('agency', 'Agency')}
+      <th class="center" style="width:90px">Actions</th>
+    </tr></thead>
+    <tbody>${rowHtmls.join('')}</tbody>
   </table></div></div>`;
   document.getElementById('contacts-content').innerHTML = html;
 }
