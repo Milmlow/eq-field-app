@@ -12,10 +12,10 @@
 //   3. Click "Copy as JSON"
 //   4. Paste over the object below, bump @version + last_updated.
 //
-// @version       v1.2
+// @version       v1.3
 // @last_updated  2026-05-14
 // @source        eq-context/drafts/eq-field-roles-2026-04-27/permissions-by-role-v1.json
-// @history       v1.0 (2026-04-27) → v1.1 (2026-05-13 prestart) → v1.2 (2026-05-14 toolbox)
+// @history       v1.0 (2026-04-27) → v1.1 (2026-05-13 prestart) → v1.2 (2026-05-14 toolbox) → v1.3 (2026-05-14 diary)
 // Plan ref: MULTI-TENANCY-PLAN.md §Phase 1 — Step 1.5
 // ─────────────────────────────────────────────────────────────
 
@@ -42,7 +42,9 @@ window.EQ_PERMISSIONS = {
     // v3.4.67 — Site Reports (Prestart v1)
     'reports.prestart.view', 'reports.prestart.create', 'reports.prestart.submit', 'reports.prestart.sign',
     // v3.4.75 — Site Reports (Toolbox Talk v1)
-    'reports.toolbox.view', 'reports.toolbox.create', 'reports.toolbox.submit', 'reports.toolbox.sign'
+    'reports.toolbox.view', 'reports.toolbox.create', 'reports.toolbox.submit', 'reports.toolbox.sign',
+    // v3.4.77 — Site Reports (Daily Site Diary v1)
+    'reports.diary.view', 'reports.diary.create', 'reports.diary.submit', 'reports.diary.sign'
   ],
   supervisor: [
     'roster.view_own', 'roster.view_team', 'roster.view_all', 'roster.request_changes',
@@ -60,7 +62,9 @@ window.EQ_PERMISSIONS = {
     // v3.4.67 — Site Reports (Prestart v1)
     'reports.prestart.view', 'reports.prestart.create', 'reports.prestart.submit', 'reports.prestart.sign',
     // v3.4.75 — Site Reports (Toolbox Talk v1)
-    'reports.toolbox.view', 'reports.toolbox.create', 'reports.toolbox.submit', 'reports.toolbox.sign'
+    'reports.toolbox.view', 'reports.toolbox.create', 'reports.toolbox.submit', 'reports.toolbox.sign',
+    // v3.4.77 — Site Reports (Daily Site Diary v1)
+    'reports.diary.view', 'reports.diary.create', 'reports.diary.submit', 'reports.diary.sign'
   ],
   employee: [
     'roster.view_own', 'roster.view_team', 'roster.request_changes',
@@ -72,7 +76,9 @@ window.EQ_PERMISSIONS = {
     // crewed onto and sign their own attendance (v2 — magic-link sign-off).
     'reports.prestart.sign',
     // v3.4.75 — Toolbox attendees can sign their own attendance.
-    'reports.toolbox.sign'
+    'reports.toolbox.sign',
+    // v3.4.77 — Diary attendees can sign their own shift attendance.
+    'reports.diary.sign'
   ],
   apprentice: [
     'roster.view_own', 'roster.view_team', 'roster.request_changes',
@@ -82,7 +88,8 @@ window.EQ_PERMISSIONS = {
     'sites.view_list', 'sites.view_details',
     'app.view_own_profile', 'app.submit_feedback', 'app.view_skills', 'app.buddy_checkin',
     'reports.prestart.sign',
-    'reports.toolbox.sign'
+    'reports.toolbox.sign',
+    'reports.diary.sign'
   ],
   labour_hire: [
     'roster.view_own',
@@ -90,6 +97,7 @@ window.EQ_PERMISSIONS = {
     'people.view_own',
     'sites.view_list',
     'reports.prestart.sign',
-    'reports.toolbox.sign'
+    'reports.toolbox.sign',
+    'reports.diary.sign'
   ]
 };
