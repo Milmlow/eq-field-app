@@ -577,6 +577,25 @@ function removePrestartPhoto(i)               { return prestartPhotos.remove(i);
 function setPrestartPhotoCaption(i, caption)  { return prestartPhotos.setCaption(i, caption); }
 function openPrestartPhotoLightbox(i)         { return prestartPhotos.lightbox(i); }
 
+// v3.5.2: count accessor for the Site Reports HUB. Returns total
+// prestart briefings dated today (any status). `prestartCache` is
+// module-local so the HUB can't reach it directly. Returns 0 on
+// tenants where prestarts is gated off.
+window.eqGetPrestartsTodayCount = function () {
+  try {
+    const slug = (window.TENANT && TENANT.ORG_SLUG) ? TENANT.ORG_SLUG : 'eq';
+    const disabled = (window.TENANT_DISABLED_TABLES && TENANT_DISABLED_TABLES[slug]) || [];
+    if (disabled.indexOf('prestarts') !== -1) return 0;
+    if (!Array.isArray(prestartCache)) return 0;
+    const today = _prestartTodayIso();
+    let n = 0;
+    for (let i = 0; i < prestartCache.length; i++) {
+      if (prestartCache[i] && prestartCache[i].briefing_date === today) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+};
+
 // v3.5.1: small accessor for the supervisor mobile home action strip.
 // Counts prestarts in 'draft' status dated today or earlier (i.e. still
 // open and needing sign-off). Returns 0 on tenants where the table is

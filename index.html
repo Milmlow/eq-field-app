@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.1'; // cache-buster — bump on icon changes
+    var v = '3.5.2'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -79,6 +79,7 @@
 <script src="scripts/site-reports.js"></script>
 <script src="scripts/toolbox.js"></script>
 <script src="scripts/diary.js"></script>
+<script src="scripts/site-reports-hub.js"></script>
 <script src="scripts/auth.js"></script>
 <!-- v3.5.0 — Mobile home tile screen. Must load after app-state.js,
      analytics.js, flags.js, auth.js. Renders into #page-home. -->
@@ -211,8 +212,49 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.1
+  EQ Solves — Field  v3.5.2
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.2  (Site Reports HUB — collapses Prestart / Toolbox / Diary)
+  ────────────────────────────────────────────────────────────
+  • Adds a single "Site Reports" sidebar entry that lands on a
+    HUB page with three status cards:
+      - Prestart · N briefing(s) today
+      - Toolbox  · N talk(s) this week
+      - Diary    · N entry(ies) today
+    Tap any card → routes to that workflow's existing list view
+    via showPage(). HUB pre-loads all three caches in parallel
+    on first render so the counts are real, not stale.
+  • The three original sidebar entries (Prestart / Toolbox / Diary)
+    are HIDDEN, not deleted, via inline style="display:none". This
+    keeps showPage('prestart' | 'toolbox' | 'diary') working for
+    deep-links, the v3.5.0 staff home tile, and any audit-log entry
+    that pointed at the individual pages.
+  • Count accessors added on each workflow module (module-local
+    caches the HUB couldn't reach directly):
+      - window.eqGetPrestartsTodayCount()
+      - window.eqGetToolboxWeekCount()
+      - window.eqGetDiariesTodayCount()
+    Tenant-gated: SKS prestart card is suppressed if
+    TENANT_DISABLED_TABLES.sks contains 'prestarts'.
+  • SCOPE — exactly what the brief specified for HUB. Weekly Site
+    Report is the next Site Reports milestone (~6-8 days work),
+    gated on at least one supervisor actually using all three
+    workflows weekly.
+  • PERMISSIONS — HUB always renders. Each card tap-through lands
+    on the underlying workflow which already enforces
+    reports.{prestart,toolbox,diary}.view via EQ_PERMS — no
+    double-gating in HUB needed.
+  • FILES TOUCHED
+    - scripts/site-reports-hub.js     (NEW — render + style + tap)
+    - scripts/site-reports.js         (eqGetPrestartsTodayCount)
+    - scripts/toolbox.js              (eqGetToolboxWeekCount)
+    - scripts/diary.js                (eqGetDiariesTodayCount)
+    - index.html                      (sidebar entry, page mount,
+                                       script tag, PAGE_TITLES,
+                                       dispatch, favicon, this banner)
+    - scripts/app-state.js            (APP_VERSION 3.5.0 → 3.5.2)
+    - sw.js                           (CACHE bump + hub.js in PRECACHE)
 
   CHANGES IN v3.5.1  (Mobile-first home tile screen — supervisor role)
   ────────────────────────────────────────────────────────────
@@ -2265,9 +2307,13 @@
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
       <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
-      <button class="nav-item edit-only" onclick="showPage('prestart')" id="nav-prestart"><span class="nav-icon">⚠</span> Prestart <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-prestart" style="display:none">0</span></button>
-      <button class="nav-item edit-only" onclick="showPage('toolbox')" id="nav-toolbox"><span class="nav-icon">🔧</span> Toolbox <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-toolbox" style="display:none">0</span></button>
-      <button class="nav-item edit-only" onclick="showPage('diary')" id="nav-diary"><span class="nav-icon">📔</span> Diary <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-diary" style="display:none">0</span></button>
+      <!-- v3.5.2 — Site Reports HUB collapses the three sibling entries below.
+           The originals are kept (style="display:none") so showPage('prestart'/'toolbox'/'diary')
+           deep-links and existing onclick callers (home tile screen, audit log links) still work. -->
+      <button class="nav-item edit-only" onclick="showPage('site-reports')" id="nav-site-reports"><span class="nav-icon">📋</span> Site Reports <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item edit-only" onclick="showPage('prestart')" id="nav-prestart" style="display:none"><span class="nav-icon">⚠</span> Prestart <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-prestart" style="display:none">0</span></button>
+      <button class="nav-item edit-only" onclick="showPage('toolbox')" id="nav-toolbox" style="display:none"><span class="nav-icon">🔧</span> Toolbox <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-toolbox" style="display:none">0</span></button>
+      <button class="nav-item edit-only" onclick="showPage('diary')" id="nav-diary" style="display:none"><span class="nav-icon">📔</span> Diary <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-diary" style="display:none">0</span></button>
     </div>
   </div>
   <div class="sidebar-footer" style="padding:0">
@@ -2509,6 +2555,13 @@
       <div id="leave-cal-grid"></div>
     </div>
     <div id="leave-content"><div class="empty"><div class="empty-icon">🏖</div><p>Loading leave requests…</p></div></div>
+  </div>
+
+  <!-- v3.5.2 — Site Reports HUB landing. Renders three status cards
+       (Prestart today, Toolbox this week, Diary today). Each card
+       routes through showPage() into the existing list view. -->
+  <div class="page hidden" id="page-site-reports">
+    <div class="empty" style="padding:24px"><div class="empty-icon">📋</div><p>Loading Site Reports…</p></div>
   </div>
 
   <div class="page hidden" id="page-prestart">
@@ -2988,6 +3041,8 @@ const PAGE_TITLES = {
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
   prestart:'Prestart Briefings', toolbox:'Toolbox Talks', diary:'Daily Site Diary',
+  // v3.5.2 — Site Reports HUB collapses prestart/toolbox/diary into one entry
+  'site-reports':'Site Reports',
   // v3.5.0 — Mobile-first home tile screen (staff role, mobile viewport)
   home:'Home',
   // v3.4.79 — Tender Pipeline
@@ -3046,6 +3101,18 @@ function renderCurrentPage() {
   else if (currentPage === 'prestart')   { loadPrestarts().then(renderPrestart); }
   else if (currentPage === 'toolbox')    { loadToolboxTalks().then(renderToolbox); }
   else if (currentPage === 'diary')      { loadDiaries().then(renderDiary); }
+  // v3.5.2 — Site Reports HUB. Loads all three caches in parallel so the
+  // status-card counts are real on first render. Each module's load is
+  // a no-op on tenants where its table is gated (returns []).
+  else if (currentPage === 'site-reports') {
+    Promise.all([
+      typeof loadPrestarts === 'function'    ? loadPrestarts()    : Promise.resolve(),
+      typeof loadToolboxTalks === 'function' ? loadToolboxTalks() : Promise.resolve(),
+      typeof loadDiaries === 'function'      ? loadDiaries()      : Promise.resolve()
+    ]).then(function () {
+      if (typeof renderSiteReportsHub === 'function') renderSiteReportsHub();
+    });
+  }
   // v3.4.79 — Tender Pipeline pages dispatch through EQ_TENDER_PIPELINE so
   // the loader can lazy-fetch + render. Each is a no-op on SKS (the module
   // checks _isDisabledTable internally).
