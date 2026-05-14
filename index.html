@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.2'; // cache-buster — bump on icon changes
+    var v = '3.5.3'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -212,8 +212,74 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.2
+  EQ Solves — Field  v3.5.3
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.3  (S1 sliding-window queries — Melbourne scaling)
+  ────────────────────────────────────────────────────────────
+  • THE BLOCKER — Night 1 audit FINDING #S1 (HIGH severity):
+    `schedule?select=*` and `timesheets?select=*` were unscoped.
+    At Melbourne scale (~577 ppl × 52 weeks = 30k schedule rows,
+    similar for timesheets) every page load + every 30s poll
+    pulled 5-10MB. Unusable above ~100 users. Design in
+    MELBOURNE-SCALE-DESIGN.md §6, plan in SPRINT-PLAN.md S1,
+    13 sprint-questions answered with defaults per Royce's
+    "start S1 on defaults" call.
+  • THE FIX — sliding-window scope. STATE.schedule + STATE.timesheets
+    now hold only ±4 weeks (9 weeks total) around STATE.currentWeek
+    at any time. Lazy-load on week navigation fetches missing
+    weeks plus adjacent prefetch. Cache eviction caps the loaded
+    set at 16 weeks. Bulk exports get a separate full-fetch path
+    so all-weeks reports stay correct.
+  • PHASE 1 — instrumentation (no behaviour change):
+    - STATE.loadedWeeks = new Set()   tracks DD.MM.YY keys with rows
+    - _getVisibleWeekRange(center)    returns the 9-week window
+  • PHASE 2 — scope initial load:
+    - loadFromSupabase: schedule + timesheets fetches now include
+      &week=in.(visibleWeeks). Marks STATE.loadedWeeks on response.
+    - loadTimesheets (scripts/timesheets.js): same scoping.
+    - _loadFullDataForExport(): un-scoped snapshot helper for
+      bulk-export paths (Q3 default).
+    - exportScheduleCSV: pre-fetches via the helper before
+      iterating all weeks. Single-week exports (exportTsCSV,
+      exportTsPayroll, exportCSV) untouched — they already
+      scope by STATE.currentWeek.
+  • PHASE 3 — lazy-load on week nav:
+    - _loadWeeks(weekKeys): fetches + merges missing weeks into
+      STATE without overwriting other windows. Re-builds
+      STATE.scheduleIndex. Dedupes by (name, week).
+    - onWeekChange: awaits _loadWeeks for the new window before
+      re-render. Pre-fetches the full ±4 around the new center
+      per Q2 default ("yes, always pre-fetch adjacent").
+    - Inline "↻ Loading…" indicator swaps the week-label text
+      during in-flight fetches.
+  • PHASE 4 — cache eviction:
+    - _evictDistantWeeks(): when STATE.loadedWeeks > 16, drops
+      the furthest-from-current entries and their rows. Keeps
+      memory bounded for power users navigating across months.
+  • PHASE 5 — dashboard investigation (Q4 default):
+    - renderDashboard() + updateTopStats() both scope to
+      STATE.currentWeek via getWeekSchedule(). Current week is
+      always in the loaded window (Phase 2 includes ±4 around
+      current), so no behaviour change needed. No aggregate RPC
+      built. Documented here; revisit if dashboard ever needs
+      org-wide "total ever" stats.
+  • DEMO ONLY — SKS still on v3.4.73. Per Q5 default, SKS port
+    waits for 3-5 days of clean demo soak. After Royce green-lights,
+    SKS gets the same scoping in a separate version bump.
+  • REALTIME — out-of-window updates are dropped client-side
+    (acceptable per SPRINT-PLAN risk register). User sees them
+    on next navigation to that week. Fine for now; alongside S1
+    in a future sprint we can scope the realtime channel per
+    visible weeks too (FINDING #S3, parked).
+  • FILES TOUCHED
+    - scripts/app-state.js      (STATE.loadedWeeks + APP_VERSION)
+    - index.html                (loadFromSupabase scoping, four
+                                 new helpers, onWeekChange lazy-load,
+                                 changelog banner, favicon)
+    - scripts/timesheets.js     (loadTimesheets scoping)
+    - scripts/import-export.js  (exportScheduleCSV full-fetch path)
+    - sw.js                     (CACHE bump)
 
   CHANGES IN v3.5.2  (Site Reports HUB — collapses Prestart / Toolbox / Diary)
   ────────────────────────────────────────────────────────────
@@ -2994,12 +3060,23 @@ async function loadFromSupabase() {
   }
 
   try {
+    // S1 Phase 2 — sliding-window scope for schedule + timesheets.
+    // At Melbourne scale (577 ppl × 52 weeks ≈ 30k rows) the previous
+    // unscoped `schedule?select=*` fetched 5-10MB per poll. We now scope
+    // to ±4 weeks (9 weeks) per SPRINT-QUESTIONS Q1 default. The 30s
+    // poll picks up the SAME window via STATE.currentWeek each call.
+    // Lazy-load on week nav (Phase 3) covers excursions outside the
+    // window. people / sites / managers stay full-fetch — small,
+    // bounded, used everywhere.
+    const visibleWeeks = _getVisibleWeekRange();
+    const weekFilter = '&week=in.(' + visibleWeeks.map(encodeURIComponent).join(',') + ')';
+
     const [people, sites, schedule, managers, tsRows] = await Promise.all([
       sbFetch('people?select=*&order=name'),
       sbFetch('sites?select=*&order=name'),
-      sbFetch('schedule?select=*'),
+      sbFetch('schedule?select=*' + weekFilter),
       sbFetch('managers?select=*&order=name'),
-      sbFetch('timesheets?select=*'),
+      sbFetch('timesheets?select=*' + weekFilter),
     ]);
 
     STATE.people = people.map(r => ({ id:r.id, name:r.name, phone:r.phone||'', group:normaliseGroupFromDb(r.group)||'', licence:r.licence||'', agency:r.agency||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, year_level:r.year_level||null, archived:!!r.archived }));
@@ -3019,6 +3096,12 @@ async function loadFromSupabase() {
 
     STATE.timesheets = tsRows;
     STATE.managers   = managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
+
+    // S1 Phase 2 — record which weeks now have data. Overwrites any
+    // prior set (e.g. lazy-loaded weeks from a previous nav session)
+    // because loadFromSupabase replaces STATE.schedule wholesale.
+    STATE.loadedWeeks = new Set(visibleWeeks);
+
     hideLoadingOverlay();
     updateLastUpdated();
     return true;
@@ -3132,12 +3215,214 @@ function stepWeek(dir) {
   if (next >= 0 && next < opts.length) { sel.value = opts[next].value; onWeekChange(); }
 }
 
-function onWeekChange() {
+async function onWeekChange() {
   STATE.currentWeek = document.getElementById('globalWeek').value;
   saveCurrentWeek();
   updateWeekLabel();
+
+  // S1 Phase 3 — if the new week (or its neighbours) aren't loaded
+  // yet, fetch them before rendering. Adjacent pre-fetch per Q2
+  // default — keeps the next "›" tap instant. No-op on SEED tenants
+  // and when the new week is already in STATE.loadedWeeks.
+  if (typeof _loadWeeks === 'function' && STATE.loadedWeeks) {
+    var center = STATE.currentWeek;
+    var range = (typeof _getVisibleWeekRange === 'function') ? _getVisibleWeekRange(center) : [center];
+    var needed = range.filter(function (w) { return !STATE.loadedWeeks.has(w); });
+    if (needed.length) {
+      await _loadWeeks(needed);
+    }
+  }
+
   updateTopStats();
   renderCurrentPage();
+}
+
+// ── S1 — Sliding-window helpers (Phases 1-4) ────────────────────
+//
+// Phase 1: _getVisibleWeekRange — what's the current 9-week window?
+// Phase 2: loadFromSupabase + loadTimesheets scope to that window
+//          (changes live in those functions, not here)
+// Phase 3: _loadWeeks(keys) — lazy-load missing weeks on nav, merge
+//          rows into STATE without overwriting existing weeks
+// Phase 4: _evictDistantWeeks — cap STATE.loadedWeeks at 16, drop
+//          rows for evicted weeks so memory stays bounded
+//
+// Window size (±4 = 9 weeks) per SPRINT-QUESTIONS Q1 default. Adjacent
+// pre-fetch on week nav per Q2 default. Cache cap 16 weeks per the
+// SPRINT-PLAN Phase 4 spec. Bulk exports per Q3 default use the
+// _loadFullDataForExport helper below to bypass the window.
+
+function _getVisibleWeekRange(centerWeek) {
+  function _mondayOfWeekKey(wk) {
+    if (wk && typeof wk === 'string' && wk.indexOf('.') > -1) {
+      var parts = wk.split('.');
+      if (parts.length === 3) {
+        return new Date('20' + parts[2] + '-' + parts[1] + '-' + parts[0]);
+      }
+    }
+    // Fallback — Monday of real-world current week
+    var d = new Date();
+    var mon = new Date(d);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    mon.setHours(0, 0, 0, 0);
+    return mon;
+  }
+  function _formatWeekKey(date) {
+    return String(date.getDate()).padStart(2, '0') + '.' +
+           String(date.getMonth() + 1).padStart(2, '0') + '.' +
+           String(date.getFullYear()).slice(-2);
+  }
+  var center = _mondayOfWeekKey(centerWeek || (STATE && STATE.currentWeek) || '');
+  var weeks = [];
+  for (var i = -4; i <= 4; i++) {
+    var d = new Date(center);
+    d.setDate(center.getDate() + i * 7);
+    weeks.push(_formatWeekKey(d));
+  }
+  return weeks;
+}
+
+// Convert a DD.MM.YY week key into a JS Date for the Monday. Returns
+// null if the input doesn't parse — callers should treat null as
+// "skip this row in distance calcs".
+function _weekKeyToDate(wk) {
+  if (!wk || typeof wk !== 'string' || wk.indexOf('.') === -1) return null;
+  var parts = wk.split('.');
+  if (parts.length !== 3) return null;
+  var d = new Date('20' + parts[2] + '-' + parts[1] + '-' + parts[0]);
+  return isNaN(d) ? null : d;
+}
+
+// S1 Phase 3 — fetch + merge specific weeks of schedule + timesheets.
+// Filters out weeks already in STATE.loadedWeeks (no-op if all present).
+// Shows the inline loading indicator near the week picker while fetch
+// is in flight. Idempotent — safe to call repeatedly.
+async function _loadWeeks(weekKeys) {
+  // SEED / demo tenant has no Supabase to lazy-load from; STATE is
+  // fully populated up front (single week range from SEED.schedule).
+  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') return;
+  if (!Array.isArray(weekKeys) || !weekKeys.length) return;
+
+  var missing = weekKeys.filter(function (w) { return !STATE.loadedWeeks.has(w); });
+  if (!missing.length) return;
+
+  _showWeekLoading(true);
+  try {
+    var filter = '&week=in.(' + missing.map(encodeURIComponent).join(',') + ')';
+    var results = await Promise.all([
+      sbFetch('schedule?select=*' + filter),
+      sbFetch('timesheets?select=*' + filter),
+    ]);
+    var scheduleRows = results[0] || [];
+    var timesheetRows = results[1] || [];
+
+    // Merge schedule rows. Dedupe by (name, week) — same logic as
+    // loadFromSupabase but doesn't wipe other weeks already loaded.
+    var existingByKey = {};
+    STATE.schedule.forEach(function (r) { existingByKey[r.name + '||' + r.week] = r; });
+    scheduleRows.forEach(function (r) {
+      var key = r.name + '||' + r.week;
+      var prev = existingByKey[key];
+      // Keep the newer row (higher id wins, mirroring loadFromSupabase)
+      if (!prev || r.id > prev.id) {
+        existingByKey[key] = { id:r.id, name:r.name, week:r.week,
+          mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'',
+          fri:r.fri||'', sat:r.sat||'', sun:r.sun||'', updated_at:r.updated_at||null };
+      }
+    });
+    STATE.schedule = Object.values(existingByKey);
+
+    // Rebuild scheduleIndex so lookups by (name, week) pick up new rows.
+    STATE.scheduleIndex = {};
+    STATE.schedule.forEach(function (r) { STATE.scheduleIndex[r.name + '||' + r.week] = r; });
+
+    // Merge timesheet rows. Dedupe by (name, week, group) — id can
+    // be missing on locally-staged rows so we key on the natural key.
+    var tsByKey = {};
+    (STATE.timesheets || []).forEach(function (t) {
+      tsByKey[t.name + '||' + t.week] = t;
+    });
+    timesheetRows.forEach(function (t) {
+      tsByKey[t.name + '||' + t.week] = t;
+    });
+    STATE.timesheets = Object.values(tsByKey);
+
+    missing.forEach(function (w) { STATE.loadedWeeks.add(w); });
+
+    _evictDistantWeeks();
+  } catch (e) {
+    console.warn('S1 lazy-load failed:', e);
+    if (TENANT.ORG_SLUG !== 'eq' && TENANT.ORG_SLUG !== 'demo') {
+      showToast('Could not load that week — check connection.');
+    }
+  } finally {
+    _showWeekLoading(false);
+  }
+}
+
+// S1 Phase 4 — cache eviction. Cap STATE.loadedWeeks at 16 entries
+// (4 months of windowing). Without this, a power user navigating
+// around builds memory indefinitely at Melbourne scale. Eviction
+// drops the week strings AND the corresponding schedule + timesheet
+// rows so the rebuild on next visit pulls fresh from Supabase.
+function _evictDistantWeeks() {
+  var MAX = 16;
+  if (!STATE.loadedWeeks || STATE.loadedWeeks.size <= MAX) return;
+
+  var center = _weekKeyToDate(STATE.currentWeek) || new Date();
+  // Score each loaded week by ms-distance from center, biggest first.
+  var scored = [];
+  STATE.loadedWeeks.forEach(function (w) {
+    var d = _weekKeyToDate(w);
+    var dist = d ? Math.abs(d - center) : Number.MAX_SAFE_INTEGER;
+    scored.push({ week: w, dist: dist });
+  });
+  scored.sort(function (a, b) { return b.dist - a.dist; });
+
+  var toEvict = new Set();
+  for (var i = 0; i < scored.length - MAX; i++) toEvict.add(scored[i].week);
+  if (!toEvict.size) return;
+
+  // Drop rows for evicted weeks so memory actually shrinks.
+  STATE.schedule = STATE.schedule.filter(function (r) { return !toEvict.has(r.week); });
+  STATE.scheduleIndex = {};
+  STATE.schedule.forEach(function (r) { STATE.scheduleIndex[r.name + '||' + r.week] = r; });
+  STATE.timesheets = (STATE.timesheets || []).filter(function (t) { return !toEvict.has(t.week); });
+  toEvict.forEach(function (w) { STATE.loadedWeeks.delete(w); });
+}
+
+// S1 Phase 2 helper — used by bulk-export paths per SPRINT-QUESTIONS
+// Q3 default ("fetch fresh full data on export click"). Returns
+// snapshots of all-weeks schedule + timesheets WITHOUT mutating
+// STATE.* — keeps STATE windowed but lets the export grab the full
+// history in one go. Caller is responsible for the loading UX.
+async function _loadFullDataForExport() {
+  if (TENANT.ORG_SLUG === 'eq' || TENANT.ORG_SLUG === 'demo') {
+    // SEED tenant — STATE already has everything it'll ever have
+    return { schedule: STATE.schedule.slice(), timesheets: (STATE.timesheets || []).slice() };
+  }
+  var results = await Promise.all([
+    sbFetch('schedule?select=*'),
+    sbFetch('timesheets?select=*'),
+  ]);
+  return { schedule: results[0] || [], timesheets: results[1] || [] };
+}
+
+// Inline loading indicator near the week picker (Phase 3).
+function _showWeekLoading(show) {
+  var lbl = document.getElementById('week-label-text');
+  if (!lbl) return;
+  if (show) {
+    if (!lbl.dataset.eqOriginalText) lbl.dataset.eqOriginalText = lbl.textContent;
+    lbl.textContent = '↻ Loading…';
+  } else {
+    if (lbl.dataset.eqOriginalText) {
+      // Restore from updateWeekLabel rather than the cached text so
+      // we pick up any week-change that landed mid-flight.
+      delete lbl.dataset.eqOriginalText;
+      if (typeof updateWeekLabel === 'function') updateWeekLabel();
+    }
+  }
 }
 
 function updateWeekLabel() {

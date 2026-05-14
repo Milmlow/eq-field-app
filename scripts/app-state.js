@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.5.2';
+const APP_VERSION = '3.5.3';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -345,6 +345,13 @@ const STATE = {
   timesheets:   [],
   currentWeek:  '',
   scheduleIndex: {},
+  // S1 Phase 1 — sliding-window queries (Melbourne scaling). Tracks which
+  // week keys (DD.MM.YY) currently have rows loaded into STATE.schedule /
+  // STATE.timesheets. Populated by Phase 2 (loadFromSupabase scoping) and
+  // grown by Phase 3 (lazy-load on week navigation). Phase 1 ships this
+  // empty Set + the _getVisibleWeekRange() helper as instrumentation only
+  // — no query change yet, no behaviour change.
+  loadedWeeks:  new Set(),
   // v3.4.79 — Tender Pipeline cache (populated by tender-pipeline.js)
   tenders:           [],
   tenderEnrichment:  {},  // keyed by tender_id
