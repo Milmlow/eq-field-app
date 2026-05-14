@@ -73,6 +73,7 @@
 <script src="scripts/audit.js"></script>
 <script src="scripts/realtime.js"></script>
 <script src="scripts/presence.js"></script>
+<script src="scripts/site-reports-shared.js"></script>
 <script src="scripts/site-reports.js"></script>
 <script src="scripts/toolbox.js"></script>
 <script src="scripts/auth.js"></script>
@@ -199,48 +200,83 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.75
+  EQ Solves — Field  v3.4.76
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.76  (Site Reports refactor — shared helpers extracted)
+  ────────────────────────────────────────────────────────────
+  Pure refactor — no user-visible change. Extracts the photo / signature
+  pad / offline write queue helpers that were copy-pasted between
+  Prestart (v3.4.69) and Toolbox (v3.4.75) into a new shared module.
+  Behaviour-preserving on both surfaces.
+
+  Adds:
+  • scripts/site-reports-shared.js (~470 lines) — factory functions:
+    - createPhotoController({ getDraft, onChange, prefix, maxPhotos,
+      callbackNames }) → { add, remove, setCaption, lightbox, renderList }
+    - createSignatureController({ getDraft, attendanceKey, onChange,
+      prefix, workflowLabel }) → { openModal, clearCanvas, saveSignature,
+      closeModal }. Modal HTML uses event delegation via data attributes
+      (no more global window.{close,clear,save}{Prestart,Toolbox}Signature).
+    - createOfflineQueue({ storageKey, pillElementId, pageName, table,
+      reloadAndRender }) → { enqueue, replay, updateBadge, persist,
+      startReplayListener }. Persist returns either the written row or
+      a synthetic { id, _offline:true } when queued — unified for all
+      workflows.
+    - injectMobileStyle(prefix) — scoped mobile CSS for full-screen
+      modals + grid collapse + signature canvas resize.
+
+  Refactors:
+  • scripts/site-reports.js — Prestart drops ~310 lines of duplicated
+    helpers. Keeps Prestart-specific: HRCW categories, crew shape,
+    dual-source notice (now uses its own #prestart-notice-style id so
+    it can coexist with the shared mobile style).
+  • scripts/toolbox.js — Toolbox drops ~290 lines. Keeps Toolbox-
+    specific: facilitator/topic/items_reviewed fields, attendance
+    shape (same JSONB as crew).
+
+  Net: 1690 lines across two workflow modules → 1096 lines (-35%).
+  Diary (v3.4.77, next) starts at ~400 lines instead of ~700.
+
+  Why now: with two workflows shipped and two to come (Daily Diary,
+  Weekly Report), the duplication cost was about to compound 4×.
+  Refactor before Diary lands so the cleanup pays back across the
+  remaining build, not after.
+
+  Migrations: none. Database tables unchanged.
+  Permissions: none. Permission matrix unchanged.
+  Sidebar: unchanged.
+
+  Known limitations preserved for next pass (per 2026-05-14 review):
+  • Offline queue still uses localStorage (~5-10MB cap). IndexedDB
+    migration is a separate workstream.
+  • RLS policies still USING (true). Org-id-bound policies are a
+    separate workstream (gated on Phase D JWT mint).
+  • No automated tests. Vitest harness is a separate workstream.
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.75 (history)
 
   CHANGES IN v3.4.75  (Site Reports v2 — Toolbox Talk MVP — DEMO ONLY)
   ────────────────────────────────────────────────────────────
   Second workflow in the Site Reports module, mirroring v3.4.69 Prestart.
-  Toolbox Talks are periodic safety briefings (typically weekly) with
-  per-attendee sign-off, topic + safety message, items reviewed, and
-  open actions carried from prior talks.
+  Toolbox Talks are periodic safety briefings with per-attendee sign-off,
+  topic + safety message, items reviewed, open actions from prior talks.
+  Adds scripts/toolbox.js + migrations/2026-05-14_toolbox_talks_v1.sql
+  (table applied to BOTH Supabases) + permission-matrix.js v1.2 with
+  reports.toolbox.{view,create,submit,sign}. Sidebar entry under Testing
+  (DO NOT USE) with BETA chip.
 
-  Adds:
-  • scripts/toolbox.js — new module (~650 lines), sibling to
-    scripts/site-reports.js. Photo + signature + offline-queue helpers
-    copy-pasted with `toolbox` / `_tbx` prefixes. Refactor target:
-    once Diary lands, extract shared helpers to site-report-shared.js.
-  • migrations/2026-05-14_toolbox_talks_v1.sql — toolbox_talks table
-    (uuid PK, org_id, site_abbr, meeting_date/time, facilitator,
-    topic, safety_message, items_reviewed, open_actions, hazards,
-    swms_refs, next_meeting, attendance jsonb, photos jsonb, status).
-    Same RLS + realtime pattern as prestarts. Photos included from
-    day 1 (Prestart needed a follow-up migration — not repeating).
-  • permission-matrix.js v1.2 — reports.toolbox.{view,create,submit,
-    sign} added. Manager + supervisor get all four; employee /
-    apprentice / labour_hire get .sign only (same shape as prestart).
-  • Sidebar entry "Toolbox" with BETA chip under Testing (DO NOT USE),
-    next to Prestart. Will collapse to one "Site Reports" entry once
-    Diary lands (per the outstanding build brief — hub deferred until
-    ≥2 workflows ship, which is now true).
+  Schema differences from prestarts (deliberate, tenant-neutral):
+  facilitator (not sks_rep), meeting_date/time (not briefing_*),
+  attendance (not crew). Same JSONB shape so signature pad reuses.
 
-  Schema differences from prestarts (deliberate):
-  • `facilitator` not `sks_rep` — toolbox column names must be tenant-
-    neutral. Prestart's `sks_rep` is a legacy leak we're not repeating.
-  • `meeting_date/time` not `briefing_date/time` — toolbox = scheduled
-    meeting, not pre-shift briefing.
-  • `attendance` not `crew` — toolbox audiences include subbies, clients,
-    visitors. Same JSONB shape, so signature pad code is reusable.
-
-  Path C absorption (eq-context ops/decisions.md 2026-05-13): this
-  workflow is the second of four being absorbed from Ben Ritchie's
-  sks-field-reports.netlify.app v29 into EQ Field. Demo-only soak until
-  Ben + Royce sign off. Migration applied to eq-solves-field Supabase
-  ONLY — SKS live waits for explicit "SKS live" trigger.
+  Path C absorption (eq-context ops/decisions.md 2026-05-13): second of
+  four workflows absorbed from Ben Ritchie's sks-field-reports.netlify.app
+  v29. Demo-only soak until sign-off.
   ════════════════════════════════════════════════════════════════
 -->
 
