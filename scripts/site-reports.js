@@ -595,3 +595,23 @@ window.eqGetPrestartsTodayCount = function () {
     return n;
   } catch (e) { return 0; }
 };
+
+// v3.5.1: small accessor for the supervisor mobile home action strip.
+// Counts prestarts in 'draft' status dated today or earlier (i.e. still
+// open and needing sign-off). Returns 0 on tenants where the table is
+// disabled. `prestartCache` is module-local so home.js can't reach it.
+window.eqGetPrestartsDraftCount = function () {
+  try {
+    const slug = (window.TENANT && TENANT.ORG_SLUG) ? TENANT.ORG_SLUG : 'eq';
+    const disabled = (window.TENANT_DISABLED_TABLES && TENANT_DISABLED_TABLES[slug]) || [];
+    if (disabled.indexOf('prestarts') !== -1) return 0;
+    if (!Array.isArray(prestartCache)) return 0;
+    const todayIso = _prestartTodayIso();
+    let n = 0;
+    for (let i = 0; i < prestartCache.length; i++) {
+      const r = prestartCache[i];
+      if (r && r.status === 'draft' && r.briefing_date && r.briefing_date <= todayIso) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+};

@@ -175,3 +175,57 @@ overnight. Read the new `## Night 1` entry below.
 - This iteration covered ALL FOUR angles in one pass for the test. Cloud schedule will rotate ONE per night per the day-of-week plan.
 - The "Look at this first" pointer at the top of each entry is the most useful summary item for Royce — keep it.
 - The findings table by severity gives a quick visual of where attention is needed — keep it.
+
+---
+
+### Session — 2026-05-15 — v3.5.1 supervisor home (manual, not cloud-scheduled)
+
+**Look at this first:** [PR #83](https://github.com/Milmlow/eq-field-app/pull/83) — v3.5.1 supervisor home tile screen. Open for your review; does NOT pass auto-merge bar. Test plan in the PR body.
+
+**Pre-flight findings (state-of-the-world correction):**
+
+The session brief (`NEW-WINDOW-PROMPT.md` on the Desktop) was written before v3.5.0 shipped and said "build Daily Site Diary next". Diary actually shipped at v3.4.77; demo is now on v3.5.0. The brief was refreshed in place to reflect actual state through v3.5.0 and the v3.5.1 supervisor home draft on disk. Next-Claude pre-flight cost should drop by ~30 min.
+
+Also confirmed:
+- Cloud /schedule for nightly audit STILL not active (no Night 2+ entries in this log; Royce's retry pending)
+- SPRINT-QUESTIONS.md still unanswered → S1/U2/S2/SEC2 sprint not started
+- Tender Pipeline shipped a major workstream (v3.4.79–83) plus v3.4.84 polish rolled into v3.5.0 — not in any earlier brief, now documented
+
+**What shipped (PR open, not yet merged):**
+
+v3.5.1 — Mobile-first home tile screen: supervisor variant. Phase 2 of the mobile-first nav rollout. Promoted the `_proposals/mobile-first-nav/phase-2-supervisor-home.js` draft into `scripts/home.js` via Option A (extend with a role branch).
+
+Diff: 8 files, +461 / -95 (≈366 net new). Above the auto-merge bar — PR left open for Royce review.
+
+**Schema corrections vs the draft:**
+
+Three of the draft's count functions were wired against fields that don't exist in the live schema. Re-wired against actual sources:
+
+| Count | Draft path (wrong) | Actual schema | Fix |
+| --- | --- | --- | --- |
+| Pending leave | `STATE.leaveRequests` w/ `status==='pending'` | module-local `leaveRequests` in leave.js, `status==='Pending'` | new `window.eqGetPendingLeaveCount()` accessor in leave.js |
+| Pre-starts to sign | `STATE.prestarts` w/ `signed_by_supervisor_id` | module-local `prestartCache` in site-reports.js, `status==='draft'` + `briefing_date` | new `window.eqGetPrestartsDraftCount()` accessor in site-reports.js |
+| Timesheets to review | `STATE.timesheets` w/ `submitted_at`/`reviewed_at`/`approved_at` | None of those columns exist — timesheets are auto-saved per cell | **Dropped** the count from MVP. No source. |
+
+**Decisions needed from Royce:**
+
+1. **Review + merge PR #83** once you've poked at the supervisor home on your phone (test plan in the PR body).
+2. **Stage SKS supervisors separately?** Right now `home_screen_v1` is default-on for both tenants — when PR #83 merges, SKS supervisors will see this on mobile too. If you want SKS to soak on the existing sidebar for a few days first, set `DEFAULTS.tenants.sks.home_screen_v1 = false` in scripts/flags.js before merging (or merge then flip via PostHog audience).
+3. **SPRINT-QUESTIONS.md is still open.** S1 (sliding-window queries — Melbourne scaling blocker, ~7h) is gated on your answers. Nothing else can move that.
+4. **Cloud /schedule retry.** Night 1 was a manual test run; no Night 2+ entries because the cloud schedule never fired. If you want the nightly audit cadence back, retry the /schedule setup with the prompt in SCHEDULE-PROMPT.md.
+
+**What's queued after v3.5.1 ships:**
+
+1. Site Reports HUB (~half day) — collapse Prestart + Toolbox + Diary sidebar entries into ONE "Site Reports" entry with landing-page status cards. Brief calls this next. Auto-merge candidate.
+2. S1 sliding-window queries (~7h) — IF SPRINT-QUESTIONS answered.
+3. U2 accessibility CI scaffold (~1-2h) — standalone, independent. Useful warm-up between bigger pieces.
+4. Weekly Site Report (~6-8 days) — premature until at least one supervisor is using all three Site Reports workflows weekly.
+
+**What was deliberately NOT touched:**
+
+- main / SKS prod auth / RLS / env / migrations
+- SKS Supabase project (off-limits per brief)
+- scripts/tender-pipeline.js (Royce's active surface; he just shipped 5 versions of it)
+- AUDIT-REVIEW's prior findings (append-only; this session added one new entry below Night 1, no restructure)
+
+**Substrate hygiene:** not updated (eq-context substrate not visible from this worktree).

@@ -1,6 +1,35 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
 // ─────────────────────────────────────────────────────────────
-// _proposals/mobile-first-nav/phase-2-supervisor-home.js  —  DRAFT
+// _proposals/mobile-first-nav/phase-2-supervisor-home.js
+//
+// ╔══════════════════════════════════════════════════════════╗
+// ║  SHIPPED IN v3.5.1 — 2026-05-15                          ║
+// ║                                                          ║
+// ║  This draft was PROMOTED via Option A (extend            ║
+// ║  scripts/home.js with a role branch). The live code      ║
+// ║  lives in scripts/home.js. This file is kept on disk     ║
+// ║  for reference / decision trail — DO NOT load it.        ║
+// ║                                                          ║
+// ║  Key differences between this draft and what shipped:    ║
+// ║    - countPendingLeave() now calls                       ║
+// ║      window.eqGetPendingLeaveCount() (added to           ║
+// ║      scripts/leave.js) — draft's STATE.leaveRequests     ║
+// ║      reference was wrong (leaveRequests is module-       ║
+// ║      local, status is 'Pending' capital-P).              ║
+// ║    - countPrestartsToSign() now calls                    ║
+// ║      window.eqGetPrestartsDraftCount() — draft's         ║
+// ║      STATE.prestarts + signed_by_supervisor_id was       ║
+// ║      wrong (prestartCache is module-local, status is     ║
+// ║      'draft', date column is briefing_date).             ║
+// ║    - countTimesheetsToReview() DROPPED — timesheets      ║
+// ║      have no review-state column in this app (they're    ║
+// ║      auto-saved per cell), so the count had no source.   ║
+// ║    - Drawer unified into one DOM node, rebuilt per       ║
+// ║      open based on role (simpler than two nodes).        ║
+// ╚══════════════════════════════════════════════════════════╝
+//
+// Original (pre-promotion) header below for reference.
+// ─────────────────────────────────────────────────────────────
 //
 // Phase 2 scaffolding for the SUPERVISOR variant of the mobile home
 // tile screen. Sibling to the staff home in scripts/home.js (shipped

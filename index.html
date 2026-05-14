@@ -256,6 +256,57 @@
     - scripts/app-state.js            (APP_VERSION 3.5.0 → 3.5.2)
     - sw.js                           (CACHE bump + hub.js in PRECACHE)
 
+  CHANGES IN v3.5.1  (Mobile-first home tile screen — supervisor role)
+  ────────────────────────────────────────────────────────────
+  • Phase 2 of the mobile-first nav rollout. Supervisors on mobile
+    (viewport < 768px, isManager === true, home_screen_v1 flag on)
+    now land on a six-tile home screen with an action strip:
+      "Needs you today · 2 leave to approve · 1 pre-start"
+    Empty state shows a green "All clear — nothing waiting on you
+    today" instead.
+  • TILES — Schedule, Timesheets, Leave, Pre-starts, Team, Reports.
+    Pre-starts tile still hidden on SKS until the module ships there
+    (TENANT_DISABLED_TABLES gate, unchanged from staff variant).
+    Decision G1: tiles carry STATUS badges only (e.g. "New" on
+    Pre-starts) — no count badges. Counts live exclusively on the
+    action strip so supervisors don't have to scan six numbers.
+  • COG DRAWER — supervisor variant adds Edit roster, Sites, Job
+    numbers, Apprentices, Supervision, Import/Export, Audit log
+    on top of the staff drawer's Contacts/Calendar/Help/Privacy.
+  • ACTION STRIP DATA — small accessors added:
+      window.eqGetPendingLeaveCount()    (in scripts/leave.js)
+      window.eqGetPrestartsDraftCount()  (in scripts/site-reports.js)
+    Both read module-local arrays the home screen can't reach
+    directly. "Timesheets to review" count was DROPPED from MVP —
+    timesheets in this app have no review-state column (they're
+    auto-saved per cell by the supervisor), so the count had no
+    meaningful source. Add it later if a "needs review" workflow
+    lands.
+  • ROUTING — initApp() gets a parallel supervisor branch mirroring
+    the v3.5.0 staff branch. Desktop supervisor (viewport ≥ 768px)
+    or flag-off still lands on the existing sidebar shell — no
+    regression for the 90% of supervisor work that happens at a desk.
+  • REUSES home_screen_v1 — same flag as v3.5.0. If Royce wants to
+    stage SKS supervisors separately, flip the flag per-tenant
+    (DEFAULTS in flags.js or PostHog audience).
+  • DRAFT PROMOTED — _proposals/mobile-first-nav/phase-2-supervisor-home.js
+    is now stamped SHIPPED IN v3.5.1 at the top. Kept on disk for
+    reference; the live code lives in scripts/home.js with a role
+    branch (Option A per the proposal's promotion plan).
+  • FILES TOUCHED
+    - scripts/home.js                 (role branch, supervisor render,
+                                       action strip, drawer variant)
+    - styles/home.css                 (role chip, action strip states,
+                                       Team/Reports tile colours)
+    - scripts/leave.js                (window.eqGetPendingLeaveCount)
+    - scripts/site-reports.js         (window.eqGetPrestartsDraftCount)
+    - index.html                      (favicon cache-buster, initApp
+                                       supervisor branch, this banner)
+    - scripts/app-state.js            (APP_VERSION 3.5.0 → 3.5.1)
+    - sw.js                           (CACHE bump)
+    - _proposals/mobile-first-nav/phase-2-supervisor-home.js
+                                      (header stamped SHIPPED)
+
   CHANGES IN v3.5.0  (Mobile-first home tile screen — staff role, flag-gated)
   ────────────────────────────────────────────────────────────
   • First non-patch release since v3.0. Adds a mobile-first home
@@ -3405,6 +3456,23 @@ async function initApp() {
       showPage('schedule');
       mobileNav('schedule');
     }
+  } else {
+    // v3.5.1 — supervisor mobile gets the home tile screen too (action
+    // strip + 6 tiles). Desktop supervisor flow is unchanged: bulk admin
+    // still wants sidebar density. Same flag as Phase 1 — if Royce wants
+    // to stage SKS supervisors separately he can flip the flag per-tenant.
+    const _eqhsWantsHome = (function () {
+      try {
+        if (!window.EQ_FLAGS || !window.EQ_FLAGS.isEnabled('home_screen_v1')) return false;
+        if (typeof window.renderHomeScreen !== 'function') return false;
+        if (typeof window.matchMedia !== 'function') return false;
+        return window.matchMedia('(max-width: 767px)').matches;
+      } catch (e) { return false; }
+    })();
+    if (_eqhsWantsHome) {
+      showPage('home');
+    }
+    // Otherwise: leave the existing supervisor desktop landing alone.
   }
 
   // v3.4.72: seed the state signature now so the first poll cycle doesn't
