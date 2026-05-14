@@ -505,4 +505,4 @@ const SEED = {
     { id:317, name:'Maxine Scott',    week:'20.04.26', mon:'SITE-E', tue:'SITE-E', wed:'SITE-E', thu:'SITE-E', fri:'SITE-E' },
     { id:318, name:'Noah King',       week:'20.04.26', mon:'SITE-F', tue:'SITE-F', wed:'SITE-F', thu:'SITE-F', fri:'SITE-F' },
   ]
-}; 
+};

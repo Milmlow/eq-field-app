@@ -1839,4 +1839,91 @@
           + '<td>' + dot + escapeHtml(stageLabel[t.stage] || t.stage) + '</td>'
           + '<td style="text-align:right;font-weight:600">' + fmtMoney(t.quote_value) + '</td>'
           + '<td style="text-align:center">' + (t.probability_pct != null ? t.probability_pct + '%' : '—') + '</td>'
-          + '<td>' + fmtDate(en
+          + '<td>' + fmtDate(enr.start_date_estimated) + '</td>'
+          + '<td>' + fmtDate(finishDate) + '</td>'
+          + '<td style="text-align:center">' + (enr.duration_weeks ? enr.duration_weeks + 'w' : '—') + '</td>'
+          + '<td style="text-align:right">' + (enr.hours_estimated ? Math.round(enr.hours_estimated) + 'h' : '—') + '</td>'
+          + '<td>' + escapeHtml(pmPerson ? pmPerson.name : '—') + '</td>'
+          + '<td>' + escapeHtml(supPerson ? supPerson.name : '—') + '</td>'
+          + '<td>' + escapeHtml(t.department || '—') + '</td>'
+          + '</tr>';
+      }).join('');
+
+      host.innerHTML = ''
+        + '<div class="pl-wrap">'
+        + '  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">'
+        + '    <h2 style="margin:0">Pipeline Dashboard</h2>'
+        + '    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+        + '      <select class="pl-select" id="pl-dash-stage" style="max-width:200px">' + stageOptions + '</select>'
+        + '      <select class="pl-select" id="pl-dash-dept" style="max-width:200px">' + deptOptions.join('') + '</select>'
+        + '      <span style="font-size:12px;color:var(--ink-3)">' + tenders.length + ' tender' + (tenders.length === 1 ? '' : 's') + '</span>'
+        + '    </div>'
+        + '  </div>'
+        + '  <div class="pl-dash-stats">'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + fmtMoney(totalPipelineValue) + '</div><div class="pl-stat-lbl">Active pipeline value</div></div>'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + fmtMoney(confirmedValue) + '</div><div class="pl-stat-lbl">Confirmed value</div></div>'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + Math.round(confirmedHours) + 'h</div><div class="pl-stat-lbl">Committed hours</div></div>'
+        + '    <div class="pl-stat-card"><div class="pl-stat-val">' + active.length + '</div><div class="pl-stat-lbl">Active tenders</div></div>'
+        + '  </div>'
+        + '  <div class="pl-card" style="margin-bottom:16px">'
+        + '    <div class="pl-section-title" style="margin-bottom:8px">Weekly hours forecast (next 26 weeks)</div>'
+        + '    <div style="overflow-x:auto">' + chartHtml + '</div>'
+        + '  </div>'
+        + '  <div class="pl-card" style="padding:0;overflow:hidden">'
+        + '    <table class="pl-dash-table">'
+        + '      <thead><tr>'
+        + '        <th>Job</th><th>Client</th><th>Stage</th><th style="text-align:right">Value</th>'
+        + '        <th style="text-align:center">Prob</th><th>Start</th><th>Finish</th>'
+        + '        <th style="text-align:center">Dur</th><th style="text-align:right">Hours</th>'
+        + '        <th>PM</th><th>Supervisor</th><th>Dept</th>'
+        + '      </tr></thead>'
+        + '      <tbody>' + (tableRows || '<tr><td colspan="12" style="text-align:center;color:var(--ink-3);padding:20px">No tenders match the current filters.</td></tr>') + '</tbody>'
+        + '    </table>'
+        + '  </div>'
+        + '</div>';
+
+      // Wire up filter change events
+      var stageEl = document.getElementById('pl-dash-stage');
+      var deptEl  = document.getElementById('pl-dash-dept');
+      if (stageEl) stageEl.addEventListener('change', function () {
+        _dashStageFilter = this.value;
+        renderPipelineDashboard();
+      });
+      if (deptEl) deptEl.addEventListener('change', function () {
+        _dashDeptFilter = this.value;
+        renderPipelineDashboard();
+      });
+    });
+  }
+
+  // =====================================================================
+  // Exports
+  // =====================================================================
+
+  window.EQ_TENDER_PIPELINE = {
+    loadAll:              loadAll,
+    renderImport:         renderImport,
+    renderKanban:         renderKanban,
+    renderReview:         renderReview,
+    renderConfirmCurve:   renderConfirmCurve,
+    renderPipelineDashboard: renderPipelineDashboard,
+    openTenderPanel:      openTenderPanel,
+    closeTenderPanel:     closeTenderPanel,
+    _applyImport:         _applyImport,
+    _cancelImport:        _cancelImport,
+    _savePanel:           _savePanel,
+    _startSession:        _startSession,
+    _endSession:          _endSession,
+    _logDecision:         _logDecision,
+    _quickDecision:       _quickDecision,
+    _goConfirmCurve:      _goConfirmCurve,
+    _confirmCurveSubmit:  _confirmCurveSubmit,
+    _saveRowPencillings:  _saveRowPencillings,
+    _advanceStage:        _advanceStage,
+    _quickPushToSchedule: _quickPushToSchedule,
+    _helpers: {
+      toMonday: toMonday, addWeeks: addWeeks, isoWeekKey: isoWeekKey,
+      fmtMoney: fmtMoney, fmtDate: fmtDate, deptValueFloor: deptValueFloor
+    }
+  };
+})();
