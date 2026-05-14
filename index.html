@@ -3101,6 +3101,34 @@ async function loadFromSupabase() {
     STATE.schedule  = SEED.schedule.map(r => ({ id:r.id||Math.random(), name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:'', sun:'' }));
     STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
     STATE.timesheets = [];
+    // v3.5.4 (S2 test affordance) — ?seed500 URL param appends ~480 fake
+    // contacts so reviewers can verify EQVirtualTable virtualisation
+    // kicks in (threshold 150 rows). Demo / EQ tenant only — never runs
+    // on SKS prod. Faked rows have id `fake-N` so they're easy to spot
+    // and easy to filter out if needed. No-op when param absent.
+    try {
+      var _qs = new URLSearchParams(window.location.search);
+      if (_qs.get('seed500') !== null) {
+        var _groups = ['Direct','Apprentice','Labour Hire'];
+        var _agencies = ['Core Labour','Atom Staff','Pivot Crew','Ridgeline'];
+        for (var _i = 0; _i < 480; _i++) {
+          var _g = _groups[_i % 3];
+          STATE.people.push({
+            id: 'fake-' + _i,
+            name: 'Test Person ' + String(_i + 1).padStart(3, '0'),
+            phone: '0411' + String(900000 + _i).padStart(6, '0'),
+            group: _g,
+            licence: _g === 'Apprentice' ? (['1st Year','2nd Year','3rd Year','4th Year'][_i % 4]) : 'Licensed',
+            agency: _g === 'Labour Hire' ? _agencies[_i % _agencies.length] : '',
+            email: 'test' + (_i + 1) + '@example.com',
+            tafe_day: _g === 'Apprentice' ? (['mon','tue','wed','thu','fri'][_i % 5]) : '',
+            dob_day: null, dob_month: null, start_date: null,
+            archived: false
+          });
+        }
+        console.info('EQ[seed500] Appended 480 fake contacts. STATE.people now has ' + STATE.people.length + ' entries.');
+      }
+    } catch (_e) { /* fail-quiet */ }
     // PERF: Build O(1) schedule index
     STATE.scheduleIndex = {};
     STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });
