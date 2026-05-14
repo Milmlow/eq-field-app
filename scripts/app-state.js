@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.77';
+const APP_VERSION = '3.4.79';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -60,7 +60,13 @@ const ORG_TABLES = [
   'apprentice_profiles', 'skills_ratings', 'feedback_entries',
   'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log',
   'roster_presence',  // v3.4.47 — realtime presence on roster editor cells
-  'prestarts'         // v3.4.69 — Site Reports module, prestart briefings
+  'prestarts',        // v3.4.69 — Site Reports module, prestart briefings
+  // v3.4.79 — Tender Pipeline module. nominations + tender_enrichment are
+  // tender-scoped (no org_id column of their own) so they're filtered via
+  // tender_id joins in tender-pipeline.js — NOT auto-org-stamped here.
+  // nomination_clashes is a view without an org_id column — filtered
+  // client-side by joining against STATE.people.
+  'tenders', 'tender_import_runs', 'tender_review_decisions', 'pending_schedule'
 ];
 
 // v3.4.29: tables a tenant doesn't have. sbFetch GET on these returns []
@@ -72,7 +78,11 @@ const TENANT_DISABLED_TABLES = {
     'skills_ratings', 'competencies', 'sks_quotes_materials',
     'feedback_entries', 'feedback_requests',
     'rotations', 'buddy_checkins', 'quarterly_reviews', 'engagement_log',
-    'checkins'
+    'checkins',
+    // v3.4.79 — Tender Pipeline migration is demo-only for now. SKS will
+    // get it bundled into a future cutover. Until then, skip the fetches.
+    'tenders', 'tender_enrichment', 'nominations', 'nomination_clashes',
+    'pending_schedule', 'tender_import_runs', 'tender_review_decisions'
   ]
 };
 
@@ -334,7 +344,14 @@ const STATE = {
   managers:     [],
   timesheets:   [],
   currentWeek:  '',
-  scheduleIndex: {}
+  scheduleIndex: {},
+  // v3.4.79 — Tender Pipeline cache (populated by tender-pipeline.js)
+  tenders:           [],
+  tenderEnrichment:  {},  // keyed by tender_id
+  nominations:       [],
+  nominationClashes: [],
+  tenderImportRuns:  [],
+  reviewSessionId:   null // set when CM clicks Start Review Session
 };
 
 function saveCurrentWeek() {

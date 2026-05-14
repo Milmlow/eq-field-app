@@ -1,0 +1,24 @@
+# Property of EQ — all rights reserved. Unauthorised use prohibited.
+# Netlify _headers — security headers + CSP for eq-solves-field.
+#
+# Introduced in v3.4.69 alongside the Tender Pipeline module. Prior
+# releases shipped with no _headers file; Netlify defaults applied.
+# SheetJS (xlsx 0.20.3) is loaded from cdnjs.cloudflare.com — the
+# script-src + connect-src directives below cover it explicitly.
+#
+# Both Supabase hosts are listed in connect-src because the same
+# repo deploys to two tenants (eq → ktmjmdzqrogauaevbktn, sks →
+# nspbmirochztcjijmcrx). PostHog (EU region) and Microsoft Clarity
+# (analytics) are also pre-allowed.
+#
+# When adding a new external script, dependency or fetch target,
+# add its origin here AND to the analytics.js / supabase.js call
+# sites — don't silently rely on report-only mode.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=(self), payment=(), usb=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://eu.i.posthog.com https://eu-assets.i.posthog.com https://www.clarity.ms https://c.clarity.ms; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://nspbmirochztcjijmcrx.supabase.co https://ktmjmdzqrogauaevbktn.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com https://www.clarity.ms https://c.clarity.ms; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
