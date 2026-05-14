@@ -108,4 +108,10 @@ self.addEventListener('fetch', event => {
         // v3.4.58: only cache successful responses. See cache-first branch.
         if (res.ok) {
           const c = res.clone();
-          caches.open(CACHE).then(cache => cache.p
+          caches.open(CACHE).then(cache => cache.put(event.request, c));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request))
+  );
+});
