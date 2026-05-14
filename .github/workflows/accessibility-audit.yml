@@ -1,0 +1,99 @@
+# Accessibility audit — axe-core against the live deploys.
+#
+# Phase 1 of U2 (Night 1 audit finding — only 10 aria-* attributes
+# across the 3500-line index.html). Generates a structured report so
+# we have an evidence base for the targeted manual pass + a
+# procurement-ready artefact when a Melbourne enterprise customer
+# asks "what's your WCAG compliance?"
+#
+# Trigger: manual only (workflow_dispatch). No cron — the v3.5.0 cloud
+# /schedule taught us recurring infra is fragile. Royce fires this
+# from the GitHub Actions tab when he wants a fresh audit. Suggested
+# cadence: monthly, or after any large UX shift (e.g. v3.5.0 mobile
+# home tile screen).
+#
+# Output: JSON + HTML reports uploaded as artifacts on the run.
+# Inspect under Actions → run → Artifacts.
+
+name: Accessibility audit (axe-core)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which deploy to audit'
+        required: true
+        default: 'eq'
+        type: choice
+        options:
+          - eq
+          - sks
+
+jobs:
+  axe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve target URL
+        id: target
+        run: |
+          if [ "${{ inputs.target }}" = "sks" ]; then
+            echo "url=https://sks-nsw-labour.netlify.app" >> "$GITHUB_OUTPUT"
+            echo "label=SKS prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://eq-solves-field.netlify.app" >> "$GITHUB_OUTPUT"
+            echo "label=EQ demo" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install axe-core CLI
+        run: npm install --no-save @axe-core/cli@^4.10.0
+
+      - name: Install Chrome (axe-core needs a real browser)
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Run axe-core against ${{ steps.target.outputs.label }}
+        id: axe
+        continue-on-error: true
+        run: |
+          mkdir -p axe-reports
+          npx axe "${{ steps.target.outputs.url }}" \
+            --save axe-reports/${{ inputs.target }}-$(date -u +%Y-%m-%dT%H-%M-%SZ).json \
+            --tags wcag2a,wcag2aa,wcag21a,wcag21aa \
+            --exit \
+            || echo "axe exited non-zero — violations found, see report"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: axe-report-${{ inputs.target }}
+          path: axe-reports/
+          if-no-files-found: warn
+
+      - name: Summarise findings
+        if: always()
+        run: |
+          echo "## Accessibility audit — ${{ steps.target.outputs.label }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ steps.target.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Run by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if ls axe-reports/*.json >/dev/null 2>&1; then
+            REPORT=$(ls -t axe-reports/*.json | head -1)
+            VIOLATIONS=$(jq '[.[] | .violations | length] | add // 0' "$REPORT" 2>/dev/null || echo "?")
+            INCOMPLETE=$(jq '[.[] | .incomplete | length] | add // 0' "$REPORT" 2>/dev/null || echo "?")
+            echo "**Violations:** $VIOLATIONS" >> $GITHUB_STEP_SUMMARY
+            echo "**Needs review:** $INCOMPLETE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Full JSON + HTML reports attached as a run artifact." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "_No report generated — axe step likely failed before output. Check logs._" >> $GITHUB_STEP_SUMMARY
+          fi
