@@ -3022,6 +3022,46 @@ function onWeekChange() {
   renderCurrentPage();
 }
 
+// ── S1 Phase 1 — Sliding-window helpers ─────────────────────────
+// Returns the 9 week keys (DD.MM.YY) centered on `centerWeek`
+// (default STATE.currentWeek): -4, -3, -2, -1, 0, +1, +2, +3, +4.
+// If no center week is available, falls back to the Monday of the
+// real-world current week. Used by Phase 2 (initial-load scope) and
+// Phase 3 (lazy-load on week nav). Phase 1 ships this unused — it's
+// just instrumentation so the data shape is ready.
+//
+// Window size (±4 = 9 weeks) chosen per SPRINT-QUESTIONS Q1 default:
+// good balance between initial payload size and lazy-load frequency.
+function _getVisibleWeekRange(centerWeek) {
+  function _mondayOfWeekKey(wk) {
+    if (wk && typeof wk === 'string' && wk.indexOf('.') > -1) {
+      var parts = wk.split('.');
+      if (parts.length === 3) {
+        return new Date('20' + parts[2] + '-' + parts[1] + '-' + parts[0]);
+      }
+    }
+    // Fallback — Monday of real-world current week
+    var d = new Date();
+    var mon = new Date(d);
+    mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    mon.setHours(0, 0, 0, 0);
+    return mon;
+  }
+  function _formatWeekKey(date) {
+    return String(date.getDate()).padStart(2, '0') + '.' +
+           String(date.getMonth() + 1).padStart(2, '0') + '.' +
+           String(date.getFullYear()).slice(-2);
+  }
+  var center = _mondayOfWeekKey(centerWeek || (STATE && STATE.currentWeek) || '');
+  var weeks = [];
+  for (var i = -4; i <= 4; i++) {
+    var d = new Date(center);
+    d.setDate(center.getDate() + i * 7);
+    weeks.push(_formatWeekKey(d));
+  }
+  return weeks;
+}
+
 function updateWeekLabel() {
   const lbl = document.getElementById('week-label-text');
   if (lbl) lbl.textContent = formatWeekLabel(STATE.currentWeek);
