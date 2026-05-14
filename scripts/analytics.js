@@ -431,12 +431,32 @@ const _events = {
     _track('tender_promoted', {
       tender_id:  p && p.tender_id,
       from_stage: p && p.from_stage,
+      path:       (p && p.path) || 'confirm_curve',
     });
   },
   labourCurveConfirmed: function (p) {
     _track('labour_curve_confirmed', {
       tender_id:   p && p.tender_id,
       rows_pushed: (p && p.rows_pushed) || 0,
+      path:        (p && p.path) || 'confirm_curve',
+    });
+  },
+
+  // v3.4.82 — drag-and-drop on kanban + decision queue actions on Review
+  tenderStageDragged: function (p) {
+    _track('tender_stage_dragged', {
+      tender_id:               p && p.tender_id,
+      from_stage:              p && p.from_stage,
+      to_stage:                p && p.to_stage,
+      routed_to_confirm_curve: !!(p && p.routed_to_confirm_curve),
+      source:                  (p && p.source) || 'drag',
+    });
+  },
+  pencillingsSavedReview: function (p) {
+    _track('pencillings_saved_review', {
+      tender_id: p && p.tender_id,
+      pm_set:    !!(p && p.pm_set),
+      sup_set:   !!(p && p.sup_set),
     });
   },
 };

@@ -230,7 +230,26 @@
       + '.pl-curve-grid th{background:#f9fafb;font-weight:700}'
       + '.pl-curve-grid input{width:48px;border:none;text-align:center;font-family:inherit;font-size:11.5px}'
       + '.pl-curve-grid input:focus{outline:1px solid var(--navy,#1e3a8a);outline-offset:-1px}'
-      + '@media(max-width:900px){.pl-kanban{grid-template-columns:1fr 1fr}}'
+      // v3.4.82 — drag-and-drop visuals
+      + '.pl-tender[draggable="true"]{cursor:grab}'
+      + '.pl-tender.pl-tender-dragging{opacity:.4;cursor:grabbing}'
+      + '.pl-col.pl-col-dragover{background:#dbeafe;outline:2px dashed #3b82f6;outline-offset:-2px}'
+      // v3.4.82 — decision queue (Review screen restructure)
+      + '.pl-queue{display:grid;grid-template-columns:1fr 320px;gap:14px;margin-top:14px;align-items:start}'
+      + '.pl-q-row{background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.04)}'
+      + '.pl-q-row-urgent{border-left:4px solid #dc2626}'
+      + '.pl-q-row-soon{border-left:4px solid #f59e0b}'
+      + '.pl-q-row-norm{border-left:4px solid #3b82f6}'
+      + '.pl-q-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}'
+      + '.pl-q-title{font-weight:700;font-size:14px;color:var(--ink-1,#1a1a1a);line-height:1.3}'
+      + '.pl-q-meta{font-size:11.5px;color:var(--ink-3,#666);margin-bottom:4px}'
+      + '.pl-q-tags{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 8px}'
+      + '.pl-q-controls{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}'
+      + '.pl-q-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;border-top:1px solid var(--border,#e5e7eb);padding-top:8px}'
+      + '.pl-side{position:sticky;top:14px;background:#fff;border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:12px;max-height:calc(100vh - 100px);overflow-y:auto}'
+      + '.pl-side h4{margin:0 0 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-3,#666);font-weight:700}'
+      + '.pl-q-empty{padding:30px;text-align:center;color:var(--ink-3,#666);font-size:14px;background:#f9fafb;border-radius:8px;border:1px dashed var(--border,#e5e7eb)}'
+      + '@media(max-width:900px){.pl-kanban{grid-template-columns:1fr 1fr}.pl-queue{grid-template-columns:1fr}.pl-side{position:static;max-height:none}}'
       + '@media(max-width:600px){.pl-kanban{grid-template-columns:1fr}.pl-panel{width:100%}}';
     var s = document.createElement('style');
     s.id = 'eq-pipeline-styles';
@@ -571,7 +590,7 @@
     var html = '<div class="pl-kanban">';
     STAGE_COLUMNS.forEach(function (col) {
       var rows = byStage[col.key] || [];
-      html += '<div class="pl-col">'
+      html += '<div class="pl-col" data-stage="' + escapeHtml(col.key) + '">'
         + '<div class="pl-col-header"><div class="pl-col-title" style="color:' + col.accent + '">' + col.label + '</div>'
         + '<div class="pl-col-count">' + rows.length + '</div></div>'
         + (rows.length ? rows.map(_renderTenderCard).join('') : '<div class="pl-empty">Nothing here.</div>')
@@ -579,6 +598,79 @@
     });
     html += '</div>';
     grid.innerHTML = html;
+    _attachKanbanDnd();
+  }
+
+  // v3.4.82 — drag-and-drop wiring for the kanban
+  function _attachKanbanDnd() {
+    var cards = document.querySelectorAll('#pl-kanban-grid .pl-tender[draggable="true"]');
+    cards.forEach(function (c) {
+      c.addEventListener('dragstart', function (e) {
+        var id = c.getAttribute('data-tender-id');
+        var stage = c.getAttribute('data-stage');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', JSON.stringify({ id: id, from: stage }));
+        c.classList.add('pl-tender-dragging');
+      });
+      c.addEventListener('dragend', function () {
+        c.classList.remove('pl-tender-dragging');
+      });
+    });
+    var cols = document.querySelectorAll('#pl-kanban-grid .pl-col');
+    cols.forEach(function (col) {
+      col.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        col.classList.add('pl-col-dragover');
+      });
+      col.addEventListener('dragleave', function (e) {
+        // Only clear when leaving the column for real (not when entering a child)
+        if (e.currentTarget === col && !col.contains(e.relatedTarget)) {
+          col.classList.remove('pl-col-dragover');
+        }
+      });
+      col.addEventListener('drop', function (e) {
+        e.preventDefault();
+        col.classList.remove('pl-col-dragover');
+        var raw;
+        try { raw = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (_) { return; }
+        if (!raw || !raw.id) return;
+        var toStage = col.getAttribute('data-stage');
+        _handleStageDrop(raw.id, raw.from, toStage);
+      });
+    });
+  }
+
+  function _handleStageDrop(tenderId, fromStage, toStage) {
+    if (!toStage || fromStage === toStage) return;
+    if (toStage === 'confirmed') {
+      if (fromStage !== 'won') {
+        toast('Move to "Awaiting Promotion" first — only Won tenders can confirm', 'error');
+        return;
+      }
+      // Auto-route to Confirm Curve (preserves the labour-curve gate)
+      ev('tenderStageDragged', { tender_id: tenderId, from_stage: fromStage, to_stage: toStage, routed_to_confirm_curve: true });
+      _goConfirmCurve(tenderId);
+      return;
+    }
+    _saveTenderStage(tenderId, toStage, fromStage);
+  }
+
+  function _saveTenderStage(tenderId, newStage, fromStage) {
+    sbFetch('tenders?id=eq.' + encodeURIComponent(tenderId), 'PATCH', {
+      stage:      newStage,
+      updated_at: new Date().toISOString()
+    }, 'return=minimal').then(function () {
+      var t = STATE.tenders.find(function (x) { return sameId(x.id, tenderId); });
+      if (t) t.stage = newStage;
+      ev('tenderStageDragged', { tender_id: tenderId, from_stage: fromStage, to_stage: newStage, routed_to_confirm_curve: false });
+      toast('Moved to ' + newStage, 'success');
+      _renderKanbanGrid();
+    }).catch(function (err) {
+      console.error('EQ[pipeline] stage drop failed', err);
+      toast('Move failed', 'error');
+      renderKanban();
+    });
   }
 
   function _sortDueDate(a, b) {
@@ -618,7 +710,9 @@
     var promote = t.stage === 'won'
       ? '<button class="pl-btn pl-btn-primary" style="margin-top:6px;padding:4px 10px;font-size:11.5px" onclick="event.stopPropagation();window.EQ_TENDER_PIPELINE._goConfirmCurve(' + JSON.stringify(S(t.id)) + ')">Promote →</button>'
       : '';
-    return '<div class="pl-tender" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">'
+    return '<div class="pl-tender" draggable="true"'
+      + ' data-tender-id="' + escapeHtml(S(t.id)) + '" data-stage="' + escapeHtml(t.stage) + '"'
+      + ' onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">'
       + '<div class="pl-tender-title">' + escapeHtml(t.job_name || '(no name)') + '</div>'
       + '<div class="pl-tender-meta">' + escapeHtml(t.client || '—')
       + ' · Due ' + fmtDate(t.due_date) + ' · ' + (t.probability_pct == null ? '—' : t.probability_pct + '%') + '</div>'
@@ -812,8 +906,15 @@
   }
 
   // =====================================================================
-  // Screen 4 — /pipeline/review
+  // Screen 4 — /pipeline/review  (v3.4.82: rebuilt as decision queue)
   // =====================================================================
+  // Was: 4 read-only panels + Notes log. Every actionable row said "Open"
+  // and bounced the user to the slide-over.
+  // Now: one ranked queue. Each row has inline PM + Supervisor pickers.
+  // Won-stage tenders with full enrichment + nominees can be pushed
+  // straight to the schedule (skipping Confirm Curve) — placeholder rows
+  // for the rest of the team can still be filled later via Confirm Curve.
+  // Notes log moves to a side rail.
 
   function renderReview() {
     ensureStyles();
@@ -824,63 +925,31 @@
       return;
     }
     loadAll().then(function () {
-      var lastRun = STATE.tenderImportRuns && STATE.tenderImportRuns[0];
-      var lastRunAt = lastRun ? lastRun.imported_at : null;
-
-      // Panel 1 — what changed since last review
-      var newTenders = STATE.tenders.filter(function (t) {
-        if (!t.first_imported_at) return false;
-        if (lastRunAt && new Date(t.first_imported_at) < new Date(lastRunAt)) return false;
-        return (t.probability_pct != null && t.probability_pct >= 50) && !t.archived_at;
-      });
-      var enrichToReview = Object.values(STATE.tenderEnrichment).filter(function (e) { return e.needs_review; });
-
-      // Panel 2 — likely starting in next 8 weeks
-      var now = new Date();
-      var horizon = new Date(now.getTime() + (8 * 7 * 86400000));
-      var starting = STATE.tenders.filter(function (t) {
-        if (t.stage !== 'likely' && t.stage !== 'won') return false;
-        if (t.archived_at) return false;
-        var enr = STATE.tenderEnrichment[S(t.id)];
-        var startDate = enr && enr.start_date_estimated ? new Date(enr.start_date_estimated) : null;
-        if (!startDate) return false;
-        return startDate >= now && startDate <= horizon;
-      }).sort(_sortStartDateThenDue);
-
-      // Panel 3 — clashes (already loaded into STATE.nominationClashes)
-      var clashes = STATE.nominationClashes.slice();
-      clashes.sort(function (a, b) {
-        var r = { red: 3, amber: 2, yellow: 1 };
-        return (r[b.severity] || 0) - (r[a.severity] || 0);
-      });
-
-      // Panel 4 — stale (likely + no change in 4+ weeks)
-      var fourWeeksAgo = new Date(now.getTime() - (4 * 7 * 86400000));
-      var stale = STATE.tenders.filter(function (t) {
-        if (t.stage !== 'likely') return false;
-        if (t.archived_at) return false;
-        var enr = STATE.tenderEnrichment[S(t.id)];
-        var lastTouch = enr && enr.updated_at ? new Date(enr.updated_at) : (t.updated_at ? new Date(t.updated_at) : null);
-        if (!lastTouch) return true;
-        return lastTouch < fourWeeksAgo;
-      });
-
+      var queue = _buildDecisionQueue();
       var sessionPill = STATE.reviewSessionId
         ? '<span class="pl-pill">Session active</span>'
         : '<button class="pl-btn pl-btn-primary" onclick="window.EQ_TENDER_PIPELINE._startSession()">Start Review Session</button>';
 
       host.innerHTML = ''
         + '<div class="pl-wrap">'
-        + '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'
-        + '    <h2 style="margin:0">Fortnightly Review</h2>'
+        + '  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap;gap:12px">'
+        + '    <div>'
+        + '      <h2 style="margin:0">Review &amp; act</h2>'
+        + '      <p style="font-size:13px;color:var(--ink-3);margin:2px 0 0;max-width:680px">'
+        + '        Ranked queue. Pencil PM and Supervisor inline. Push fully-enriched Won tenders straight to the roster — no full Confirm Curve trip required.'
+        + '      </p>'
+        + '    </div>'
         + '    ' + sessionPill
         + '  </div>'
-        + '  <p style="font-size:13px;color:var(--ink-3);max-width:680px;margin:0 0 14px">15 minutes. Four panels. Capture a note for each item that needed a decision. The screen is the dashboard; the meeting is the product.</p>'
-        + _renderPanel1(newTenders, enrichToReview, lastRunAt)
-        + _renderPanel2(starting)
-        + _renderPanel3(clashes)
-        + _renderPanel4(stale)
-        + _renderNotesLog()
+        + '  <div class="pl-queue">'
+        + '    <div>'
+        + (queue.length
+            ? '<div style="font-size:11.5px;color:var(--ink-3);margin:8px 0">' + queue.length + ' item' + (queue.length === 1 ? '' : 's') + ' needing attention</div>'
+              + queue.map(_renderQueueRow).join('')
+            : '<div class="pl-q-empty">Nothing in the queue. Pipeline is healthy.</div>')
+        + '    </div>'
+        + '    <aside class="pl-side">' + _renderNotesSiderail() + '</aside>'
+        + '  </div>'
         + '</div>';
     });
   }
@@ -892,132 +961,340 @@
     renderReview();
   }
 
-  function _renderPanel1(newTenders, enrichToReview, lastRunAt) {
-    function row(t) {
-      return '<tr><td>' + escapeHtml(t.external_ref || '') + '</td>'
-        + '<td>' + escapeHtml(t.job_name || '—') + '</td>'
-        + '<td>' + (t.probability_pct == null ? '—' : t.probability_pct + '%') + '</td>'
-        + '<td>' + fmtMoney(t.quote_value) + '</td>'
-        + '<td><button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">Open</button></td></tr>';
-    }
-    function enrichRow(e) {
-      var t = STATE.tenders.find(function (x) { return sameId(x.id, e.tender_id); });
-      if (!t) return '';
-      return '<tr><td>' + escapeHtml(t.external_ref || '') + '</td><td>' + escapeHtml(t.job_name || '—') + '</td>'
-        + '<td colspan="2" style="color:#854d0e">Smartsheet row changed — review enrichment.</td>'
-        + '<td><button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">Open</button></td></tr>';
-    }
-    var last = lastRunAt ? fmtDate(lastRunAt) : 'never';
-    return '<div class="pl-card"><h3 style="margin:0 0 8px">1 · What changed since last review <span class="pl-pill">' + newTenders.length + ' new · ' + enrichToReview.length + ' to re-enrich</span></h3>'
-      + '<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:6px">Last import: ' + escapeHtml(last) + '</div>'
-      + (newTenders.length || enrichToReview.length
-          ? '<table class="pl-diff-table"><thead><tr><th>Ref</th><th>Job</th><th>Prob</th><th>Value</th><th></th></tr></thead><tbody>'
-            + newTenders.map(row).join('') + enrichToReview.map(enrichRow).join('')
-            + '</tbody></table>'
-          : '<div class="pl-empty">Nothing new. Nice.</div>')
-      + '</div>';
-  }
+  // -- Decision queue ----------------------------------------------------
+  // Pure ranking pass over STATE. Returns items with { tender, enrichment,
+  // pmNom, supNom, reasons[], score }. Higher score = higher priority.
 
-  function _renderPanel2(starting) {
-    function row(t) {
-      var e = STATE.tenderEnrichment[S(t.id)];
+  function _buildDecisionQueue() {
+    var now = new Date();
+    var soonish      = new Date(now.getTime() + (2 * 7 * 86400000));
+    var horizon      = new Date(now.getTime() + (8 * 7 * 86400000));
+    var fourWeeksAgo = new Date(now.getTime() - (4 * 7 * 86400000));
+    var lastRun = STATE.tenderImportRuns && STATE.tenderImportRuns[0];
+    var lastRunAt = lastRun ? new Date(lastRun.imported_at) : null;
+
+    var clashByTender = {};
+    STATE.nominationClashes.forEach(function (c) {
+      [c.tender_a_id, c.tender_b_id].forEach(function (tid) {
+        var k = S(tid);
+        (clashByTender[k] = clashByTender[k] || []).push(c);
+      });
+    });
+
+    var items = [];
+    STATE.tenders.forEach(function (t) {
+      if (t.archived_at) return;
+      if (t.stage !== 'watch' && t.stage !== 'likely' && t.stage !== 'won' && t.stage !== 'confirmed') return;
+
+      var enr  = STATE.tenderEnrichment[S(t.id)] || null;
       var noms = STATE.nominations.filter(function (n) { return sameId(n.tender_id, t.id); });
-      var pm = noms.find(function (n) { return n.role === 'pm'; });
-      var sup = noms.find(function (n) { return n.role === 'supervisor'; });
-      function nomName(n) {
-        if (!n) return '<em style="color:#dc2626">empty</em>';
-        var p = STATE.people.find(function (q) { return sameId(q.id, n.person_id); });
-        return escapeHtml(p ? p.name : '?');
+      var pmNom  = noms.find(function (n) { return n.role === 'pm'; });
+      var supNom = noms.find(function (n) { return n.role === 'supervisor'; });
+      var clashes = clashByTender[S(t.id)] || [];
+      var startDate = (enr && enr.start_date_estimated) ? new Date(enr.start_date_estimated) : null;
+
+      var reasons = [];
+      var score = 0;
+
+      var redClash    = clashes.find(function (c) { return c.severity === 'red'; });
+      var amberClash  = clashes.find(function (c) { return c.severity === 'amber'; });
+      var yellowClash = clashes.find(function (c) { return c.severity === 'yellow'; });
+
+      if (redClash) { reasons.push({ kind: 'clash', sev: 'red', text: 'Red clash' }); score += 1000; }
+
+      if (t.stage === 'won' && startDate && startDate < soonish && (!pmNom || !supNom)) {
+        reasons.push({ kind: 'urgent', text: 'Won + starts <2w + nominee missing' }); score += 800;
       }
-      return '<tr><td>' + fmtDate(e && e.start_date_estimated) + '</td>'
-        + '<td>' + escapeHtml(t.job_name || '—') + '</td>'
-        + '<td>' + nomName(pm) + '</td>'
-        + '<td>' + nomName(sup) + '</td>'
-        + '<td>' + fmtMoney(t.quote_value) + '</td>'
-        + '<td><button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">Open</button></td></tr>';
+
+      var readyToPush = t.stage === 'won' && enr
+        && enr.start_date_estimated && enr.duration_weeks && enr.peak_workers
+        && pmNom && pmNom.person_id && supNom && supNom.person_id;
+      if (readyToPush) { reasons.push({ kind: 'ready', text: 'Ready to push to roster' }); score += 600; }
+
+      if (startDate && startDate >= now && startDate < soonish) {
+        reasons.push({ kind: 'soon', text: 'Starts in <2w' }); score += 400;
+      } else if ((t.stage === 'likely' || t.stage === 'won') && startDate && startDate >= soonish && startDate <= horizon) {
+        reasons.push({ kind: 'horizon', text: 'Starts in 2–8w' }); score += 200;
+      }
+
+      if (amberClash) { reasons.push({ kind: 'clash', sev: 'amber', text: 'Amber clash' }); score += 150; }
+
+      if (lastRunAt && t.first_imported_at && new Date(t.first_imported_at) > lastRunAt
+        && (t.probability_pct == null || t.probability_pct >= 50)) {
+        reasons.push({ kind: 'new', text: 'New since last review' }); score += 100;
+      }
+
+      if (enr && enr.needs_review) { reasons.push({ kind: 'enrich', text: 'Needs re-enrich' }); score += 80; }
+
+      if (t.stage === 'likely') {
+        var lastTouch = enr && enr.updated_at ? new Date(enr.updated_at) : (t.updated_at ? new Date(t.updated_at) : null);
+        if (lastTouch && lastTouch < fourWeeksAgo) { reasons.push({ kind: 'stale', text: 'Stale 4w+' }); score += 50; }
+      }
+
+      if (yellowClash && !redClash && !amberClash) {
+        reasons.push({ kind: 'clash', sev: 'yellow', text: 'Yellow clash' }); score += 20;
+      }
+
+      if (reasons.length === 0) return; // nothing to act on
+      items.push({ tender: t, enrichment: enr, pmNom: pmNom, supNom: supNom, reasons: reasons, score: score });
+    });
+
+    items.sort(function (a, b) { return b.score - a.score; });
+    return items;
+  }
+
+  function _renderQueueRow(item) {
+    var t = item.tender, enr = item.enrichment;
+    var managers    = (STATE.people || []).filter(function (p) { return p.role === 'manager'    && !p.archived; });
+    var supervisors = (STATE.people || []).filter(function (p) { return p.role === 'supervisor' && !p.archived; });
+
+    function personOptions(list, selected) {
+      return ['<option value="">— pick —</option>'].concat(list.map(function (p) {
+        return '<option value="' + escapeHtml(p.id) + '"' + (sameId(p.id, selected) ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
+      })).join('');
     }
-    return '<div class="pl-card"><h3 style="margin:0 0 8px">2 · Likely starting in next 8 weeks <span class="pl-pill">' + starting.length + '</span></h3>'
-      + (starting.length
-          ? '<table class="pl-diff-table"><thead><tr><th>Start</th><th>Job</th><th>PM</th><th>Supervisor</th><th>Value</th><th></th></tr></thead><tbody>' + starting.map(row).join('') + '</tbody></table>'
-          : '<div class="pl-empty">Nothing starting in the next 8 weeks.</div>')
+    var pmId  = (item.pmNom  && item.pmNom.person_id)  || '';
+    var supId = (item.supNom && item.supNom.person_id) || '';
+
+    var urgency = item.reasons.some(function (r) { return (r.kind === 'clash' && r.sev === 'red') || r.kind === 'urgent'; })
+      ? 'urgent'
+      : (item.reasons.some(function (r) { return r.kind === 'soon' || r.kind === 'ready'; }) ? 'soon' : 'norm');
+
+    var tagHtml = item.reasons.map(function (r) {
+      if (r.kind === 'clash')  return '<span class="pl-tag pl-tag-clash-' + r.sev + '">' + escapeHtml(r.text) + '</span>';
+      if (r.kind === 'ready')  return '<span class="pl-tag" style="background:#dcfce7;color:#15803d">' + escapeHtml(r.text) + '</span>';
+      if (r.kind === 'urgent') return '<span class="pl-tag" style="background:#fee2e2;color:#991b1b">' + escapeHtml(r.text) + '</span>';
+      if (r.kind === 'soon')   return '<span class="pl-tag" style="background:#fef3c7;color:#92400e">' + escapeHtml(r.text) + '</span>';
+      return '<span class="pl-tag pl-tag-low">' + escapeHtml(r.text) + '</span>';
+    }).join('');
+
+    var enrichSummary = enr && enr.start_date_estimated
+      ? 'Start ' + fmtDate(enr.start_date_estimated)
+        + (enr.duration_weeks ? ' · ' + enr.duration_weeks + 'w' : '')
+        + (enr.peak_workers ? ' · ' + enr.peak_workers + 'pp' : '')
+      : '<em style="color:#dc2626">no enrichment yet</em>';
+
+    var canPush = t.stage === 'won' && enr
+      && enr.start_date_estimated && enr.duration_weeks && enr.peak_workers
+      && pmId && supId;
+
+    return '<div class="pl-q-row pl-q-row-' + urgency + '" data-tender-id="' + escapeHtml(S(t.id)) + '">'
+      + '  <div class="pl-q-head">'
+      + '    <div>'
+      + '      <div class="pl-q-title">' + escapeHtml(t.job_name || '(no name)') + '</div>'
+      + '      <div class="pl-q-meta">' + escapeHtml(t.external_ref || '—') + ' · ' + escapeHtml(t.stage) + ' · ' + escapeHtml(t.client || '—') + ' · ' + fmtMoney(t.quote_value) + '</div>'
+      + '      <div class="pl-q-meta">' + enrichSummary + '</div>'
+      + '    </div>'
+      + '  </div>'
+      + (tagHtml ? '<div class="pl-q-tags">' + tagHtml + '</div>' : '')
+      + '  <div class="pl-q-controls">'
+      + '    <div><span class="pl-label">PM (manager)</span><select class="pl-select" data-row-pm="' + escapeHtml(S(t.id)) + '">' + personOptions(managers, pmId) + '</select></div>'
+      + '    <div><span class="pl-label">Supervisor</span><select class="pl-select" data-row-sup="' + escapeHtml(S(t.id)) + '">' + personOptions(supervisors, supId) + '</select></div>'
+      + '  </div>'
+      + '  <div class="pl-q-actions">'
+      + '    <button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(t.id)) + ')">Open</button>'
+      + '    <button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._saveRowPencillings(' + JSON.stringify(S(t.id)) + ')">Save pencillings</button>'
+      + (t.stage === 'likely'
+          ? '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._advanceStage(' + JSON.stringify(S(t.id)) + ',\'won\')">Mark as Won</button>'
+          : '')
+      + '    <button class="pl-btn pl-btn-primary"'
+      +        (canPush ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="Needs Won stage + start date + duration + peak workers + PM + Supervisor"')
+      +        ' onclick="window.EQ_TENDER_PIPELINE._quickPushToSchedule(' + JSON.stringify(S(t.id)) + ')">Push to roster →</button>'
+      + '  </div>'
       + '</div>';
   }
 
-  function _renderPanel3(clashes) {
-    function row(c) {
-      var ta = STATE.tenders.find(function (t) { return sameId(t.id, c.tender_a_id); });
-      var tb = STATE.tenders.find(function (t) { return sameId(t.id, c.tender_b_id); });
-      var sevStyle = CLASH_SEVERITY_STYLE[c.severity] || CLASH_SEVERITY_STYLE.yellow;
-      return '<tr><td><span class="pl-tag pl-tag-clash-' + c.severity + '">' + sevStyle.label + '</span></td>'
-        + '<td>' + escapeHtml(c.person_name || '—') + '</td>'
-        + '<td>' + escapeHtml((ta && ta.job_name) || '—') + ' / ' + escapeHtml((tb && tb.job_name) || '—') + '</td>'
-        + '<td>' + fmtDate(c.overlap_start) + ' → ' + fmtDate(c.overlap_end) + '</td>'
-        + '<td>'
-        + (ta ? '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(ta.id)) + ')">A</button> ' : '')
-        + (tb ? '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE.openTenderPanel(' + JSON.stringify(S(tb.id)) + ')">B</button>' : '')
-        + '</td></tr>';
+  // Save inline PM + Supervisor pickers from a queue row. Mirrors the
+  // syncNomination logic in _savePanel — extracted here to avoid forcing
+  // users back into the slide-over for the most common review action.
+  function _saveRowPencillings(tenderId) {
+    var pmEl  = document.querySelector('[data-row-pm="' + S(tenderId) + '"]');
+    var supEl = document.querySelector('[data-row-sup="' + S(tenderId) + '"]');
+    if (!pmEl || !supEl) { toast('Row not found'); return; }
+    var pmId  = pmEl.value  || null;
+    var supId = supEl.value || null;
+    var enr   = STATE.tenderEnrichment[S(tenderId)] || {};
+    var start = enr.start_date_estimated || null;
+    var endWeek = (start && enr.duration_weeks) ? toMonday(addWeeks(start, enr.duration_weeks - 1)) : null;
+
+    function syncNomination(role, personId) {
+      var existing = STATE.nominations.filter(function (n) { return sameId(n.tender_id, tenderId) && n.role === role; });
+      var promises = [];
+      existing.forEach(function (n) {
+        if (n.status === 'confirmed') return; // can't remove confirmed nominations from review
+        if (!sameId(n.person_id, personId)) {
+          promises.push(sbFetch('nominations?id=eq.' + encodeURIComponent(n.id), 'DELETE', null, 'return=minimal'));
+        }
+      });
+      if (personId) {
+        var already = existing.some(function (n) { return sameId(n.person_id, personId); });
+        if (!already) {
+          promises.push(sbFetch('nominations', 'POST', {
+            tender_id:  tenderId,
+            person_id:  personId,
+            role:       role,
+            is_primary: true,
+            status:     'pencilled',
+            start_week: start,
+            end_week:   endWeek
+          }, 'return=minimal').then(function () {
+            ev('nominationAdded', { tender_id: tenderId, role: role, status: 'pencilled' });
+          }));
+        }
+      }
+      return Promise.all(promises);
     }
-    return '<div class="pl-card"><h3 style="margin:0 0 8px">3 · Clashes <span class="pl-pill">' + clashes.length + '</span></h3>'
-      + '<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:6px">Yellow = both pencilled (normal/expected). Amber = pencilled vs confirmed. Red = both confirmed (escalate immediately).</div>'
-      + (clashes.length
-          ? '<table class="pl-diff-table"><thead><tr><th>Severity</th><th>Person</th><th>Tenders (A / B)</th><th>Overlap</th><th></th></tr></thead><tbody>' + clashes.map(row).join('') + '</tbody></table>'
-          : '<div class="pl-empty">No clashes detected.</div>')
-      + '</div>';
+
+    Promise.all([syncNomination('pm', pmId), syncNomination('supervisor', supId)])
+      .then(function () {
+        ev('pencillingsSavedReview', { tender_id: tenderId, pm_set: !!pmId, sup_set: !!supId });
+        toast('Pencillings saved', 'success');
+        return loadAll();
+      })
+      .then(renderReview)
+      .catch(function (err) {
+        console.error('EQ[pipeline] pencillings save failed', err);
+        toast('Save failed', 'error');
+      });
   }
 
-  function _renderPanel4(stale) {
-    function row(t) {
-      return '<tr><td>' + escapeHtml(t.external_ref || '') + '</td>'
-        + '<td>' + escapeHtml(t.job_name || '—') + '</td>'
-        + '<td>' + (t.probability_pct == null ? '—' : t.probability_pct + '%') + '</td>'
-        + '<td>' + fmtDate(t.updated_at) + '</td>'
-        + '<td>'
-        + '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._quickDecision(' + JSON.stringify(S(t.id)) + ',\'escalate\')">Escalate</button> '
-        + '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._quickDecision(' + JSON.stringify(S(t.id)) + ',\'kill\')">Kill</button> '
-        + '<button class="pl-btn" onclick="window.EQ_TENDER_PIPELINE._quickDecision(' + JSON.stringify(S(t.id)) + ',\'hold\')">Hold</button>'
-        + '</td></tr>';
-    }
-    return '<div class="pl-card"><h3 style="margin:0 0 8px">4 · Stale (no change 4+ weeks) <span class="pl-pill">' + stale.length + '</span></h3>'
-      + (stale.length
-          ? '<table class="pl-diff-table"><thead><tr><th>Ref</th><th>Job</th><th>Prob</th><th>Last touch</th><th></th></tr></thead><tbody>' + stale.map(row).join('') + '</tbody></table>'
-          : '<div class="pl-empty">Nothing stale.</div>')
-      + '</div>';
+  // Stage-advance shortcut from the Review queue (e.g. "Mark as Won").
+  // For Likely → Won the user can always go to the kanban and drag, but
+  // having a button keeps the meeting flow uninterrupted.
+  function _advanceStage(tenderId, toStage) {
+    var t = STATE.tenders.find(function (x) { return sameId(x.id, tenderId); });
+    if (!t) return;
+    var fromStage = t.stage;
+    sbFetch('tenders?id=eq.' + encodeURIComponent(tenderId), 'PATCH', {
+      stage:      toStage,
+      updated_at: new Date().toISOString()
+    }, 'return=minimal').then(function () {
+      t.stage = toStage;
+      ev('tenderStageDragged', { tender_id: tenderId, from_stage: fromStage, to_stage: toStage, source: 'review_button' });
+      toast('Stage updated to ' + toStage, 'success');
+      renderReview();
+    }).catch(function (err) {
+      console.error('EQ[pipeline] advanceStage failed', err);
+      toast('Stage update failed', 'error');
+    });
   }
 
-  function _renderNotesLog() {
+  // Fast-path Confirm Curve: write PM + Supervisor onto the schedule for
+  // the full duration, flip the tender to confirmed, mark nominations
+  // confirmed. The remaining (peak_workers - 2) team slots stay open and
+  // can be filled later via the full Confirm Curve grid.
+  function _quickPushToSchedule(tenderId) {
+    var t = STATE.tenders.find(function (x) { return sameId(x.id, tenderId); });
+    if (!t)             { toast('Tender not found', 'error');  return; }
+    if (t.stage !== 'won') { toast('Only Won tenders can push to roster', 'error'); return; }
+
+    var enr = STATE.tenderEnrichment[S(tenderId)];
+    if (!enr || !enr.start_date_estimated || !enr.duration_weeks || !enr.peak_workers) {
+      toast('Add start date + duration + peak workers in the slide-over first', 'error');
+      return;
+    }
+
+    var noms = STATE.nominations.filter(function (n) { return sameId(n.tender_id, tenderId); });
+    var pmNom  = noms.find(function (n) { return n.role === 'pm'; });
+    var supNom = noms.find(function (n) { return n.role === 'supervisor'; });
+    if (!pmNom || !pmNom.person_id || !supNom || !supNom.person_id) {
+      toast('Pick PM and Supervisor first, then Save pencillings', 'error');
+      return;
+    }
+
+    if (!t.site_id) {
+      toast('Tender needs a site linked. Use Open → set site, or use Confirm Curve to create one.', 'error');
+      return;
+    }
+
+    var msg = 'Push "' + (t.job_name || 'this tender') + '" to the roster?\n\n'
+      + 'This will write ' + enr.duration_weeks + ' weeks of schedule for the PM and Supervisor.\n'
+      + 'Remaining ' + Math.max(0, enr.peak_workers - 2) + ' worker slot(s) can be filled later via Confirm Curve.';
+    if (!window.confirm(msg)) return;
+
+    var start = toMonday(enr.start_date_estimated);
+    var weeks = [];
+    for (var i = 0; i < enr.duration_weeks; i++) {
+      weeks.push({ monday: addWeeks(start, i), label: isoWeekKey(addWeeks(start, i)) });
+    }
+    var existingSite = STATE.sites.find(function (s) { return sameId(s.id, t.site_id); });
+    var fillAbbr = (existingSite && existingSite.abbr) || (t.external_ref || '').slice(0, 8);
+
+    var personIds = [pmNom.person_id, supNom.person_id];
+    var scheduleRows = [];
+    var pendingRows = [];
+    personIds.forEach(function (pid) {
+      weeks.forEach(function (w) {
+        scheduleRows.push({
+          person_id: pid,
+          week:      w.label,
+          mon: fillAbbr, tue: fillAbbr, wed: fillAbbr, thu: fillAbbr, fri: fillAbbr,
+          sat: null, sun: null
+        });
+        pendingRows.push({
+          tender_id:    tenderId,
+          person_id:    pid,
+          week:         w.label,
+          mon: fillAbbr, tue: fillAbbr, wed: fillAbbr, thu: fillAbbr, fri: fillAbbr,
+          sat: null, sun: null,
+          confirmed_at: new Date().toISOString()
+        });
+      });
+    });
+
+    Promise.all([
+      sbFetch('pending_schedule', 'POST', pendingRows, 'return=minimal'),
+      sbFetch('schedule', 'POST', scheduleRows, 'return=minimal'),
+      sbFetch('tenders?id=eq.' + encodeURIComponent(tenderId), 'PATCH', {
+        stage: 'confirmed', updated_at: new Date().toISOString()
+      }, 'return=minimal'),
+      sbFetch('nominations?tender_id=eq.' + encodeURIComponent(tenderId), 'PATCH', {
+        status: 'confirmed'
+      }, 'return=minimal')
+    ]).then(function () {
+      ev('tenderPromoted',        { tender_id: tenderId, from_stage: 'won', path: 'review_quick_push' });
+      ev('labourCurveConfirmed',  { tender_id: tenderId, rows_pushed: scheduleRows.length, path: 'review_quick_push' });
+      toast('Pushed to roster — PM + Supervisor scheduled for ' + enr.duration_weeks + 'w', 'success');
+      return loadAll();
+    }).then(renderReview).catch(function (err) {
+      console.error('EQ[pipeline] quick push failed', err);
+      toast('Push failed — see console', 'error');
+    });
+  }
+
+  // -- Notes side rail (was the "Capture a note" panel at the bottom) ---
+
+  function _renderNotesSiderail() {
     var decisions = STATE.tenderReviewDecisions || [];
-    var recent = decisions.slice(0, 12);
+    var recent = decisions.slice(0, 8);
     var tendersById = {};
     STATE.tenders.forEach(function (t) { tendersById[S(t.id)] = t; });
     var tenderOptions = ['<option value="">— pick tender —</option>'].concat(STATE.tenders.map(function (t) {
-      return '<option value="' + escapeHtml(t.id) + '">' + escapeHtml(t.external_ref + ' · ' + (t.job_name || '')) + '</option>';
+      return '<option value="' + escapeHtml(t.id) + '">' + escapeHtml((t.external_ref || '') + ' · ' + (t.job_name || '')) + '</option>';
     })).join('');
 
     var rows = recent.map(function (d) {
       var t = tendersById[S(d.tender_id)];
-      return '<tr><td>' + fmtDate(d.reviewed_at) + '</td>'
-        + '<td>' + escapeHtml((t && t.job_name) || d.tender_id) + '</td>'
-        + '<td>' + escapeHtml(d.decision) + '</td>'
-        + '<td>' + escapeHtml(d.notes || '') + '</td></tr>';
+      return '<div style="padding:8px 0;border-top:1px solid var(--border,#e5e7eb);font-size:12px">'
+        + '<div style="color:var(--ink-3);font-size:10.5px;letter-spacing:.3px;text-transform:uppercase">' + fmtDate(d.reviewed_at) + ' · ' + escapeHtml(d.decision) + '</div>'
+        + '<div style="font-weight:600;margin-top:1px">' + escapeHtml((t && t.job_name) || d.tender_id) + '</div>'
+        + (d.notes ? '<div style="color:var(--ink-2);margin-top:2px">' + escapeHtml(d.notes) + '</div>' : '')
+        + '</div>';
     }).join('');
 
-    return '<div class="pl-card"><h3 style="margin:0 0 8px">Capture a note</h3>'
-      + '<div class="pl-row">'
-      + '  <div style="flex:2"><select class="pl-select" id="pl-note-tender">' + tenderOptions + '</select></div>'
-      + '  <div><select class="pl-select" id="pl-note-decision">'
-      + '    <option value="escalate">Escalate</option>'
-      + '    <option value="kill">Kill</option>'
-      + '    <option value="promote">Promote</option>'
-      + '    <option value="hold">Hold</option>'
-      + '    <option value="resolve_clash">Resolve clash</option>'
-      + '  </select></div>'
-      + '  <div style="flex:2"><input class="pl-input" type="text" id="pl-note-text" placeholder="Note (optional)"></div>'
-      + '  <div style="flex:0 0 auto"><button class="pl-btn pl-btn-primary" onclick="window.EQ_TENDER_PIPELINE._logDecision()">Capture</button></div>'
-      + '</div>'
-      + (recent.length
-          ? '<table class="pl-diff-table" style="margin-top:10px"><thead><tr><th>Captured</th><th>Tender</th><th>Decision</th><th>Note</th></tr></thead><tbody>' + rows + '</tbody></table>'
-          : '<div class="pl-empty">No notes logged yet.</div>')
-      + '</div>';
+    return '<h4>Capture decision</h4>'
+      + '<div style="margin-bottom:6px"><select class="pl-select" id="pl-note-tender">' + tenderOptions + '</select></div>'
+      + '<div style="margin-bottom:6px"><select class="pl-select" id="pl-note-decision">'
+      + '  <option value="escalate">Escalate</option>'
+      + '  <option value="kill">Kill</option>'
+      + '  <option value="promote">Promote</option>'
+      + '  <option value="hold">Hold</option>'
+      + '  <option value="resolve_clash">Resolve clash</option>'
+      + '</select></div>'
+      + '<div style="margin-bottom:8px"><input class="pl-input" type="text" id="pl-note-text" placeholder="Note (optional)"></div>'
+      + '<div style="margin-bottom:14px"><button class="pl-btn pl-btn-primary" style="width:100%" onclick="window.EQ_TENDER_PIPELINE._logDecision()">Capture</button></div>'
+      + '<h4>Recent notes <span class="pl-pill">' + recent.length + '</span></h4>'
+      + (recent.length ? rows : '<div style="color:var(--ink-3);font-size:12px;padding:8px 0">No notes logged yet.</div>');
   }
 
   function _logDecision() {
@@ -1395,6 +1672,12 @@
     _quickDecision:     _quickDecision,
     _goConfirmCurve:    _goConfirmCurve,
     _confirmCurveSubmit:_confirmCurveSubmit,
+    // v3.4.82 — drag-and-drop on kanban + decision queue actions on Review
+    _handleStageDrop:   _handleStageDrop,
+    _saveTenderStage:   _saveTenderStage,
+    _saveRowPencillings:_saveRowPencillings,
+    _quickPushToSchedule:_quickPushToSchedule,
+    _advanceStage:      _advanceStage,
     // Helpers (exposed for tests / console debugging)
     _helpers: {
       toMonday: toMonday, addWeeks: addWeeks, isoWeekKey: isoWeekKey,

@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.81'; // cache-buster — bump on icon changes
+    var v = '3.4.82'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -206,8 +206,48 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.81
+  EQ Solves — Field  v3.4.82
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.82  (Pipeline drag-and-drop + Review = decision queue)
+  ────────────────────────────────────────────────────────────
+  • KANBAN DRAG-AND-DROP — Pipeline cards are now draggable.
+    Drop into Watch / Likely / Awaiting Promotion to update
+    tenders.stage in one PATCH. Drop into Confirmed auto-routes
+    to the Confirm Labour Curve screen (preserves the gate;
+    the CM still has to fill the weeks×people grid and click
+    Confirm). Visual: dashed-blue drop target, faded source card.
+  • REVIEW SCREEN REBUILT AS A DECISION QUEUE — Was 4 panels of
+    "click Open to act" (which sent you to the slide-over for
+    every change). Now: one ranked queue. Each row has inline
+    PM + Supervisor pickers and a "Save pencillings" button —
+    the meeting flow doesn't context-switch. Reasons-for-listing
+    show as tags (Red clash / Starts <2w / Stale 4w+ / etc.)
+    with an urgency stripe on the left edge.
+  • PUSH TO ROSTER FROM REVIEW — Won-stage rows with full
+    enrichment (start + duration + peak workers) AND a chosen
+    PM + Supervisor get a "Push to roster →" primary button.
+    Click → confirm prompt → writes the PM + Sup onto the live
+    schedule for the full duration, flips nominations to
+    confirmed, sets tenders.stage='confirmed'. Skips the full
+    Confirm Curve grid for the common case; remaining team slots
+    can still be filled later via Confirm Curve.
+  • ANALYTICS — 2 new PostHog events (tender_stage_dragged,
+    pencillings_saved_review). tender_promoted and
+    labour_curve_confirmed gain a `path` property
+    (confirm_curve | review_quick_push) so the funnel separates.
+  • FILES TOUCHED
+    - scripts/tender-pipeline.js (~+450 / -180; Review screen
+      rebuilt; new functions: _attachKanbanDnd, _handleStageDrop,
+      _saveTenderStage, _buildDecisionQueue, _renderQueueRow,
+      _saveRowPencillings, _quickPushToSchedule, _advanceStage,
+      _renderNotesSiderail. Old _renderPanel1..4 + _renderNotesLog
+      removed.)
+    - scripts/analytics.js (2 new events; path field on 2 existing)
+    - scripts/app-state.js (APP_VERSION 3.4.81 → 3.4.82)
+    - sw.js (CACHE bump)
+    - index.html (favicon cache-buster + this banner)
+    - CHANGELOG-v3.4.82.md (NEW)
 
   CHANGES IN v3.4.81  (Tender Sync actually working + What's New refresh)
   ────────────────────────────────────────────────────────────
