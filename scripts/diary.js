@@ -701,3 +701,18 @@ function addDiaryPhoto(fileInput)          { return diaryPhotos.add(fileInput); 
 function removeDiaryPhoto(i)               { return diaryPhotos.remove(i); }
 function setDiaryPhotoCaption(i, caption)  { return diaryPhotos.setCaption(i, caption); }
 function openDiaryPhotoLightbox(i)         { return diaryPhotos.lightbox(i); }
+
+// v3.5.2: count accessor for the Site Reports HUB. Returns total
+// diary entries dated today (any status). `diaryCache` is module-
+// local so the HUB can't reach it directly.
+window.eqGetDiariesTodayCount = function () {
+  try {
+    if (!Array.isArray(diaryCache)) return 0;
+    const today = _diaryTodayIso();
+    let n = 0;
+    for (let i = 0; i < diaryCache.length; i++) {
+      if (diaryCache[i] && diaryCache[i].diary_date === today) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+};

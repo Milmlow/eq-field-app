@@ -37,6 +37,8 @@ const PRECACHE = [
   '/scripts/site-reports.js',
   '/scripts/toolbox.js',
   '/scripts/diary.js',
+  // v3.5.2 — Site Reports HUB landing
+  '/scripts/site-reports-hub.js',
   // v3.5.0 — Mobile-first home tile screen (staff role, mobile viewport)
   '/scripts/home.js',
   '/styles/home.css',

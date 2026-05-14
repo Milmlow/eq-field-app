@@ -516,3 +516,24 @@ function addToolboxPhoto(fileInput)          { return toolboxPhotos.add(fileInpu
 function removeToolboxPhoto(i)               { return toolboxPhotos.remove(i); }
 function setToolboxPhotoCaption(i, caption)  { return toolboxPhotos.setCaption(i, caption); }
 function openToolboxPhotoLightbox(i)         { return toolboxPhotos.lightbox(i); }
+
+// v3.5.2: count accessor for the Site Reports HUB. Returns the total
+// number of toolbox talks with meeting_date within the last 7 days
+// (any status). `toolboxCache` is module-local so the HUB can't
+// reach it directly.
+window.eqGetToolboxWeekCount = function () {
+  try {
+    if (!Array.isArray(toolboxCache)) return 0;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    cutoff.setHours(0, 0, 0, 0);
+    let n = 0;
+    for (let i = 0; i < toolboxCache.length; i++) {
+      const r = toolboxCache[i];
+      if (!r || !r.meeting_date) continue;
+      const d = new Date(r.meeting_date);
+      if (!isNaN(d) && d >= cutoff) n++;
+    }
+    return n;
+  } catch (e) { return 0; }
+};
