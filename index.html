@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.4.40'; // cache-buster — bump on icon changes
+    var v = '3.4.79'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -83,6 +83,11 @@
 <script src="scripts/tafe.js"></script>
 <script src="scripts/digest-settings.js"></script>
 <script src="scripts/whatsnew.js"></script>
+<!-- v3.4.79 — Tender Pipeline module. SheetJS CDN must load BEFORE
+     tender-parser.js (the parser checks window.XLSX on first call). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.3/xlsx.full.min.js"></script>
+<script src="scripts/tender-parser.js"></script>
+<script src="scripts/tender-pipeline.js"></script>
 
 <style>
 /* ── Gate redesign override ─────────────────────────────────── */
@@ -201,7 +206,75 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.4.77
+  EQ Solves — Field  v3.4.79
+  Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.4.79  (Tender Pipeline — 5 screens + SheetJS parser + RLS)
+  ────────────────────────────────────────────────────────────
+  • The "before" layer of labour planning. Brings SKS Smartsheet
+    tender data into EQ Field, supports pencilling PMs and
+    supervisors against likely jobs, detects clashes, and runs the
+    fortnightly review session.
+  • SCREENS
+    - /pipeline/import       — xlsx upload + diff preview (new /
+      stage-changed / value-changed / missing) before apply.
+    - /pipeline (kanban)     — Watch / Likely / Won / Confirmed,
+      department filter, below-floor toggle, clash + 90%-high-
+      confidence badges per card.
+    - tender slide-over      — enrichment fields (hours, start,
+      duration, peak workers, notes) + PM + supervisor pencilling.
+    - /pipeline/review       — four-panel fortnightly review
+      (changed since last / starting next 8w / clashes / stale)
+      + Notes log (DB: tender_review_decisions, UI: "Notes").
+    - /pipeline/:id/confirm-curve — labour curve gate for promotion.
+      CM picks site (or creates), optional job number, edits the
+      grid, then pushes to live schedule. Friction is the feature.
+  • PARSER — scripts/tender-parser.js ports the bundle's vitest
+    module to an IIFE (window.EQ_TENDER_PARSER) and runs against
+    a standalone HTML harness (tests/tender-parser.test.html).
+    45 assertions pass headless.
+  • CDN — SheetJS loaded from cdnjs (xlsx 0.20.3). First external
+    CDN script in eq-solves-field; CSP needed updating in _headers.
+  • DB — migration 001_tender_pipeline applied to
+    ktmjmdzqrogauaevbktn in a prior session. This release ships
+    migration 002 (permissive anon RLS, matching people/sites/
+    schedule convention). Demo seed cleanup (3 cross-org collisions)
+    applied as part of this work.
+  • POSTHOG — 8 new events: tender_imported, tender_enriched,
+    nomination_added, clash_detected, review_session_started,
+    decision_logged, tender_promoted, labour_curve_confirmed.
+  • SKS GATING — pipeline tables added to TENANT_DISABLED_TABLES.sks
+    so the module is a no-op on SKS until the migration is
+    bundled into a cutover.
+  • RLS LIMITATION — proper draft-mode visibility (pencillings
+    hidden from nominees until confirmed) requires per-user auth
+    JWTs, which eq-solves-field doesn't have (PIN gate + anon
+    key). Enforced client-side instead, with a flag-back note in
+    the session log.
+  • VERSION NOTE — built as v3.4.69 originally, but origin/demo
+    shipped its own v3.4.69 (Prestart MVP) and moved on through
+    v3.4.77 (Daily Site Diary). Rebased onto v3.4.77, re-stamped
+    v3.4.79, leaving v3.4.78 reserved for Weekly Report.
+  • FILES TOUCHED
+    - scripts/tender-parser.js   (NEW, ~280 lines)
+    - scripts/tender-pipeline.js (NEW, ~830 lines)
+    - tests/tender-parser.test.html (NEW)
+    - scripts/app-state.js (APP_VERSION 3.4.77→3.4.79, ORG_TABLES +
+      TENANT_DISABLED_TABLES.sks, STATE pipeline cache)
+    - scripts/analytics.js (8 tenderPipeline events)
+    - index.html (Pipeline nav section, 4 page divs, slide-over
+      host, SheetJS CDN tag, PAGE_TITLES + renderCurrentPage
+      dispatch, this banner)
+    - sw.js (CACHE bump)
+    - _headers (NEW — adds cdnjs.cloudflare.com to script-src)
+    - CHANGELOG-v3.4.79.md (NEW)
+    - eq-context/sessions/2026-05-14.md (NEW, session log)
+  ════════════════════════════════════════════════════════════════
+-->
+
+<!--
+  ════════════════════════════════════════════════════════════════
+  EQ Solves — Field  v3.4.77 (history)
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
 
   CHANGES IN v3.4.77  (Site Reports v3 — Daily Site Diary MVP — DEMO ONLY)
@@ -2014,6 +2087,14 @@
       <button class="nav-item" onclick="showPage('data')" id="nav-data"><span class="nav-icon">⇅</span> Import / Export</button>
       <button class="nav-item" onclick="showPage('help')" id="nav-help"><span class="nav-icon">❓</span> Help</button>
     </div>
+    <!-- v3.4.79 — Tender Pipeline section (the "before" layer of labour planning).
+         Supervisor+manager visible; pipeline data lives in demo tenant only for now. -->
+    <div class="nav-section" id="nav-section-pipeline">
+      <div class="nav-label">Pipeline</div>
+      <button class="nav-item" onclick="showPage('pipeline-import')" id="nav-pipeline-import"><span class="nav-icon">⇧</span> Tender Sync <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
+      <button class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">▦</span> Pipeline <span class="nav-badge" id="badge-pipeline-clash" style="display:none">0</span></button>
+      <button class="nav-item" onclick="showPage('pipeline-review')" id="nav-pipeline-review"><span class="nav-icon">⌖</span> Fortnightly Review</button>
+    </div>
     <div class="nav-section">
       <div class="nav-label">Testing (DO NOT USE)</div>
       <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
@@ -2433,7 +2514,29 @@
     <div id="apprentices-content"></div>
   </div>
 
+  <!-- v3.4.79 — Tender Pipeline module pages.
+       Container is empty on load; tender-pipeline.js renders into it
+       lazily on showPage(). Keeps initial paint cheap. -->
+  <div class="page hidden" id="page-pipeline-import">
+    <div id="pipeline-import-content"></div>
+  </div>
+  <div class="page hidden" id="page-pipeline">
+    <div id="pipeline-content"></div>
+  </div>
+  <div class="page hidden" id="page-pipeline-review">
+    <div id="pipeline-review-content"></div>
+  </div>
+  <div class="page hidden" id="page-pipeline-confirm-curve">
+    <div id="pipeline-confirm-curve-content"></div>
+  </div>
+
 </div><!-- /content -->
+
+<!-- v3.4.79 — Tender Pipeline enrichment + nomination side panel.
+     Slide-over opened from kanban cards. Hidden by default. Markup
+     is built inside tender-pipeline.js → openTenderPanel(); this is
+     just the host element. -->
+<div id="tender-panel" class="tender-panel-host" style="display:none"></div>
 
 <!-- ═══════════════════════════════════════════════════════════
      MOBILE BOTTOM NAV + DRAWER
@@ -2714,7 +2817,12 @@ const PAGE_TITLES = {
   data:'Import / Export', managers:'Supervision', timesheets:'Timesheets',
   leave:'Leave Requests', 'staff-ts':'My Timesheet', calendar:'Calendar',
   jobnumbers:'Job Numbers', help:'Help', trial:'Trial Dashboard', apprentices:'Apprentices',
-  prestart:'Prestart Briefings', toolbox:'Toolbox Talks', diary:'Daily Site Diary'
+  prestart:'Prestart Briefings', toolbox:'Toolbox Talks', diary:'Daily Site Diary',
+  // v3.4.79 — Tender Pipeline
+  'pipeline-import':        'Tender Sync',
+  'pipeline':               'Pipeline',
+  'pipeline-review':        'Fortnightly Review',
+  'pipeline-confirm-curve': 'Confirm Labour Curve'
 };
 
 function showPage(id) {
@@ -2764,6 +2872,13 @@ function renderCurrentPage() {
   else if (currentPage === 'prestart')   { loadPrestarts().then(renderPrestart); }
   else if (currentPage === 'toolbox')    { loadToolboxTalks().then(renderToolbox); }
   else if (currentPage === 'diary')      { loadDiaries().then(renderDiary); }
+  // v3.4.79 — Tender Pipeline pages dispatch through EQ_TENDER_PIPELINE so
+  // the loader can lazy-fetch + render. Each is a no-op on SKS (the module
+  // checks _isDisabledTable internally).
+  else if (currentPage === 'pipeline-import')        { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderImport(); }
+  else if (currentPage === 'pipeline')               { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderKanban(); }
+  else if (currentPage === 'pipeline-review')        { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderReview(); }
+  else if (currentPage === 'pipeline-confirm-curve') { window.EQ_TENDER_PIPELINE && window.EQ_TENDER_PIPELINE.renderConfirmCurve(); }
 }
 
 // ── Week controls ─────────────────────────────────────────────

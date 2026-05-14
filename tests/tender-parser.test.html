@@ -1,0 +1,243 @@
+<!doctype html>
+<!--
+  Property of EQ — all rights reserved. Unauthorised use prohibited.
+
+  tests/tender-parser.test.html — EQ Solves Field
+  Standalone test harness for scripts/tender-parser.js. No vitest, no
+  bundler. Open this file directly in a browser:
+
+      file:///.../eq-solves-field/tests/tender-parser.test.html
+
+  Or serve the repo root and visit /tests/tender-parser.test.html.
+
+  All assertions are pure-JS. The xlsx-reading paths are NOT exercised
+  here — they belong to an integration test once the import screen
+  exists. This file covers the pure helpers + the diff engine.
+
+  Source: ported from eq-field-pipeline/src/lib/tender-parser.test.js
+  (vitest-style ESM).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>EQ Field — tender-parser tests</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+           margin: 24px; color: #1a1a1a; background: #fafafa; }
+    h1   { font-size: 18px; margin: 0 0 4px; }
+    .meta { color: #666; font-size: 13px; margin-bottom: 16px; }
+    .summary { padding: 10px 14px; border-radius: 6px; font-weight: 600;
+               display: inline-block; margin-bottom: 16px; }
+    .summary.pass { background: #e6f7eb; color: #0a5a1f; }
+    .summary.fail { background: #fdecec; color: #8a1414; }
+    .group { margin: 18px 0 8px; font-weight: 700; color: #333; }
+    .case  { padding: 4px 0; font-size: 13px; font-family: ui-monospace, monospace; }
+    .case.pass { color: #178a3a; }
+    .case.fail { color: #b30000; }
+    .case .why { color: #555; margin-left: 12px; white-space: pre-wrap; }
+    .footer { margin-top: 24px; font-size: 12px; color: #888; }
+  </style>
+</head>
+<body>
+  <h1>tender-parser.js — test harness</h1>
+  <div class="meta">Pure-JS assertions against <code>window.EQ_TENDER_PARSER</code>. xlsx-reading paths not covered here.</div>
+  <div id="summary" class="summary">Running…</div>
+  <div id="results"></div>
+  <div class="footer">Edit <code>tests/tender-parser.test.html</code> to add cases. Refresh to re-run.</div>
+
+  <!-- Module under test -->
+  <script src="../scripts/tender-parser.js"></script>
+
+  <!-- Test harness -->
+  <script>
+  (function () {
+    'use strict';
+
+    var TP = window.EQ_TENDER_PARSER;
+    if (!TP) {
+      document.getElementById('summary').textContent = 'FAIL — window.EQ_TENDER_PARSER not loaded';
+      document.getElementById('summary').className = 'summary fail';
+      return;
+    }
+
+    var resultsEl = document.getElementById('results');
+    var summaryEl = document.getElementById('summary');
+    var passes = 0, fails = 0;
+    var currentGroupEl = null;
+
+    function group(name) {
+      var el = document.createElement('div');
+      el.className = 'group';
+      el.textContent = name;
+      resultsEl.appendChild(el);
+      currentGroupEl = resultsEl;
+    }
+
+    function deepEqual(a, b) {
+      if (a === b) return true;
+      if (a === null || b === null) return false;
+      if (typeof a !== typeof b) return false;
+      if (typeof a !== 'object') return false;
+      if (Array.isArray(a) !== Array.isArray(b)) return false;
+      var ka = Object.keys(a), kb = Object.keys(b);
+      if (ka.length !== kb.length) return false;
+      for (var i = 0; i < ka.length; i++) {
+        if (!deepEqual(a[ka[i]], b[ka[i]])) return false;
+      }
+      return true;
+    }
+
+    function recordCase(name, ok, detail) {
+      var el = document.createElement('div');
+      el.className = 'case ' + (ok ? 'pass' : 'fail');
+      el.textContent = (ok ? 'PASS  ' : 'FAIL  ') + name;
+      if (!ok && detail) {
+        var why = document.createElement('div');
+        why.className = 'why';
+        why.textContent = detail;
+        el.appendChild(why);
+      }
+      currentGroupEl.appendChild(el);
+      if (ok) passes++; else fails++;
+    }
+
+    function eq(name, actual, expected) {
+      var ok = deepEqual(actual, expected);
+      recordCase(name, ok, ok ? '' :
+        'expected: ' + JSON.stringify(expected) + '\nactual:   ' + JSON.stringify(actual));
+    }
+
+    function match(name, actual, regex) {
+      var ok = typeof actual === 'string' && regex.test(actual);
+      recordCase(name, ok, ok ? '' :
+        'expected to match ' + regex + '\nactual: ' + JSON.stringify(actual));
+    }
+
+    function len(name, arr, n) {
+      var ok = Array.isArray(arr) && arr.length === n;
+      recordCase(name, ok, ok ? '' :
+        'expected array length ' + n + '\nactual: ' + (Array.isArray(arr) ? arr.length : '<not array>'));
+    }
+
+    // ─── probabilityToStage ────────────────────────────────────────────
+    group('probabilityToStage');
+    eq('maps 100% to won',       TP.probabilityToStage(100),  'won');
+    eq('maps 90% to likely',     TP.probabilityToStage(90),   'likely');
+    eq('maps 70% to likely',     TP.probabilityToStage(70),   'likely');
+    eq('maps 50% to watch',      TP.probabilityToStage(50),   'watch');
+    eq('maps 25% to tracked',    TP.probabilityToStage(25),   'tracked');
+    eq('maps 0% to tracked',     TP.probabilityToStage(0),    'tracked');
+    eq('maps null to tracked',   TP.probabilityToStage(null), 'tracked');
+
+    // ─── parseProbability ──────────────────────────────────────────────
+    group('parseProbability');
+    eq('"70% - In Negotiation"', TP.parseProbability('70% - In Negotiation'),
+       { pct: 70, label: '70% - In Negotiation' });
+    eq('"0% - New/Pipeline"',    TP.parseProbability('0% - New/Pipeline'),
+       { pct: 0, label: '0% - New/Pipeline' });
+    eq('"100% - Won"',           TP.parseProbability('100% - Won'),
+       { pct: 100, label: '100% - Won' });
+    eq('blank string',           TP.parseProbability(''),    { pct: null, label: null });
+    eq('null',                   TP.parseProbability(null),  { pct: null, label: null });
+    eq('malformed (label only)', TP.parseProbability('Pending review'),
+       { pct: null, label: 'Pending review' });
+    eq('whitespace trimmed',     TP.parseProbability('  90% - Verbal Agreement  '),
+       { pct: 90, label: '90% - Verbal Agreement' });
+
+    // ─── excelSerialToIsoDate ──────────────────────────────────────────
+    group('excelSerialToIsoDate');
+    // Excel serial 46157 maps to 2026-05-15 with the SheetJS-standard 1899-12-30
+    // epoch (the original test expected 2026-03-2X — that was an off-by-comment
+    // error in the bundle; the parser math is correct).
+    match('46157 → ~2026-05-15', TP.excelSerialToIsoDate(46157), /^2026-05-1[3-6]$/);
+    eq('Date object',            TP.excelSerialToIsoDate(new Date('2026-05-14')), '2026-05-14');
+    eq('ISO string',             TP.excelSerialToIsoDate('2026-05-14'), '2026-05-14');
+    eq('null',                   TP.excelSerialToIsoDate(null), null);
+    eq('empty string',           TP.excelSerialToIsoDate(''),   null);
+
+    // ─── parseQuoteValue ───────────────────────────────────────────────
+    group('parseQuoteValue');
+    eq('plain number',           TP.parseQuoteValue(65000),       65000);
+    eq('0 becomes null',         TP.parseQuoteValue(0),           null);
+    eq('"$65,000"',              TP.parseQuoteValue('$65,000'),   65000);
+    eq('"2270300"',              TP.parseQuoteValue('2270300'),   2270300);
+    eq('"1298950.49"',           TP.parseQuoteValue('1298950.49'), 1298950.49);
+    eq('blank',                  TP.parseQuoteValue(''),          null);
+    eq('null',                   TP.parseQuoteValue(null),        null);
+
+    // ─── normaliseExternalRef ──────────────────────────────────────────
+    group('normaliseExternalRef');
+    eq('"SKS - 16404"',          TP.normaliseExternalRef('SKS - 16404'),    'SKS-16404');
+    eq('"SKS-16404"',            TP.normaliseExternalRef('SKS-16404'),      'SKS-16404');
+    eq('"  sks - 16404  "',      TP.normaliseExternalRef('  sks - 16404  '),'SKS-16404');
+    eq('null',                   TP.normaliseExternalRef(null),             null);
+
+    // ─── diffAgainstExisting ───────────────────────────────────────────
+    group('diffAgainstExisting');
+    var existing = [
+      { external_ref: 'SKS-16404', probability_pct: 50, quote_value: 65000 },
+      { external_ref: 'SKS-16405', probability_pct: 25, quote_value: 2250000 }
+    ];
+
+    (function () {
+      var parsed = [{ external_ref: 'SKS-99999', probability_pct: 70, quote_value: 500000 }];
+      var diff = TP.diffAgainstExisting(parsed, existing);
+      len('detects new tenders',         diff['new'],   1);
+      len('reports DB rows as missing',  diff.missing,  2);
+    })();
+
+    (function () {
+      var parsed = [{ external_ref: 'SKS-16404', probability_pct: 70, quote_value: 65000 }];
+      var diff = TP.diffAgainstExisting(parsed, existing);
+      len('detects stage change',                          diff.stageChanged, 1);
+      eq('previous probability captured on stage change',  diff.stageChanged[0].previous.probability_pct, 50);
+    })();
+
+    (function () {
+      var parsed = [{ external_ref: 'SKS-16404', probability_pct: 50, quote_value: 75000 }];
+      var diff = TP.diffAgainstExisting(parsed, existing);
+      len('detects value change', diff.valueChanged, 1);
+    })();
+
+    (function () {
+      var parsed = [{ external_ref: 'SKS-16404', probability_pct: 50, quote_value: 65000 }];
+      var diff = TP.diffAgainstExisting(parsed, existing);
+      len('detects unchanged', diff.unchanged, 1);
+    })();
+
+    (function () {
+      var parsed = [{ external_ref: 'SKS-16404', probability_pct: 50, quote_value: 65000 }];
+      var diff = TP.diffAgainstExisting(parsed, existing);
+      len('detects missing (in DB, not in import)', diff.missing, 1);
+      eq('missing[0] is SKS-16405', diff.missing[0].external_ref, 'SKS-16405');
+    })();
+
+    // ─── summariseImport ───────────────────────────────────────────────
+    group('summariseImport');
+    (function () {
+      var parsed = [
+        { external_ref: 'SKS-1', probability_pct: 70, quote_value: 500000, below_threshold: false },
+        { external_ref: 'SKS-2', probability_pct: 50, quote_value: 50000,  below_threshold: true  }
+      ];
+      var diff = TP.diffAgainstExisting(parsed, []);
+      var s = TP.summariseImport(diff, parsed);
+      eq('rows_total',           s.rows_total,           2);
+      eq('rows_new',             s.rows_new,             2);
+      eq('rows_below_threshold', s.rows_below_threshold, 1);
+      eq('rows_stage_changed',   s.rows_stage_changed,   0);
+      eq('rows_value_changed',   s.rows_value_changed,   0);
+      eq('rows_missing',         s.rows_missing,         0);
+    })();
+
+    // ─── Render summary ────────────────────────────────────────────────
+    if (fails === 0) {
+      summaryEl.textContent = 'PASS — ' + passes + ' assertions';
+      summaryEl.className = 'summary pass';
+    } else {
+      summaryEl.textContent = 'FAIL — ' + fails + ' of ' + (passes + fails) + ' failed';
+      summaryEl.className = 'summary fail';
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -383,6 +383,62 @@ const _events = {
       has_email:  !!(p && p.has_email),
     });
   },
+
+  // v3.4.79 — Tender Pipeline events. 8 in total, per
+  // docs/cowork-prompt-v3.md §"PostHog events". Adoption signal is
+  // six fortnightly reviews logged — review_session_started +
+  // decision_logged is the headline funnel.
+  tenderImported: function (p) {
+    _track('tender_imported', {
+      rows_total:            (p && p.rows_total)           || 0,
+      rows_new:              (p && p.rows_new)             || 0,
+      rows_stage_changed:    (p && p.rows_stage_changed)   || 0,
+      rows_value_changed:    (p && p.rows_value_changed)   || 0,
+      rows_missing:          (p && p.rows_missing)         || 0,
+      rows_below_threshold:  (p && p.rows_below_threshold) || 0,
+    });
+  },
+  tenderEnriched: function (p) {
+    _track('tender_enriched', {
+      tender_id:      p && p.tender_id,
+      fields_changed: (p && p.fields_changed) || [],
+    });
+  },
+  nominationAdded: function (p) {
+    _track('nomination_added', {
+      tender_id: p && p.tender_id,
+      role:      p && p.role,
+      status:    (p && p.status) || 'pencilled',
+    });
+  },
+  clashDetected: function (p) {
+    _track('clash_detected', {
+      severity:  p && p.severity,
+      person_id: p && p.person_id,
+    });
+  },
+  reviewSessionStarted: function (p) {
+    _track('review_session_started', { session_id: p && p.session_id });
+  },
+  decisionLogged: function (p) {
+    _track('decision_logged', {
+      tender_id:  p && p.tender_id,
+      decision:   p && p.decision,
+      session_id: p && p.session_id,
+    });
+  },
+  tenderPromoted: function (p) {
+    _track('tender_promoted', {
+      tender_id:  p && p.tender_id,
+      from_stage: p && p.from_stage,
+    });
+  },
+  labourCurveConfirmed: function (p) {
+    _track('labour_curve_confirmed', {
+      tender_id:   p && p.tender_id,
+      rows_pushed: (p && p.rows_pushed) || 0,
+    });
+  },
 };
 
 // ── Small helpers ─────────────────────────────────────────────
