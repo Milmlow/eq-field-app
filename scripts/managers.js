@@ -131,32 +131,75 @@ function renderManagers() {
       });
     });
   } else {
-    html = '<div class="roster-card"><div class="table-scroll"><table style="width:100%">'
-      + '<thead><tr>'
-      + '<th class="name-col">Name</th><th>Role</th><th>Category</th>'
-      + '<th>Mobile</th><th>Email</th>'
-      + '<th class="center" style="width:80px">Actions</th>'
-      + '</tr></thead><tbody>';
+    // v3.5.5 (S2 Phase 2): build the flat row HTML array up-front (interleaving
+    // category-header rows with manager rows). Below threshold we splat into
+    // innerHTML as before. Above threshold we hand the array to
+    // EQVirtualTable. Same pattern + same shim as v3.5.4 contacts.
+    //
+    // Note: typical Supervisors table size is ~20 (SKS) — ~50 (Melbourne
+    // future). The threshold rarely bites in practice. Wiring it anyway
+    // for consistency + future-proofing as the supervisors list grows.
+    const rowHtmls = [];
     cats.forEach(cat => {
       const col = catColors[cat] || '#8494A7';
-      html += `<tr><td colspan="6" style="padding:6px 14px 4px;background:#F7F9FB;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${col};border-bottom:1px solid var(--border)">${cat}</td></tr>`;
+      rowHtmls.push(`<tr><td colspan="6" style="padding:6px 14px 4px;background:#F7F9FB;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:${col};border-bottom:1px solid var(--border)">${cat}</td></tr>`);
       grouped[cat].forEach(m => {
         // v3.4.70: archived rows get a faint row tint + "ARCHIVED" chip.
         const rowStyle = m.archived ? 'background:#F8FAFC;opacity:.7' : '';
         const archChip = m.archived
           ? '<span style="background:#E5E7EB;color:#6B7280;border-radius:4px;padding:1px 6px;font-size:9px;font-weight:700;margin-left:6px">ARCHIVED</span>'
           : '';
-        html += `<tr style="${rowStyle}">
+        rowHtmls.push(`<tr style="${rowStyle}">
           <td class="name-col" style="font-weight:600">${esc(m.name)}${archChip}</td>
           <td class="meta-col">${m.role || '—'}</td>
           <td class="meta-col">${m.category || '—'}</td>
           <td class="phone-col">${_managerPhone(m, 'desktop')}</td>
           <td class="meta-col">${_managerEmail(m, 'desktop')}</td>
           <td class="center" style="white-space:nowrap">${_managerActions(m)}</td>
-        </tr>`;
+        </tr>`);
       });
     });
-    html += '</tbody></table></div></div>';
+
+    const VIRTUAL_THRESHOLD = 150;
+    const useVirtual = rowHtmls.length > VIRTUAL_THRESHOLD && window.EQVirtualTable;
+
+    const tableHead = '<thead><tr>'
+      + '<th class="name-col">Name</th><th>Role</th><th>Category</th>'
+      + '<th>Mobile</th><th>Email</th>'
+      + '<th class="center" style="width:80px">Actions</th>'
+      + '</tr></thead>';
+
+    if (useVirtual) {
+      html = '<div class="roster-card"><div class="table-scroll" id="managers-virtual-scroll" style="overflow-y:auto;max-height:calc(100vh - 220px)"><table style="width:100%">'
+        + tableHead
+        + '<tbody id="managers-virtual-tbody"></tbody></table></div></div>';
+      // Mount after innerHTML write — done after the assignment below.
+    } else {
+      html = '<div class="roster-card"><div class="table-scroll"><table style="width:100%">'
+        + tableHead
+        + '<tbody>' + rowHtmls.join('') + '</tbody></table></div></div>';
+    }
+
+    // Tear down any stale virtual instance before swapping innerHTML out
+    // from under it (avoids dangling scroll/resize listeners).
+    if (window._managersVirtual) {
+      window._managersVirtual.destroy();
+      window._managersVirtual = null;
+    }
+    html += '<div id="import-managers-preview" style="display:none;margin-top:8px"></div>';
+    document.getElementById('managers-content').innerHTML = html;
+
+    if (useVirtual) {
+      window._managersVirtual = window.EQVirtualTable.mount({
+        scrollEl: document.getElementById('managers-virtual-scroll'),
+        tbodyEl:  document.getElementById('managers-virtual-tbody'),
+        rows:     rowHtmls,
+        rowHeight: 38,
+        colspan:  6,
+        bufferRows: 20
+      });
+    }
+    return;  // skip the trailing innerHTML write below — done above
   }
 
   html += '<div id="import-managers-preview" style="display:none;margin-top:8px"></div>';
