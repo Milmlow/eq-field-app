@@ -61,6 +61,19 @@ this sprint. S2 depends on STATE shape — best done AFTER S1 stabilises.
 
 **Total: ~7 hours. Behaviour-preserving throughout.**
 
+**Status:**
+- ✅ **Phases 1–4 (demo)** shipped 2026-05-15 via [PR #89](https://github.com/Milmlow/eq-field-app/pull/89) as v3.5.3.
+  All five phases folded into one PR per SPRINT-QUESTIONS Q11 default
+  ("bump per workstream"). Defaults applied throughout per Q1, Q2, Q3, Q4, Q5.
+- ✅ **Phase 5 (dashboard)** investigated and confirmed **no-op** per Q4 default —
+  `renderDashboard` + `updateTopStats` already scope via `getWeekSchedule()` and
+  current week is always in the loaded window. No aggregate RPC needed.
+- ⏳ **SKS port** open in [PR #93](https://github.com/Milmlow/eq-field-app/pull/93) as
+  v3.4.74 on `main` (2026-05-18). Re-implemented fresh rather than cherry-picked
+  due to ~16 versions of demo-only stacked work between main (v3.4.73) and
+  demo (v3.5.4). DO NOT auto-merge — explicit Royce instruction required for
+  SKS prod port.
+
 ### Phase 1 — Visibility tracking (no behaviour change yet, ~1h)
 Files: `scripts/app-state.js`, `index.html`
 
