@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.3'; // cache-buster — bump on icon changes
+    var v = '3.5.4'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -61,6 +61,9 @@
 <script src="scripts/utils.js"></script>
 <script src="scripts/supabase.js"></script>
 <script src="scripts/roster.js"></script>
+<!-- v3.5.4 — EQ Virtual Table (FINDING #S2). Must load BEFORE people.js
+     so renderContacts() can detect window.EQVirtualTable at first paint. -->
+<script src="scripts/virtual-table.js"></script>
 <script src="scripts/people.js"></script>
 <script src="scripts/sites.js"></script>
 <script src="scripts/managers.js"></script>
@@ -212,8 +215,58 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.3
+  EQ Solves — Field  v3.5.4
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.4  (S2 contacts virtualisation — Phase 1)
+  ────────────────────────────────────────────────────────────
+  • Addresses AUDIT-REVIEW FINDING #S2 (medium) — wholesale
+    innerHTML rebuilds on big-list views. Phase 1 lands the
+    virtualisation primitive + applies it to Contacts (desktop
+    table only). Supervisors page + Roster editor are Phase 2
+    once contacts soak proves the shim.
+  • NEW SHIM — scripts/virtual-table.js (~80 LOC, MIT-clean
+    vanilla JS, EQ-authored). The brief originally suggested
+    clusterize.js but clusterize is GPLv3 — incompatible with
+    a closed-source commercial PWA. EQVirtualTable is a from-
+    scratch implementation of the same render-window-plus-
+    buffer pattern: top/bottom padding <tr>s sized to the
+    elided rows, rAF-throttled scroll listener swaps the
+    rendered slice. Public API: EQVirtualTable.mount({ scrollEl,
+    tbodyEl, rows, rowHeight, colspan, bufferRows }) returns
+    { update, destroy }.
+  • CONTACTS — renderContacts() desktop path now branches at
+    150 rows. Below threshold: existing innerHTML path (cheaper
+    for small tables, no scroll math overhead). Above threshold:
+    EQVirtualTable.mount on a new scroll container with
+    max-height:calc(100vh - 220px). thead stays static; tbody
+    is virtualised. Per-row inline onclick handlers (Edit,
+    Archive, Delete, Restore) untouched — they survive the
+    swap because each render rebuilds tbody with the same row
+    HTML structure.
+  • MOBILE PATH UNCHANGED — the iPad/phone card layout with
+    group headers (Direct / Apprentice / Labour Hire) doesn't
+    fit a flat virtualised table cleanly. At Melbourne scale
+    most supervisors use desktop for contact management; the
+    perf win is concentrated there.
+  • SKIPPED PER SPRINT-PLAN — Dashboard, Audit log, Leave
+    typically render <100 rows; innerHTML stays fine.
+  • PHASE 2 SCOPE — once contacts soaks clean, apply the same
+    EQVirtualTable.mount pattern to scripts/managers.js
+    (Supervisors page) and the Roster editor body. Same shim,
+    same API.
+  • FILES TOUCHED
+    - scripts/virtual-table.js  (NEW — the shim)
+    - scripts/people.js         (renderContacts desktop branch)
+    - index.html                (script tag, favicon cache-bust,
+                                 this banner)
+    - scripts/app-state.js      (APP_VERSION 3.5.3 → 3.5.4)
+    - sw.js                     (CACHE bump + virtual-table.js
+                                 in PRECACHE)
+  • TEST PLAN — SEED demo with 500 fake contacts and verify
+    smooth scroll, no stutter on edit/archive/delete, sort
+    headers still work, search/group filter still narrow the
+    list correctly. Mobile (<768px) layout untouched.
 
   CHANGES IN v3.5.3  (S1 sliding-window queries — Melbourne scaling)
   ────────────────────────────────────────────────────────────
@@ -3051,6 +3104,34 @@ async function loadFromSupabase() {
     STATE.schedule  = SEED.schedule.map(r => ({ id:r.id||Math.random(), name:r.name, week:r.week, mon:r.mon||'', tue:r.tue||'', wed:r.wed||'', thu:r.thu||'', fri:r.fri||'', sat:'', sun:'' }));
     STATE.managers  = SEED.managers.map(r => ({ id:r.id, name:r.name, role:r.role||'', category:r.category||'', phone:r.phone||'', email:r.email||'', tafe_day:r.tafe_day||'', dob_day:r.dob_day||null, dob_month:r.dob_month||null, start_date:r.start_date||null, archived:!!r.archived }));
     STATE.timesheets = [];
+    // v3.5.4 (S2 test affordance) — ?seed500 URL param appends ~480 fake
+    // contacts so reviewers can verify EQVirtualTable virtualisation
+    // kicks in (threshold 150 rows). Demo / EQ tenant only — never runs
+    // on SKS prod. Faked rows have id `fake-N` so they're easy to spot
+    // and easy to filter out if needed. No-op when param absent.
+    try {
+      var _qs = new URLSearchParams(window.location.search);
+      if (_qs.get('seed500') !== null) {
+        var _groups = ['Direct','Apprentice','Labour Hire'];
+        var _agencies = ['Core Labour','Atom Staff','Pivot Crew','Ridgeline'];
+        for (var _i = 0; _i < 480; _i++) {
+          var _g = _groups[_i % 3];
+          STATE.people.push({
+            id: 'fake-' + _i,
+            name: 'Test Person ' + String(_i + 1).padStart(3, '0'),
+            phone: '0411' + String(900000 + _i).padStart(6, '0'),
+            group: _g,
+            licence: _g === 'Apprentice' ? (['1st Year','2nd Year','3rd Year','4th Year'][_i % 4]) : 'Licensed',
+            agency: _g === 'Labour Hire' ? _agencies[_i % _agencies.length] : '',
+            email: 'test' + (_i + 1) + '@example.com',
+            tafe_day: _g === 'Apprentice' ? (['mon','tue','wed','thu','fri'][_i % 5]) : '',
+            dob_day: null, dob_month: null, start_date: null,
+            archived: false
+          });
+        }
+        console.info('EQ[seed500] Appended 480 fake contacts. STATE.people now has ' + STATE.people.length + ' entries.');
+      }
+    } catch (_e) { /* fail-quiet */ }
     // PERF: Build O(1) schedule index
     STATE.scheduleIndex = {};
     STATE.schedule.forEach(r => { STATE.scheduleIndex[`${r.name}||${r.week}`] = r; });

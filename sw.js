@@ -1,6 +1,6 @@
 /*! Property of EQ — all rights reserved. Unauthorised use prohibited. */
-// EQ Solves — Field  ·  Service Worker  v3.5.3
-const CACHE = 'eq-field-v3.5.3';
+// EQ Solves — Field  ·  Service Worker  v3.5.4
+const CACHE = 'eq-field-v3.5.4';
 
 const PRECACHE = [
   '/',
@@ -13,6 +13,9 @@ const PRECACHE = [
   '/scripts/utils.js',
   '/scripts/supabase.js',
   '/scripts/roster.js',
+  // v3.5.4 — EQ Virtual Table (FINDING #S2). Load order: before people.js
+  // so renderContacts can detect window.EQVirtualTable at first paint.
+  '/scripts/virtual-table.js',
   '/scripts/people.js',
   '/scripts/sites.js',
   '/scripts/managers.js',
@@ -105,4 +108,10 @@ self.addEventListener('fetch', event => {
         // v3.4.58: only cache successful responses. See cache-first branch.
         if (res.ok) {
           const c = res.clone();
-          caches.open(CACHE).then(cache => cache.p
+          caches.open(CACHE).then(cache => cache.put(event.request, c));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request))
+  );
+});
