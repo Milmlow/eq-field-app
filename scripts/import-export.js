@@ -309,16 +309,41 @@ function importSitesCSV(input) {
 
 // ── Schedule export / import ──────────────────────────────────
 
-function exportScheduleCSV() {
-  const days     = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  const rows     = [['Name', 'Group', 'Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']];
-  const allWeeks = [...new Set(STATE.schedule.map(r => r.week))].sort((a, b) => {
+async function exportScheduleCSV() {
+  const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const rows = [['Name', 'Group', 'Week', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']];
+
+  // S1 — STATE.schedule is now scoped to a ±4 week window. For an
+  // all-weeks export we have to fetch fresh. _loadFullDataForExport
+  // returns a SNAPSHOT — it doesn't mutate STATE, so the window stays
+  // bounded after the export.
+  let scheduleSnapshot;
+  if (typeof _loadFullDataForExport === 'function') {
+    showToast('Fetching all weeks for export…');
+    try {
+      const snap = await _loadFullDataForExport();
+      scheduleSnapshot = snap.schedule;
+    } catch (e) {
+      showToast('Export failed — could not fetch full schedule');
+      return;
+    }
+  } else {
+    scheduleSnapshot = STATE.schedule;
+  }
+
+  // Build an indexed lookup over the snapshot — we can't call
+  // getPersonSchedule directly since it reads STATE.scheduleIndex.
+  const snapIndex = {};
+  scheduleSnapshot.forEach(r => { snapIndex[`${r.name}||${r.week}`] = r; });
+
+  const allWeeks = [...new Set(scheduleSnapshot.map(r => r.week))].sort((a, b) => {
     const [da, ma, ya] = a.split('.'); const [db, mb, yb] = b.split('.');
     return new Date(`20${ya}-${ma}-${da}`) - new Date(`20${yb}-${mb}-${db}`);
   });
+
   STATE.people.forEach(p => {
     allWeeks.forEach(w => {
-      const s = getPersonSchedule(p.name, w);
+      const s = snapIndex[`${p.name}||${w}`] || {};
       if (days.some(d => s[d] && s[d].trim()))
         rows.push([p.name, p.group, w, ...days.map(d => s[d] || '')]);
     });

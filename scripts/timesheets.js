@@ -145,9 +145,19 @@ window.addEventListener('resize', closeJobCombobox);
 
 // ── Load ──────────────────────────────────────────────────────
 
+// S1 — sliding-window scope. The timesheets page only ever renders
+// the current week (renderTimesheets uses STATE.currentWeek), so a
+// windowed fetch here is sufficient + keeps the payload bounded.
+// Bulk exports that need all weeks call _loadFullDataForExport() in
+// index.html which bypasses the window.
 async function loadTimesheets() {
   try {
-    const rows = await sbFetch('timesheets?select=*');
+    var weekFilter = '';
+    if (typeof _getVisibleWeekRange === 'function') {
+      var visibleWeeks = _getVisibleWeekRange();
+      weekFilter = '&week=in.(' + visibleWeeks.map(encodeURIComponent).join(',') + ')';
+    }
+    const rows = await sbFetch('timesheets?select=*' + weekFilter);
     STATE.timesheets = rows;
   } catch (e) {
     STATE.timesheets = [];

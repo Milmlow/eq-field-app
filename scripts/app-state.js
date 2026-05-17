@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── Version ───────────────────────────────────────────────────
-const APP_VERSION = '3.4.73';
+const APP_VERSION = '3.4.74';
 
 // ── Hostname → tenant slug map ────────────────────────────────
 const HOSTNAME_MAP = {
@@ -333,7 +333,14 @@ const STATE = {
   managers:     [],
   timesheets:   [],
   currentWeek:  '',
-  scheduleIndex: {}
+  scheduleIndex: {},
+  // S1 sliding-window queries (Melbourne scaling). Tracks which
+  // week keys (DD.MM.YY) currently have rows loaded into STATE.schedule
+  // / STATE.timesheets. Populated by loadFromSupabase (initial ±4
+  // window) and _loadWeeks (lazy-load on nav). Capped at 16 by
+  // _evictDistantWeeks. Demo / SEED tenants stay full-fetch; this
+  // Set is unused there.
+  loadedWeeks:  new Set()
 };
 
 function saveCurrentWeek() {
