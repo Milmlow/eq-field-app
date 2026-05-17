@@ -57,9 +57,31 @@ Grouped by domain. Each block has the same shape: what it is, where it lives, sc
 
 **Status:** DEMO ONLY by design. Code is safe to ship to SKS (it'd just no-op) but if Royce wants SKS supervisors to USE Tender Pipeline, the SKS Supabase needs the migrations applied.
 
-**Port risk:** Low if just shipping code (no behaviour change for SKS, tables remain disabled). Medium if also enabling for SKS (needs migration + RLS audit + supervisor training).
+**Verified loose ends from the 2026-05-14 frozen Cowork session (resume doc `C:\Projects\eq-field-pipeline\RESUME-2026-05-14.md`):**
 
-**Royce note:** _(your notes here — is Tender Pipeline ever coming to SKS?)_
+| Loose end from resume doc | Status now (verified 2026-05-18) |
+|---|---|
+| Port parser + tests | ✅ `scripts/tender-parser.js`, `tests/tender-parser.test.html` shipped v3.4.79 |
+| Build 5 screens | ✅ Shipped v3.4.79 → v3.4.83 |
+| PostHog 8 events | ✅ **10 events shipped** (over-delivered): `tenderImported`, `tenderStageDragged`, `nominationAdded`, `tenderEnriched`, `reviewSessionStarted`, `reviewSessionEnded`, `pencillingsSavedReview`, `tenderPromoted`, `labourCurveConfirmed`, `decisionLogged` |
+| `_headers` file | ✅ Shipped with proper CSP for SheetJS + both Supabases + PostHog + Clarity |
+| `eq/pending.md` eq_role status | ✅ Marked `[x]` applied |
+| Session log `eq-context/sessions/2026-05-14.md` | ✅ Exists (substrate-auto-push session; Pipeline work captured in `CHANGELOG-v3.4.79.md` + `eq-context/changelog/field.md`) |
+| 3 cross-org nomination collisions (Dan/Tara/Chris UUIDs colliding with Alex/Jordan/Sam in org `a0000000-...`) | ✅ **Nominations cleaned up** — no nominations reference the 3 wrong UUIDs anymore. The 3 people rows still exist in the other org but are harmless (different `org_id`, won't load into demo-trades). |
+| RLS policies | ⚠️ **PLACEHOLDER WIDE-OPEN — see new finding below** |
+
+**⚠️ New finding — FINDING #SEC3 (medium): RLS on tender_* tables is placeholder wide-open.**
+
+All 6 tender tables (`tenders`, `tender_enrichment`, `tender_import_runs`, `tender_review_decisions`, `nominations`, `pending_schedule`) have `rowsecurity = true` toggled on, **but the policies are `_anon_{select,insert,update,delete}` for the `anon` role** — effectively no security. Anyone with the EQ anon key (which is shipped in the client bundle in `scripts/app-state.js`) can read/write/delete any tender data.
+
+- **Why scoped to demo today:** SKS Supabase doesn't have these tables. SKS users can't touch them.
+- **Why this matters later:** when Tender Pipeline ships to a real customer (any future tenant), the placeholder policies need to be replaced with real auth-aware rules (e.g. `auth.uid() IS NOT NULL AND org_id = current_org_id()`).
+- **Tracks against:** the resume doc explicitly said "Wire RLS policies (deferred to screen phase, needs auth context)" — toggle was flipped but real policies were never written.
+- **Fix:** rewrite policies per-table to require `auth.uid()` + `org_id` match. ~1h work. Should be done before Tender Pipeline goes to SKS prod or any new tenant.
+
+**Port risk:** Low if just shipping code to SKS (no behaviour change, tables remain disabled). Medium-high if also enabling for SKS — needs migration + **the SEC3 RLS rewrite must land first** + supervisor training.
+
+**Royce note:** _(your notes here — is Tender Pipeline ever coming to SKS? Want the SEC3 RLS rewrite scoped as a separate PR now, or wait until the SKS roll-out plan is real?)_
 
 ---
 
@@ -238,6 +260,9 @@ Parked 2026-05-13 by Royce; risk accepted. Worth reconsidering for SOC 2 prep ev
 ### FINDING #S3 — realtime channel org-scoped, not week-scoped
 Parked. Complementary to S1 — wastes channel bandwidth at scale, but SKS at 20 users runs fine on org-scoped.
 
+### FINDING #SEC3 — Tender Pipeline RLS placeholder wide-open (demo only)
+Discovered 2026-05-18 during the loose-ends review of the 2026-05-14 resume doc. The 6 tender tables have RLS toggled on but the policies are `_anon_{select,insert,update,delete}` — anyone with the EQ anon key can do anything to tender data. **Scoped to demo today** (SKS Supabase has no tender tables). Must be rewritten before Tender Pipeline ships to any production tenant. See Tender Pipeline section above for details.
+
 ---
 
 ## Live-version feedback (Royce's notes go here)
@@ -267,7 +292,7 @@ Suggested order if Royce wants to port _some_ of demo to live. Sorted by safety 
 | **I** | Mobile home tile (staff, flag-off SKS) | ~30 min | None until flag flipped per tenant | ⬜ Yes / ⬜ No |
 | **J** | Mobile home tile (supervisor, flag-off) | ~30 min | None until flag flipped | ⬜ Yes / ⬜ No |
 | **K** | Role system Phase B+C | ~2h | Internal — auth surface change, behaviour-equivalent | ⬜ Yes / ⬜ No |
-| **L** | Tender Pipeline | ~30 min code + migration | Requires data work; SKS doesn't have tenders today | ⬜ Yes / ⬜ No |
+| **L** | Tender Pipeline | ~30 min code + migration + **SEC3 RLS rewrite (~1h) MUST precede SKS enablement** | Requires data work; SKS doesn't have tenders today | ⬜ Yes / ⬜ No |
 | **M** | Audit/CI chores (AUDIT-REVIEW.md, axe workflow, /audit-multi-lens, sprint docs) | ~15 min | Zero | ⬜ Yes / ⬜ No |
 
 **Total if all ported:** ~10h surgical work + the data decisions for E/F/G/L.
