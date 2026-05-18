@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.7'; // cache-buster — bump on icon changes
+    var v = '3.5.8'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -215,8 +215,70 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.7
+  EQ Solves — Field  v3.5.8
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.8  (U2 Phase 3 — modal focus management + aria-live)
+  ────────────────────────────────────────────────────────────
+  • Phase 3 of FINDING #U2 (NEW-WINDOW-PROMPT-melbourne-ready.md
+    Phase C2). The "manual pass" portion — accessibility issues
+    that axe-core can't catch automatically because they're
+    behavioural, not markup-static.
+  • MODAL FOCUS MANAGEMENT in scripts/utils.js:
+      - openModal(id) stashes document.activeElement (the trigger)
+        on a stack, then moves focus INTO the modal (honours
+        [data-initial-focus], falls back to first focusable, then
+        the modal itself with tabindex=-1).
+      - closeModal(id) pops the stack and restores focus to the
+        trigger so keyboard users don't get dumped at <body>.
+      - Nested-modal aware (Confirm on top of Edit pops correctly).
+      - Backdrop-click + ESC-to-close now route through closeModal
+        so focus restore fires consistently (previously they just
+        removed the .open class).
+  • TAB FOCUS TRAP — while a modal is open, Tab/Shift+Tab cycles
+    inside the modal's focusable elements instead of leaking into
+    the background page. WCAG 2.4.3 (focus order) + 2.1.1
+    (keyboard).
+  • ARIA SEMANTICS on modals — openModal() idempotently stamps
+    role="dialog" + aria-modal="true" on the .modal-overlay
+    container so screen readers announce as dialogs. Applied
+    lazily on first open (not document-ready) to avoid touching
+    25 elements at boot.
+  • TOAST aria-live — #toast in index.html now has role="status"
+    + aria-live="polite" + aria-atomic="true". Screen readers
+    announce "Saved", "Removed", etc. without interrupting the
+    user mid-input (polite, not assertive).
+  • NOT IN THIS PHASE — count-badge aria-live (Contacts 498,
+    Pipeline 0, etc.) These change rarely (page render only) so
+    polite-mode aria-live wouldn't fire usefully without
+    rebroadcasting on every render. Recommended as a follow-on
+    if NVDA testing shows the static labels aren't enough.
+  • NVDA verification OWED — Royce. The structural fixes here
+    are correct per WCAG patterns + axe-core auto-rules continue
+    to pass, but a real NVDA run on Windows (or VoiceOver on Mac)
+    is the only way to catch perception gaps (e.g. label clarity,
+    announcement timing, focus visibility on transparent buttons).
+    See PR body for the checklist.
+  • FILES TOUCHED
+    - scripts/utils.js          (focus stack, openModal/closeModal
+                                 refactor, Tab trap, aria stamping)
+    - index.html                (toast aria-live + banner)
+    - scripts/app-state.js      (APP_VERSION 3.5.7 → 3.5.8)
+    - sw.js                     (CACHE bump only)
+  • TEST PLAN (with NVDA or VoiceOver):
+      1. Open Contacts → "Add Person" → confirm focus lands on the
+         Name input. Tab to "Mobile" → keep tabbing through Group,
+         Licence, Agency, Email, TAFE Day, Add Person button, ✕,
+         then BACK to Name. No leak to sidebar.
+      2. ESC closes the modal → focus restores to the "Add Person"
+         button (or wherever it was clicked from).
+      3. Open Confirm-type modal (e.g. delete prompt) on top of
+         Edit. ESC closes Confirm, focus returns to the Delete
+         button INSIDE the still-open Edit modal. ESC again
+         closes Edit, focus restores to the original trigger.
+      4. NVDA: "Saved" toasts read out without interrupting input.
+      5. NVDA on the gate modal — announced as "dialog, EQ Solves
+         — Field, …" (or similar).
 
   CHANGES IN v3.5.7  (U2 axe — auto-flagged contrast + missing select labels)
   ────────────────────────────────────────────────────────────
@@ -3195,7 +3257,9 @@
 <datalist id="site-datalist"></datalist>
 <datalist id="ts-job-list"></datalist>
 
-<div class="toast" id="toast"></div>
+<!-- v3.5.8 (U2 Phase 3): aria-live="polite" + role="status" so screen readers announce toast messages.
+     Polite (not assertive) because toasts are non-critical feedback; user shouldn't be interrupted mid-input. -->
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="loading-overlay" class="hidden">
   <div class="loading-spinner"></div>
