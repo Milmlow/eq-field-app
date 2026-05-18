@@ -89,18 +89,18 @@ not yet addressed stay until Royce decides + closes them._
 
 - **FINDING #S3 — scalability [med] — realtime channel is org-scoped, not week-scoped.**
   PARKED 2026-05-13 by Royce. Acknowledged as a priority for the Melbourne scaling sprint but not blocking today (SKS ~20 users runs fine on org-scoped channel). Revisit alongside FINDING #S1 implementation since the per-week subscription pattern complements the per-week query scoping.
-- **FINDING #SEC1 — security [med] — magic-link approve/reject TTL is 7 days.**
-  PARKED 2026-05-13 by Royce. Risk accepted: if a supervisor's email is compromised, the leave-approval blast radius is bounded (approving direct-report leave is not a financial transaction; the move can be reversed in-app; audit log captures the action). Revisit if SOC 2 audit demands shorter TTL, or if leave-approval scope ever widens beyond same-team direct reports.
 
 ### Tracked findings — open as GitHub issues / migration files for scheduled work
 
 - **FINDING #C1 — code [low] — apprentices.js is 2271 lines.** Tracked via [issue #74](https://github.com/Milmlow/eq-field-app/issues/74) for scheduled refactor when convenient.
-- **FINDING #SEC2 — security [low] — verify-pin rate limit is in-memory only.** Phase 1 (schema design) shipped 2026-05-15 via [`migrations/2026-05-15_rate_limit_buckets_v1.sql`](migrations/2026-05-15_rate_limit_buckets_v1.sql) — PENDING, unapplied (per SPRINT-QUESTIONS Q9 default). Phase D will apply the migration and wire `bump_rate_limit()` into `netlify/functions/verify-pin.js` alongside server-side role checks. Original evidence: `verify-pin.js:49-50` uses an in-memory `attempts = {}` map, reset on every Netlify cold start.
 
 ### Closed / shipped findings
 
 - **FINDING #U1 — usability [med] — modals can't be closed with ESC.** SHIPPED in v3.4.74 (Night 1). `scripts/utils.js` keydown listener added. Closes top-most open modal on ESC press.
 - **FINDING #C2 — code [low] — stale TODO doc in scripts/.** CLOSED 2026-05-13 by Royce. `scripts/analytics-TODO-hooks.md` deleted; hooks already implemented in `scripts/analytics.js` so the doc was misleading rather than aspirational.
+- **FINDING #SEC1 — security [med] — magic-link approve/reject TTL was 7 days.** SHIPPED 2026-05-18 via [PR #100](https://github.com/Milmlow/eq-field-app/pull/100) (Phase B3 of `NEW-WINDOW-PROMPT-melbourne-ready.md`). `LEAVE_ACTION_TTL_MS` dropped from `7 * 24 * 60 * 60 * 1000` to `48 * 60 * 60 * 1000` in both `netlify/functions/send-email.js` and `supabase/functions/supervisor-digest/index.ts`. Was parked 2026-05-13 by Royce; unparked for Melbourne procurement posture.
+- **FINDING #SEC2 — security [low] — verify-pin rate limit was in-memory only.** SHIPPED 2026-05-18 via [PR #99](https://github.com/Milmlow/eq-field-app/pull/99) (Phase B2 / Phase D activation). Phase 1 (schema design) shipped 2026-05-15 via PR #90. Phase D activated 2026-05-18: migration `2026-05-15_rate_limit_buckets_v1.sql` applied to EQ demo Supabase, RPC sanity-tested (5x true, 6th false), `netlify/functions/verify-pin.js` wired to `bump_rate_limit` RPC behind env-var feature flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)` added to `scripts/supabase.js` for future defence-in-depth callers. **Activation requires setting `RATE_LIMIT_V2=on` in the Netlify env vars** — not flipped automatically by the merge. In-memory path serves as fallback when RPC blips.
+- **FINDING #SEC3 — security [med] — Tender Pipeline RLS placeholder wide-open.** Discovered + recorded 2026-05-18 (DEMO-VS-LIVE.md). SHIPPED same day via [PR #98](https://github.com/Milmlow/eq-field-app/pull/98) (Phase B1). All 24 placeholder `_anon_*` policies on the 6 tender tables replaced — `tenders` / `tender_import_runs` / `tender_review_decisions` / `pending_schedule` gated on `org_id IS NOT NULL`; `nominations` / `tender_enrichment` gated on `EXISTS (tender_id → tenders.org_id IS NOT NULL)`. **HONEST CAVEAT in migration header:** EQ Field's anon-key auth model can't enforce `auth.uid()`-based per-user RLS — cross-tenant read by anyone holding the anon key remains structural until SSO (MELBOURNE-SCALE-DESIGN.md §7 Q7, Wave 5+). The brief's prescribed `TO authenticated USING (auth.uid()...)` pattern was a wrong premise; the precedent set in `2026-05-13_roster_presence_rls_tighten.sql` was the right shape.
 
 ---
 
@@ -295,3 +295,60 @@ Diff: 5 files, 312 insertions / 14 deletions (compare to demo S1: 303 / 23 — s
 
 - The brief's "pre-flight catches stale state" guidance paid off — without it I would have re-shipped SEC2 from scratch. Brief versioning on Desktop matters.
 - Re-implementation against main was the right call vs cherry-pick. Cherry-picking through 16 versions of stacked diffs would have wasted hours on conflict resolution and risked subtle scoping errors (the surrounding code on demo no longer matches main's structure).
+
+---
+
+### Session — 2026-05-18 — Phase A+B Melbourne prep
+
+**Look at this first:** Phase A (scale verification) + Phase B (3 security findings) of `NEW-WINDOW-PROMPT-melbourne-ready.md` are shipped to demo. Phase B closes #SEC1/#SEC2/#SEC3. Phase A doc PR ([PR #97](https://github.com/Milmlow/eq-field-app/pull/97)) still open (your call). **One out-of-PR action needed:** flip `RATE_LIMIT_V2=on` in eq-solves-field Netlify env vars to activate PR #99's RPC path — without that flip, the merged code is dormant (in-memory rate-limit is still serving). Phase C (#U2 accessibility) is next.
+
+**Pre-flight findings (state-of-the-world correction):**
+
+The session worktree (`claude/eager-nobel-eb05e1`) was branched off main back at the v3.4.68 era — 56 commits behind origin/demo, missing every doc the brief asks me to read. Reset to origin/demo cleanly after confirming nothing was lost. Separate adjacent observation: your main checkout at `C:\Projects\eq-solves-field` is on local `demo` at `db2b5fa`, also far behind origin/demo. Worktree-based sessions have been keeping it stale. Suggest `git pull` next time you're in that directory; not actioned from any PR.
+
+**Phase A — Scale verification (PR #97 open):**
+
+Drove Claude-in-Chrome against `eq-solves-field.netlify.app/?seed500`. JS-tool + DOM evidence captured per the brief's 6-step list:
+- A1 Contacts virtualisation: 498 people / 43 `<tr>` (matches brief's expected count exactly). `#contacts-virtual-scroll` + `EQVirtualTable` engaged. ✅
+- A2 Edit Roster `content-visibility: auto`: all 498 `.roster-editor-row` elements gated; contain-intrinsic-size 36px. ✅
+- A3 Roster (read-only) `content-visibility: auto`: same shape, 32px. ✅
+- A4 Schedule sliding-window: helpers wired (`_getVisibleWeekRange()` returns 9 weeks), but EQ tenant short-circuits Supabase (SEED path) — live `week=in.(...)` is exercised on the SKS port (PR #93) instead. ⚠ partial, code-verified.
+- A5 Tender Pipeline: 323 tenders + 12 nominations via `EQ_TENDER_PIPELINE.loadAll()`. (Brief said 10; count's grown from dogfood use.) ✅
+  - **Incidental:** confirmed #SEC3 empirically — anon-key read of all tender data succeeded from a gate-locked, non-supervisor session. The placeholder RLS gap wasn't paper-only.
+- A6 Mobile home tile: staff variant fully verified (flag on, `renderHomeScreen` wired, h1=Home, 17 tile elements). Supervisor variant deferred (would need supervisor unlock — privacy rules block me from typing passwords). ⚠ partial.
+
+**Phase B — Security (3 PRs merged):**
+
+- **B1 / [PR #98](https://github.com/Milmlow/eq-field-app/pull/98) — SEC3 tender RLS tighten.** The brief prescribed the textbook `TO authenticated USING (auth.uid()...)` pattern — that doesn't work on EQ Field (anon-key only, no per-user JWT). Surfaced this before writing the migration. Royce chose "tighten within anon model + caveat" per the precedent set in `2026-05-13_roster_presence_rls_tighten.sql`. Migration applied to EQ demo Supabase via MCP. App still reads 323 tenders + 12 noms post-tighten.
+- **B2 / [PR #99](https://github.com/Milmlow/eq-field-app/pull/99) — SEC2 Phase D activation.** Migration `2026-05-15_rate_limit_buckets_v1.sql` applied to EQ demo Supabase, RPC sanity-tested. `verify-pin.js` wired with env-var feature flag `RATE_LIMIT_V2` — when off (current state, post-merge), serves the in-memory path unchanged. When on, distributed RPC bucket lockout supersedes the in-memory cold-start bypass. Belt-and-braces fallback: if the RPC fails (Supabase blip), falls through to in-memory. Client helper `bumpRateLimit` added to `scripts/supabase.js` for future defence-in-depth use.
+- **B3 / [PR #100](https://github.com/Milmlow/eq-field-app/pull/100) — SEC1 magic-link TTL 7d → 48h.** Two `LEAVE_ACTION_TTL_MS` constants flipped (send-email.js + supervisor-digest/index.ts) + approve-leave.js header comment. Was parked 2026-05-13 with risk accepted; unparked for Melbourne procurement posture.
+
+**Architectural notes (worth flagging):**
+- The brief assumed EQ Field uses per-user Supabase auth. It doesn't (anon key + tenant access code at app layer). Three places that surface this constraint: `2026-05-13_roster_presence_rls_tighten.sql` HONEST CAVEAT, the new `2026-05-18_tender_rls_tighten.sql` (same shape), and MELBOURNE-SCALE-DESIGN.md §7 Q7 (Wave 5+ SSO). Worth keeping the precedent visible so the next finding hits the same shape rather than rediscovering the constraint.
+- `bumpRateLimit` client helper is dormant (not wired anywhere yet). Future role-gated client actions (e.g. throttling PostHog bursts, leave-approve clicks) can pick it up without further infra work.
+
+**Decisions punted for Royce:**
+1. **Flip `RATE_LIMIT_V2=on` in Netlify env** when you want PR #99's RPC path active. Without it, the merge is dormant for the gate-PIN function. Same for SKS prod when you decide to roll out: requires the migration applied to SKS Supabase + a separate env-var flip on sks-nsw-labour Netlify.
+2. **PR #97 merge decision.** Phase A verify doc is informational; doc-only; merge or close as you see fit.
+3. **Phase C (U2 accessibility) kickoff.** Brief says ~5-6h split across Phase 2 (axe-core auto-fixes, ~2-3h) and Phase 3 (manual focus / keyboard / aria-live pass, ~2-3h). Awaiting your green-light.
+4. **Phase D (tenant onboarding admin flow).** Greenfield work, design-first. Four open questions in the brief (E1-E4). Not started.
+
+**FINDING status changes:**
+- #SEC1 → Closed/Shipped (PR #100)
+- #SEC2 → Closed/Shipped (PR #99 wires the RPC; env var still needed to activate)
+- #SEC3 → Closed/Shipped (PR #98 — discovered + fixed same session)
+- #S1, #S2 remain in "Open findings" in the list above despite being shipped to demo via v3.5.3+v3.5.4-6. Not touching them this PR to keep scope tight; worth a separate hygiene pass to also move them to Closed alongside the U2 work in Phase C.
+
+**What was deliberately NOT touched:**
+- main / SKS prod branch
+- SKS Supabase project (off-limits per brief)
+- scripts/tender-pipeline.js (Royce's active surface)
+- Auth model itself — anon-key-only is preserved. Real per-user SSO is Wave 5+.
+- `RATE_LIMIT_V2` env var (not set; required to activate B2's RPC path)
+- PR #97 merge state (your call)
+
+**Substrate hygiene:** `eq-context/eq/changelog/field.md` entry appended in the same PR.
+
+**Process notes:**
+- The brief's premise about EQ auth model was wrong on SEC3 (assumed per-user JWT). Catching this BEFORE writing the migration saved an hour of dead-end work + a broken Tender Pipeline. The lesson is the same as the 2026-05-15 session note: pre-flight catches stale state, surface architectural mismatches BEFORE writing code.
+- Three separate PRs vs one bundle was the right shape — each PR is independently reviewable, mergeable, revertable. PR #98 had zero code-side risk (migration only). PR #99 had the heaviest review surface (function-level auth-edge changes). PR #100 was a one-line config bump per file. Clean separation made the merge train fast.
