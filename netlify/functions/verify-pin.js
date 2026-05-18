@@ -134,6 +134,31 @@ function verifyToken(token) {
   } catch (e) { return null; }
 }
 
+// v3.5.9 (Phase 1.C) — EQ Shell iframe handoff token.
+// Shell mints a short-lived (60s recommended) token via the same
+// EQ_SECRET_SALT and passes it in the iframe URL hash. Field reads
+// the hash, calls verify-pin with action='verify-shell-token', skips
+// the PIN gate on success, and gets back a 7d session token for the
+// rest of the app to use as if PIN-verified.
+//
+// Token-type confusion guard: requires payload.kind === 'shell-token'
+// so a session token (no kind) or leave-action token (kind='leave-
+// action') can't be passed here.
+function verifyShellToken(token) {
+  try {
+    const [payloadB64, sig] = token.split('.');
+    if (!payloadB64 || !sig) return null;
+    const payload = Buffer.from(payloadB64, 'base64').toString();
+    const expectedSig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
+    if (sig !== expectedSig) return null;
+    const data = JSON.parse(payload);
+    if (data.kind !== 'shell-token') return null;
+    if (typeof data.exp !== 'number' || data.exp < Date.now()) return null;
+    if (!data.name || !data.role) return null;
+    return data;
+  } catch (e) { return null; }
+}
+
 // ── Handler ──────────────────────────────────────────────────
 exports.handler = async (event) => {
   const headers = corsHeaders(event);
@@ -155,6 +180,21 @@ exports.handler = async (event) => {
         const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
         return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
       }
+      return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
+    }
+
+    // ── EQ Shell iframe handoff (Phase 1.C) ───────────────────
+    // Shell mints a short-lived token + passes via URL hash; Field
+    // calls this action to swap the shell token for a 7d session
+    // token, skipping the PIN gate.
+    if (body.action === 'verify-shell-token') {
+      const data = verifyShellToken(body.token);
+      if (data) {
+        await logAttempt(data.name, true, ip, 'shell-token');
+        const sessionToken = signToken(data.name, data.role, Date.now() + (7 * 24 * 60 * 60 * 1000));
+        return { statusCode: 200, headers, body: JSON.stringify({ valid: true, name: data.name, role: data.role, sessionToken }) };
+      }
+      // Don't disclose why it failed (expired vs bad sig vs wrong kind).
       return { statusCode: 200, headers, body: JSON.stringify({ valid: false }) };
     }
 
