@@ -156,16 +156,19 @@ S1 is the single biggest blocker for Melbourne customer onboarding. Design doc a
 
 ## SEC2 — Rate limit backend for 5-tier security
 
-**This sprint: design only (~1h). Implementation deferred to Phase D.**
-
 **Status:**
-- ✅ **Phase 1 (design)** shipped 2026-05-15 — schema captured verbatim
-  in [`migrations/2026-05-15_rate_limit_buckets_v1.sql`](migrations/2026-05-15_rate_limit_buckets_v1.sql).
-  File is PENDING (not applied to any Supabase) per SPRINT-QUESTIONS Q9 default.
-- ⏳ **Phase D (implementation)** — when server-side role checks land, that
-  workstream grabs the migration file, applies it via MCP (demo first,
-  then SKS prod on explicit "SKS live"), and wires `bump_rate_limit()`
-  into `verify-pin.js` + role-gated endpoints.
+- ✅ **Phase 1 (design)** shipped 2026-05-15 via PR #90 — schema captured
+  verbatim in [`migrations/2026-05-15_rate_limit_buckets_v1.sql`](migrations/2026-05-15_rate_limit_buckets_v1.sql).
+- ✅ **Phase D (activation)** shipped 2026-05-18 via [PR #99](https://github.com/Milmlow/eq-field-app/pull/99)
+  — migration applied to EQ demo Supabase, `bump_rate_limit` RPC
+  wired into `netlify/functions/verify-pin.js` behind env-var feature
+  flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)`
+  added to `scripts/supabase.js` for future defence-in-depth callers.
+  **Activation:** set `RATE_LIMIT_V2=on` in eq-solves-field Netlify env vars.
+  Without it, the in-memory path remains the sole rate-limit mechanism.
+- ⏳ **SKS rollout** — pending explicit "SKS live": apply the migration
+  to `nspbmirochztcjijmcrx`, then set `RATE_LIMIT_V2=on` on
+  sks-nsw-labour Netlify deploy.
 
 ### Recommendation: Supabase counter table, ship as part of Phase D
 NOT as a standalone fix. Phase D is the moment you start adding server-side role checks anyway — same migration adds both the role-check and the rate-limit infrastructure.
@@ -250,7 +253,7 @@ const allowed = await bumpRateLimit(`${tenant}:${role}:approve_leave`, 60, 60);
 - **C1** — apprentices.js split → [issue #74](https://github.com/Milmlow/eq-field-app/issues/74), scheduled when convenient
 - **C2** — already deleted (PR #75)
 - **S3** — realtime org-scoped → parked, revisit alongside S1 phase 3
-- **SEC1** — 7-day magic-link TTL → parked, risk accepted
+- **SEC1** — magic-link TTL → ✅ unparked + shipped 2026-05-18 via [PR #100](https://github.com/Milmlow/eq-field-app/pull/100) (7d → 48h)
 
 ---
 

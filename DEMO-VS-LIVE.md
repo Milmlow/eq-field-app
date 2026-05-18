@@ -11,10 +11,10 @@
 |---|---|---|
 | **URL** | eq-solves-field.netlify.app | sks-nsw-labour.netlify.app |
 | **Repo branch** | `demo` | `main` |
-| **GitHub branch HEAD** | `56a1e3a` (post-#92) | `2c769e0` (PR #69) |
-| **APP_VERSION** | `3.5.5` (`3.5.6` in PR #95) | `3.4.73` |
-| **sw.js CACHE** | `eq-field-v3.5.5` | `eq-field-v3.4.73` |
-| **Last shipped** | 2026-05-18 | 2026-05-13 |
+| **GitHub branch HEAD** | `c9cde43` (post-#100, Phase B closed) | `2c769e0` (PR #69) |
+| **APP_VERSION** | `3.5.6` (server-side Phase B since then) | `3.4.73` |
+| **sw.js CACHE** | `eq-field-v3.5.6` | `eq-field-v3.4.73` |
+| **Last shipped** | 2026-05-18 (Phase A+B Melbourne prep) | 2026-05-13 |
 | **Tenant slug** | `eq` | `sks` |
 | **Supabase project** | `ktmjmdzqrogauaevbktn` | `nspbmirochztcjijmcrx` |
 | **Active users** | 0 (dev/demo only) | ~20 supervisors / staff |
@@ -68,20 +68,21 @@ Grouped by domain. Each block has the same shape: what it is, where it lives, sc
 | `eq/pending.md` eq_role status | ✅ Marked `[x]` applied |
 | Session log `eq-context/sessions/2026-05-14.md` | ✅ Exists (substrate-auto-push session; Pipeline work captured in `CHANGELOG-v3.4.79.md` + `eq-context/changelog/field.md`) |
 | 3 cross-org nomination collisions (Dan/Tara/Chris UUIDs colliding with Alex/Jordan/Sam in org `a0000000-...`) | ✅ **Nominations cleaned up** — no nominations reference the 3 wrong UUIDs anymore. The 3 people rows still exist in the other org but are harmless (different `org_id`, won't load into demo-trades). |
-| RLS policies | ⚠️ **PLACEHOLDER WIDE-OPEN — see new finding below** |
+| RLS policies | ✅ **Tightened 2026-05-18 — see SEC3 closure below** |
 
-**⚠️ New finding — FINDING #SEC3 (medium): RLS on tender_* tables is placeholder wide-open.**
+**✅ FINDING #SEC3 closed 2026-05-18.**
 
-All 6 tender tables (`tenders`, `tender_enrichment`, `tender_import_runs`, `tender_review_decisions`, `nominations`, `pending_schedule`) have `rowsecurity = true` toggled on, **but the policies are `_anon_{select,insert,update,delete}` for the `anon` role** — effectively no security. Anyone with the EQ anon key (which is shipped in the client bundle in `scripts/app-state.js`) can read/write/delete any tender data.
+Shipped via [PR #98](https://github.com/Milmlow/eq-field-app/pull/98) (migration `2026-05-18_tender_rls_tighten.sql`, applied to EQ Supabase via MCP). All 24 placeholder `_anon_*` policies replaced — `tenders` / `tender_import_runs` / `tender_review_decisions` / `pending_schedule` gated on `org_id IS NOT NULL`; `nominations` / `tender_enrichment` gated on `EXISTS (tender_id → tenders.org_id IS NOT NULL)`.
 
-- **Why scoped to demo today:** SKS Supabase doesn't have these tables. SKS users can't touch them.
-- **Why this matters later:** when Tender Pipeline ships to a real customer (any future tenant), the placeholder policies need to be replaced with real auth-aware rules (e.g. `auth.uid() IS NOT NULL AND org_id = current_org_id()`).
-- **Tracks against:** the resume doc explicitly said "Wire RLS policies (deferred to screen phase, needs auth context)" — toggle was flipped but real policies were never written.
-- **Fix:** rewrite policies per-table to require `auth.uid()` + `org_id` match. ~1h work. Should be done before Tender Pipeline goes to SKS prod or any new tenant.
+**HONEST CAVEAT in the migration header** (mirrors `2026-05-13_roster_presence_rls_tighten.sql` precedent): the brief's prescribed `auth.uid()`-based pattern would have broken Tender Pipeline — EQ Field uses the anon key only, no per-user JWT. What's enforceable within the anon-key model: orphan-row prevention + structural integrity at the DB layer. Cross-tenant read by anyone holding the anon key remains structural until per-user SSO ships (MELBOURNE-SCALE-DESIGN.md §7 Q7, Wave 5+).
 
-**Port risk:** Low if just shipping code to SKS (no behaviour change, tables remain disabled). Medium-high if also enabling for SKS — needs migration + **the SEC3 RLS rewrite must land first** + supervisor training.
+- **EQ demo today:** one org_id only → practical impact of the remaining gap is zero.
+- **Future tenant on EQ Supabase:** the cross-tenant read risk becomes real once a second org_id is added. Wave 5+ SSO unblocks the proper fix.
+- **SKS prod:** unaffected (no tender tables there).
 
-**Royce note:** _(your notes here — is Tender Pipeline ever coming to SKS? Want the SEC3 RLS rewrite scoped as a separate PR now, or wait until the SKS roll-out plan is real?)_
+**Port risk:** Low if just shipping code to SKS (no behaviour change, tables remain disabled). Medium-high if also enabling for SKS — needs migration + the SEC3-equivalent tighten applied to SKS Supabase first + supervisor training.
+
+**Royce note:** _(is Tender Pipeline ever coming to SKS? The SEC3 tighten is portable — same migration shape applies once SKS has the tender tables.)_
 
 ---
 
@@ -196,15 +197,18 @@ All 6 tender tables (`tenders`, `tender_enrichment`, `tender_import_runs`, `tend
 
 ---
 
-### 9. SEC2 — rate-limit-buckets migration (PENDING)
+### 9. SEC2 — rate-limit-buckets migration + Phase D activation ✅
 
-**What:** SQL migration file capturing the schema for a future `public.rate_limit_buckets` table + `bump_rate_limit()` RPC + RLS denial-by-default. Lives in `migrations/2026-05-15_rate_limit_buckets_v1.sql`.
+**What:** Distributed rate limit infrastructure replacing the in-memory `attempts={}` map in `netlify/functions/verify-pin.js` (FINDING #SEC2).
 
-**Status:** **PENDING — not applied to any Supabase.** Phase D will apply it + wire `bump_rate_limit()` into `netlify/functions/verify-pin.js` (replaces the in-memory `attempts={}` map flagged as FINDING #SEC2).
+**Status (2026-05-18):**
+- ✅ **Phase 1 (design)** shipped 2026-05-15 via PR #90 — `migrations/2026-05-15_rate_limit_buckets_v1.sql`.
+- ✅ **Phase D (activation)** shipped 2026-05-18 via [PR #99](https://github.com/Milmlow/eq-field-app/pull/99). Migration applied to EQ demo Supabase. `verify-pin.js` wired with env-var feature flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)` added to `scripts/supabase.js`.
+- ⏳ **Activation:** requires `RATE_LIMIT_V2=on` in eq-solves-field Netlify env vars. Without that flip, in-memory path serves as before. Code is dormant post-merge.
 
-**Port risk:** Zero today (file is documentation). Real risk lands in Phase D.
+**Port risk:** Zero on SKS until you explicitly roll out. SKS Supabase doesn't have the migration applied and the SKS Netlify deploy doesn't have `RATE_LIMIT_V2` set. To roll to SKS: apply the migration to `nspbmirochztcjijmcrx`, then flip the env var on sks-nsw-labour Netlify.
 
-**Royce note:** _(Phase D timing? Phase D would do this for both Supabases.)_
+**Royce note:** _(when to flip RATE_LIMIT_V2 on EQ Netlify? Same question for SKS rollout timing.)_
 
 ---
 
@@ -251,17 +255,17 @@ Bugs/concerns present on SKS prod TODAY (would benefit from a port even without 
 ### sw.js tail truncation (silent)
 SKS's `sw.js` ends mid-statement at `caches.open(CACHE).then(cache => cache.p` (no closing parens). SW registration silently fails with "ServiceWorker script evaluation failed". App still works because it falls back to network fetches without caching, but the PWA's offline cache has been dead since at least v3.4.73 (probably longer). Caught + fixed in PR #91 (demo); same fix is portable.
 
-### FINDING #SEC2 — verify-pin rate limit in-memory only
-`netlify/functions/verify-pin.js:49-50` uses `const attempts = {}; const MAX_ATTEMPTS = 5;`. Netlify Functions are stateless — each cold start resets. Attackers can spam attempts across cold starts. Distributed rate limit (PENDING SEC2 migration) is the proper fix; nothing's been done about it on live yet.
+### FINDING #SEC2 — verify-pin rate limit (still in-memory on live)
+SKS prod still uses the in-memory `attempts = {}` map. Demo shipped the distributed-RPC path via PR #99 on 2026-05-18, but the env var is not flipped yet (so even demo runs the in-memory path until activation). SKS rollout pending explicit "SKS live" — migration must be applied to `nspbmirochztcjijmcrx` first.
 
-### FINDING #SEC1 — magic-link approve/reject TTL 7 days
-Parked 2026-05-13 by Royce; risk accepted. Worth reconsidering for SOC 2 prep eventually.
+### FINDING #SEC1 — magic-link approve/reject TTL (closed on demo)
+Closed on demo 2026-05-18 via PR #100 (7d → 48h). SKS prod still serves 7d until the same one-line change is promoted to `main`. Worth bundling with the next SKS port wave.
 
 ### FINDING #S3 — realtime channel org-scoped, not week-scoped
 Parked. Complementary to S1 — wastes channel bandwidth at scale, but SKS at 20 users runs fine on org-scoped.
 
-### FINDING #SEC3 — Tender Pipeline RLS placeholder wide-open (demo only)
-Discovered 2026-05-18 during the loose-ends review of the 2026-05-14 resume doc. The 6 tender tables have RLS toggled on but the policies are `_anon_{select,insert,update,delete}` — anyone with the EQ anon key can do anything to tender data. **Scoped to demo today** (SKS Supabase has no tender tables). Must be rewritten before Tender Pipeline ships to any production tenant. See Tender Pipeline section above for details.
+### FINDING #SEC3 — Tender Pipeline RLS placeholder (closed on demo)
+Discovered 2026-05-18 during the loose-ends review of the 2026-05-14 resume doc; closed same day via PR #98 (`2026-05-18_tender_rls_tighten.sql`). HONEST CAVEAT: tighten within anon-key model only — cross-tenant read by anyone holding the anon key remains structural until SSO (Wave 5+). SKS unaffected (no tender tables).
 
 ---
 
