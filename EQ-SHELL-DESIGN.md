@@ -1,8 +1,33 @@
-# EQ Shell — Architecture design (draft)
+# EQ Shell — Architecture design
 
-**Status:** DRAFT — design-first, open for Royce review.
+**Status:** Q1-Q4 LOCKED 2026-05-18 (see "Decisions" below). Q5-Q10 still open; MVP scope ready.
 **Created:** 2026-05-18 by Claude during Phase D of `NEW-WINDOW-PROMPT-melbourne-ready.md`.
 **Supersedes:** Phase D as written in that brief. The brief assumed an "EQ Field tenant onboarding admin flow"; the actual direction is a higher-level EQ Shell of which EQ Field becomes one module among several.
+
+---
+
+## Decisions locked 2026-05-18
+
+| Q | Answer | Implication |
+|---|---|---|
+| Q1 — shell repo state | **No code yet — fresh start.** | I scaffold a new repo. Stack proposal: Vite + React + TypeScript + React Router (Vite over Next.js — no SSR needed for an authenticated tool; faster setup; simpler Netlify hosting). |
+| Q2 — Field integration | **iframe MVP + new screens in React (trajectory).** | Phase 1: shell iframe-loads existing EQ Field deploy. Phase 2: Tender Pipeline's planned screens land as React shell-routes (NOT as additions to vanilla Field). Phase 3+: gradual surface-by-surface Field migration as each needs rework. No big-bang rewrite. |
+| Q3 — canonical layer | **EQ-corporate canonical Supabase.** | New project `eq-shell-control` owns `tenants`, `users`, `module_entitlements`, `branding`. Each tenant keeps their own Supabase for app data. Shell reads canonical; modules read their tenant's project. Schema-template approach (Q3 option b) deferred. |
+| Q5-Q10 | Still open. | Less blocking than Q1-Q4. Will be answered as the implementation surfaces them. |
+
+### The auth contract spelled out (Q4)
+
+Cookie on `*.eq.solutions`. Concretely:
+
+1. User lands on `melbourne.eq.solutions` → shell mounts.
+2. Shell sees no session cookie → renders login form.
+3. Login posts to `/.netlify/functions/shell-login` → validates credentials → sets `eq_shell_session` cookie (HttpOnly, Secure, SameSite=Lax, domain=.eq.solutions, ~7d TTL).
+4. Subsequent requests across `*.eq.solutions` modules read the cookie automatically.
+5. React modules (Cards / Intake / Quotes / Service / future Tender Pipeline) call `/.netlify/functions/verify-shell-session` on mount to hydrate user + tenant context.
+6. **EQ Field is cross-domain** (`eq-solves-field.netlify.app`, not `*.eq.solutions`) — cookie won't reach. Shell mints a short-lived HMAC token, passes via URL hash on iframe load (`<iframe src="https://eq-solves-field.netlify.app/#sh=...">`). Field reads the hash on boot, treats it as a Remember-me-equivalent: validates HMAC via existing `/.netlify/functions/verify-pin` (extended action="verify-shell-token"), skips the gate.
+7. When `eq-solves-field` is eventually moved under `field.eq.solutions` (subdomain alias), the URL-hash dance goes away and Field becomes cookie-native.
+
+This means **one new Netlify function** (`shell-login`) plus **two new actions** on `verify-pin` (`shell-login`, `verify-shell-token`). The HMAC signing key is already there (`EQ_SECRET_SALT`).
 
 ---
 
@@ -49,45 +74,7 @@ This doc captures my understanding so far, raises the open questions that need a
 
 ## Open questions before code
 
-Each of these blocks meaningful design work. Listed in roughly-priority order. Reply inline (or fork to a separate session) — I'll iterate this doc as answers come in.
-
-### Q1. Where does the EQ Shell live as code today?
-
-Is there:
-- (a) A repo already (separate from `eq-field-app`)? Path?
-- (b) A repo planned but empty?
-- (c) Just the architecture sketch — no code anywhere yet?
-
-The answer determines whether I'm starting from a green field or grafting onto a partial implementation.
-
-### Q2. Is EQ Field expected to be migrated to React, or stay vanilla and embed differently?
-
-Three options I can see:
-- **(a) Migrate EQ Field to React.** Major rewrite — ~6500-line `index.html` + ~20 scripts. 2-6 weeks of focused work depending on whether functionality stays identical or gets re-thought. SKS prod stays on the vanilla build until the React port is verified.
-- **(b) Keep EQ Field vanilla; embed via iframe.** Shell loads `<iframe src="/modules/field">` for the EQ Field route. Cleanest separation, weakest integration (cross-module navigation, shared auth context, message-passing all need wire-up).
-- **(c) Keep EQ Field vanilla; embed via Web Component.** Wrap the vanilla app in a custom element, mount inside the React shell. Better integration than iframe, less work than full React port.
-
-This is the highest-stakes decision in this doc. I'd recommend (c) for MVP if the other modules are already React; (b) if message-passing latency isn't a concern; (a) only when there's a real reason to unify the framework (e.g. shared component library).
-
-### Q3. What's the "canonical layer per tenant" data shape?
-
-Two readings I had earlier:
-- **(a) EQ-corporate canonical Supabase.** Single EQ-owned project holds tenant list + billing + module entitlements + branding. Each tenant still has their own Supabase for app data. Shell queries canonical for "what modules does this tenant have"; modules query the per-tenant Supabase for their data.
-- **(b) Canonical schema template.** Source-of-truth schema definition. New tenants get a clone (people, sites, schedule etc.). Future migrations push canonical → all tenant Supabases.
-- **(c) Both.** Corporate canonical owns tenant metadata + entitlements; schema template defines what a new tenant Supabase looks like at provisioning.
-
-Your sketch shows "Tenant config (modules enabled per customer)" inside the shell — that's the (a) reading at minimum. Schema template (b) is a separate concern that might or might not be in scope.
-
-### Q4. Auth at the shell vs auth at the module — what's the contract?
-
-Today's EQ Field has its own gate (STAFF_CODE + MANAGER_CODE env vars per Netlify project, plus a 7d remember-me JWT). The shell now wants "Auth (one login)" — single entry point.
-
-- Does the shell mint a session token that modules trust?
-- Does each module still gate independently and the shell just remembers credentials?
-- How do tenant-specific access codes (which are public-ish — they're in env vars per Netlify deploy) get scoped under a single login?
-- Is this an SSO conversation (MELBOURNE-SCALE-DESIGN.md §7 Q7 said Wave 5+)?
-
-The simplest contract: shell holds a session cookie scoped to `*.eq.solutions`; each module reads the cookie, calls `/.netlify/functions/verify-shell-session` to validate, hydrates its own state. Shared HMAC secret. Routes through `verify-pin.js` for now.
+Q1-Q4 are answered (see top of doc). Q5-Q10 are open but less blocking — I can scaffold Phase 1 + start Phase 2 without locking them. Captured here for completeness; we'll resolve as the implementation surfaces each.
 
 ### Q5. Module entitlements — runtime or build-time?
 
@@ -106,16 +93,7 @@ Today's EQ Field switches between EQ blue and SKS navy via hostname detection in
 
 This is straightforward once Q2 (React vs vanilla embedding) is decided.
 
-### Q7. What's the minimum viable shell shape that gets a new Melbourne customer onto the platform?
-
-The brief's MVP for Phase D was: off-app provisioning + shared Supabase + URL param routing. That maps poorly to the new EQ Shell topology. A revised MVP candidate:
-
-- **Shell repo** with a basic React app: routing, tenant-config fetch, one navigable nav item ("EQ Field"), passthrough to the existing EQ Field deploy.
-- **Canonical Supabase** with `tenants` table (id, slug, name, brand_color, modules_enabled[]).
-- **EQ Field as iframe child** initially (Q2 = b). Migrate to web component or React port later.
-- **Provisioning** = me running a `provision-tenant.sql` script + committing a `tenants` row + ensuring the EQ Field deploy is alive. No wizard in MVP.
-
-Royce flagged E2 = "Full guided wizard" — that's a richer scope. If MVP needs to include the wizard, time-budget doubles or triples.
+### Q7. ~~Minimum viable shell~~ → Answered by Phase 1 scope below.
 
 ### Q8. What's the timeline / who's the first non-SKS customer?
 
@@ -124,54 +102,119 @@ The brief framed this as "Melbourne-ready" — i.e. ready for a real Melbourne c
 - (b) A representative shape ("if we wanted to land an enterprise customer, the platform shouldn't be the blocker")?
 - (c) An internal aspiration with no specific customer behind it yet?
 
-(a) means days/weeks; (b) means weeks/months; (c) means architect-but-don't-rush. Determines whether I start building this week or just iterate the doc.
+(a) means days/weeks; (b) means weeks/months; (c) means architect-but-don't-rush. Determines whether I start building this week or just iterate the doc. **Still want this answer before Phase 1 kickoff.**
 
 ### Q9. Does the EQ Shell replace the eq.solutions marketing site, or live alongside?
 
-`eq.solutions` is currently the marketing site (manual Cloudflare Pages zip upload per CLAUDE.md). If the shell lives at `<tenant>.eq.solutions`, marketing presumably stays at `eq.solutions` (root). Worth confirming so I don't disturb that deploy.
+`eq.solutions` is currently the marketing site (manual Cloudflare Pages zip upload per CLAUDE.md). The Phase 1 design assumes marketing stays at root `eq.solutions` and the shell lives at `*.eq.solutions`. Worth confirming so I don't disturb the marketing deploy.
 
-### Q10. Where does Tender Pipeline live in this picture?
-
-Tender Pipeline shipped inside EQ Field (v3.4.79-83). If EQ Field becomes one module among many, does Tender Pipeline:
-- (a) Stay inside the EQ Field module (current state)?
-- (b) Split out as its own module under the shell?
-
-(b) feels right long-term (Tender Pipeline is a workflow EQ owns, not customer data) — but it's a follow-on, not MVP.
+### Q10. Where does Tender Pipeline live in this picture? → Answered by Phase 2 scope below (split out under the shell as a React module).
 
 ---
 
-## Proposed MVP shape (one paragraph)
+## Phase 1 — Shell MVP (1-3 sessions)
 
-If the answers to Q1-Q9 mostly land where I expect (no shell repo yet; EQ Field stays vanilla initially; canonical Supabase = EQ-corporate only; auth = shell session cookie; modules are runtime-toggled; Melbourne is (b) representative not (a) signed):
+Given the locked decisions, here's the concrete Phase 1 scope:
 
-> Build an EQ Shell repo as a small React app. Single canonical Supabase project (call it `eq-shell-control`) holds `tenants`, `users` (one login per tenant, hashed PIN initially), and `module_entitlements` (which of Cards / Intake / Quotes / Service / Field a tenant has). Shell renders nav based on entitlements; clicking "EQ Field" iframe-loads the existing eq-solves-field.netlify.app deploy with a session token in URL hash. Per-tenant subdomain `<tenant>.eq.solutions` via Netlify domain aliases on the shell deploy. Existing SKS deploy and EQ-Field demo stay live and untouched; only NEW tenants land under the shell. No EQ Field rewrite. No wizard MVP — Royce provisions via SQL until tenant #3.
+**New `eq-shell` repo** — Vite + React + TypeScript + React Router. Hosted on Netlify (its own project, separate from `eq-field-app`).
 
-That's a 3-5 session build for a working end-to-end shell-routes-to-Field path. Not Melbourne-ready in a SOC 2 sense; ready enough that a customer signs up + Royce provisions them + they navigate to EQ Field through the shell.
+**New `eq-shell-control` Supabase project** — EQ-corporate canonical. Tables:
 
-If anything in that paragraph is wrong, the answers to Q1-Q10 will tell me where to course-correct.
+```sql
+tenants               (id uuid pk, slug text unique, name, brand_color, supabase_project_id, created_at)
+users                 (id uuid pk, email, pin_hash, tenant_id fk, role, created_at)
+module_entitlements   (tenant_id fk, module text, enabled boolean, primary key (tenant_id, module))
+```
+
+`module` enum: `field` / `cards` / `intake` / `quotes` / `service` / `tender_pipeline`.
+
+**Netlify functions on shell deploy:**
+- `shell-login` — POST { email, pin } → validates against `users` table → sets `eq_shell_session` cookie.
+- `verify-shell-session` — GET → returns { user, tenant, entitlements } for an authenticated session.
+- `mint-iframe-token` — POST → returns short-lived (60s) HMAC token for iframe handoff to Field.
+
+**Shell app shape:**
+- `/` → login form (renders if no session cookie).
+- `/<tenant>/` → tenant home (nav lists enabled modules).
+- `/<tenant>/field` → iframe page for Field. Mints token via `mint-iframe-token`, embeds `<iframe src="https://eq-solves-field.netlify.app/#sh=<token>">`.
+- `/<tenant>/cards` etc. → stub routes for the other modules (return "coming soon" until built).
+
+**Netlify domain setup:**
+- `eq.solutions` → marketing (existing, untouched).
+- `*.eq.solutions` → shell deploy (wildcard).
+- `eq-solves-field.netlify.app` → existing Field deploy, untouched.
+
+**Existing Field changes:** add `?sh=` URL hash handler in `scripts/auth.js` that calls `verify-pin` with `action="verify-shell-token"`. Backwards-compatible — direct visits to `eq-solves-field.netlify.app` still get the gate. ~30 lines of vanilla JS in Field; no shell-coupling.
+
+That's the Phase 1 surface. Working end-to-end shell-routes-to-Field for one tenant.
+
+## Phase 2 — Tender Pipeline migration (the wedge)
+
+Per Royce's cowork context: Tender Pipeline is the active business wedge. The 5 originally-planned screens (Tender Sync import, Pipeline kanban, Enrichment panel, Fortnightly Review, Labour Curve Confirmation) all shipped in v3.4.79-83 *inside vanilla Field*. The product is the **fortnightly review meeting**, not the screen. Six fortnightly reviews in a row + 30+ notes logged at month 3 is the adoption proof.
+
+This is the right module to migrate FIRST under the shell, because:
+
+1. **It's the active surface** — Royce + the Construction Manager are the users; they'll feel the difference (improved or otherwise) immediately, not in six months when someone first opens it.
+2. **It's contained** — `scripts/tender-pipeline.js` (~1929 lines), `scripts/tender-parser.js` (~346 lines), 4 sidebar entries. Self-contained from the rest of Field. Clean cut.
+3. **It's recent code** — written 2026-05-14 to ~05-18, fresh in mind. Patterns are documented.
+4. **It exercises every shell capability** — Supabase reads/writes, drag-drop kanban, multi-step Review wizard, file upload (Smartsheet xlsx), PostHog events. Migrating Tender Pipeline successfully validates the React + shell pattern for everything else.
+5. **The Tender data already lives in EQ Supabase** (`ktmjmdzqrogauaevbktn`, the EQ tenant), not the canonical. That's correct — tender data is tenant-owned. The shell just provides chrome + auth + nav.
+6. **SEC3 was just closed** on the vanilla Tender Pipeline. The migration carries those policies forward — no security regression.
+
+**Phase 2 scope (3-5 sessions):**
+
+- React routes for each of the 5 screens, mounted at `/<tenant>/tender-pipeline/{import|kanban|review|enrichment|curve}`.
+- Shared component library (kanban via `@dnd-kit`, forms via `react-hook-form`, tables via `@tanstack/react-table`).
+- Reuse the EXISTING tender Supabase tables (`tenders`, `tender_enrichment`, `nominations`, `pending_schedule`, `tender_import_runs`, `tender_review_decisions`) — Phase 2 is a UI rewrite, not a schema change. Real-time stays via Supabase realtime channel.
+- PostHog events preserved (the 10 from v3.4.79-83 are already firing — Phase 2 keeps the same event names).
+- Tender Sync xlsx import — port the SheetJS parser to TypeScript, same logic.
+- Cut over: shell's `/field` route still iframes vanilla Field, but the Tender Pipeline sidebar entries inside Field redirect to `/tender-pipeline/...` shell routes. Vanilla Tender Pipeline code can be deleted once the cutover proves stable (~2 weeks of soak with you + CM running fortnightly reviews on the React version).
+
+**Adoption signal preserved:** the fortnightly meeting is unchanged. Same agenda, same kanban, same notes — different rendering engine.
+
+## Phase 3+ — Field surfaces (months out, only as needed)
+
+Each Field surface migrates one at a time when it next needs significant rework. Recommend starting order:
+
+1. **Sites CRUD** — low traffic, well-tested, simple shape. Safest first migration.
+2. **Supervisors / People CRUD** — same pattern as Sites; share the form abstractions.
+3. **Leave** — moderate complexity (approval flow + email + magic-link tokens).
+4. **Roster Editor + realtime presence** — highest complexity. Last to move.
+5. **Timesheets** — depends on Roster shape; co-migrate.
+
+Schedule (the read-only roster view) is the very last because v3.5.6's `content-visibility:auto` is a tight optimization that a naïve React port would lose.
 
 ---
 
-## What I'm NOT proposing in this doc
+## Phase 4 — Field is gone
 
-- A React migration of EQ Field. That's a separate decision (Q2) with a separate scope.
-- Killing the existing SKS deploy or EQ-Field demo. Both stay live; the shell sits in front of NEW deployments.
-- Touching the SKS auth model. The shell auth contract is independent of SKS prod's gate.
-- A wizard. The brief asked for one; my read is wizard = Wave 5+ once 3+ tenants exist.
-- Module-level rewrites. Cards / Intake / Quotes / Service are out of scope for this doc — only the shell + EQ-Field-as-module piece.
+Long-term goal: every surface is a React shell route. The `eq-solves-field.netlify.app` deploy is decommissioned. SKS and EQ tenants live entirely on `*.eq.solutions`. No iframe. Single codebase + single design system.
+
+Not for this year. Worth naming so the trajectory is honest.
 
 ---
 
-## What I want next
+## What this doc is NOT proposing
 
-Answers to Q1-Q10 (or even just Q1, Q2, Q3, Q4 — those four unblock everything else). Once locked, I'll:
-
-1. Rewrite this doc into a real spec (data model, route table, auth flow, provisioning SOP).
-2. Scope into milestones (~3-5 sessions of work, depending on Q2 answer).
-3. Open a separate PR per milestone.
-
-If the EQ Shell repo doesn't exist yet (Q1 = c), I'll also propose the initial scaffolding shape (Next.js vs Vite + React Router vs SvelteKit etc.) as part of the spec — once I know Q2.
+- **A full React migration of EQ Field.** Q2 trajectory is iframe MVP → new screens (Tender Pipeline) in React → gradual Field migration only as surfaces need rework. No big-bang.
+- **Killing the existing SKS deploy or EQ-Field demo.** Both stay live; the shell sits in front of NEW shell-hosted tenants. SKS prod is untouched until Phase 4.
+- **Touching the SKS auth model.** The shell auth contract is independent of SKS prod's gate.
+- **A wizard.** The brief asked for one; my read is wizard = Wave 5+ once 3+ tenants exist. Phase 1 provisioning is you running SQL + commit.
+- **Module-level rewrites for Cards / Intake / Quotes / Service.** Out of scope until the shell exists.
 
 ---
 
-**This is a doc-only PR.** No code. No version bump. No migration. Merge or close as you prefer; I treat your reply (here or as PR comments) as the authoritative answer set.
+## Next steps after this PR merges
+
+1. **Phase 1 kickoff** — scaffold the `eq-shell` repo (Vite + React + TS), `eq-shell-control` Supabase project, Netlify project with `*.eq.solutions` wildcard. ~1 session.
+2. **Phase 1 wire-up** — shell-login + verify-shell-session + mint-iframe-token functions. Basic React shell with login + tenant-home + iframe-Field route. ~1 session.
+3. **Phase 1 Field side** — `?sh=` URL hash handler in `scripts/auth.js` so the iframe handoff works. Small PR against `demo`. ~30 min.
+4. **End-to-end smoke test** — provision one tenant (`sks-test.eq.solutions`), login, navigate to Field via iframe, confirm session flows through. ~1 session.
+
+Then Phase 2 (Tender Pipeline migration to React) starts. ~3-5 more sessions.
+
+Pending answer: **Q8 (timeline / first non-SKS customer)** shapes whether Phase 1 kicks off this week or stays paused. **Q9** is a 5-minute confirmation about the marketing site.
+
+---
+
+**Doc-only PR.** No code. No version bump. No migration. Merge or close as you prefer; the locked Q1-Q4 decisions are reflected in the document and inform the Phase 1/2 scoping above.
