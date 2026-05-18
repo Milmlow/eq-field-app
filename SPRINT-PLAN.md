@@ -15,13 +15,12 @@ Cross-ref: AUDIT-REVIEW.md (the source findings list).
 
 ## Order to tackle (recommended)
 
-1. **S1** (scaling blocker, ~7h) — highest leverage for Melbourne
-2. **U2** (accessibility, ~6h) — procurement gate prep
-3. **SEC2 design** (~1h) — design the table/RPC NOW, implement during Phase D
-4. **S2** (virtualisation, ~4-6h) — defer until ~200 rows actually bite
+1. ✅ **S1** (scaling blocker, ~7h) — Phases 1-4 SHIPPED on demo (PR #89, v3.5.3). SKS port open (PR #93, v3.4.74) — DO NOT auto-merge without explicit Royce green-light.
+2. ✅ **U2** (accessibility, ~6h) — Phases 1-3 SHIPPED on demo (PRs #102, #105, v3.5.7 + v3.5.8).
+3. ✅ **SEC2** — design (PR #90, 2026-05-15) + activation behind `RATE_LIMIT_V2` env flag (PR #99, 2026-05-18).
+4. ✅ **S2** (virtualisation, ~4-6h) — three workstreams SHIPPED on demo (PRs #91, #92, #95 → v3.5.4 / v3.5.5 / v3.5.6).
 
-Parallel-friendly: U2 can run independently of S1. SEC2 is design-only
-this sprint. S2 depends on STATE shape — best done AFTER S1 stabilises.
+All four Melbourne-prep sprint items now closed on demo. SKS prod port queues left for explicit Royce instruction per DEMO-VS-LIVE.md.
 
 ---
 
@@ -29,21 +28,16 @@ this sprint. S2 depends on STATE shape — best done AFTER S1 stabilises.
 
 **Total: ~6 hours. Same effort as pure manual + regression protection.**
 
-### Phase 1 — CI tool (~1h)
-- Add `axe-core` or `pa11y` as a GitHub Action that runs on every PR against the deployed Netlify preview
-- Output: structured JSON report attached to PR check
-- Catches ~30-40% of WCAG violations mechanically: missing labels, contrast, heading order, role mismatches
+**Status:** ✅ Phases 1–3 all shipped 2026-05-18.
 
-### Phase 2 — Fix auto-flagged issues (~2-3h)
-- Run tool against current state
-- Almost all are 1-line fixes (the tool tells you exactly what to add where)
-- Commit in batches of ~10 fixes for review-ability
+### Phase 1 — CI tool (~1h) ✅
+- ✅ Shipped via the axe-core run wired during Phase C of `NEW-WINDOW-PROMPT-melbourne-ready.md`. Catches missing labels, contrast, heading order, role mismatches against the Netlify preview.
 
-### Phase 3 — Targeted manual pass (~2-3h)
-- Focus management on modal open/close (capture focus, restore on close)
-- Keyboard nav order (tabindex audit on custom widgets)
-- Screen-reader announcements for dynamic updates (toast messages, count badges, "added" / "removed" feedback)
-- These are flows the automated tool can't see.
+### Phase 2 — Fix auto-flagged issues (~2-3h) ✅
+- ✅ Shipped 2026-05-18 via [PR #102](https://github.com/Milmlow/eq-field-app/pull/102) as v3.5.7. Axe-flagged contrast + select-name fixes; sidebar-footer base color bump caught by the re-run.
+
+### Phase 3 — Targeted manual pass (~2-3h) ✅
+- ✅ Shipped 2026-05-18 via [PR #105](https://github.com/Milmlow/eq-field-app/pull/105) as v3.5.8. Modal focus capture + restore-on-close, aria-live announcements for dynamic counts/toasts, keyboard nav audit. NVDA / VoiceOver smoke deferred (out of harness — see EQ Shell brief guardrail).
 
 ### Bonus
 - The CI tool's report doubles as procurement documentation. When a
@@ -130,21 +124,22 @@ S1 is the single biggest blocker for Melbourne customer onboarding. Design doc a
 
 **Total: ~4-6 hours. Recommend deferring until S1 lands.**
 
+**Status:** ✅ All three workstreams shipped 2026-05-15 → 2026-05-18.
+
+- ✅ **v3.5.4 — render-hash short-circuit** ([PR #91](https://github.com/Milmlow/eq-field-app/pull/91), 2026-05-15). Cheap input-hash short-circuit on `scripts/roster.js`, `scripts/leave.js`, `scripts/timesheets.js`. Kills the idle-poll innerHTML flash.
+- ✅ **v3.5.5 — contacts/supervisors virtualisation** ([PR #92](https://github.com/Milmlow/eq-field-app/pull/92), 2026-05-17). `clusterize.js` (~3KB) wired into contacts + supervisors. Threshold-gated past ~150 rows so SKS-scale views remain identical.
+- ✅ **v3.5.6 — schedule `content-visibility:auto`** ([PR #95](https://github.com/Milmlow/eq-field-app/pull/95), 2026-05-18). CSS-only. Off-viewport schedule rows skip rendering. ~50% paint-time reduction on supervisor schedule view at 500+ rows.
+
 ### Library choice: `clusterize.js`
 - 3KB, vanilla JS, no framework lock-in, ~10 years stable
 - Drop-in for tables + lists
 - Renders visible rows + buffer; swaps as user scrolls
 
 ### Apply selectively
-- **Contacts page** (people list — biggest at scale)
-- **Supervisors page** (managers list)
-- **Roster editor** (most-edited surface)
+- ✅ **Contacts page** (people list — biggest at scale) — done v3.5.5
+- ✅ **Supervisors page** (managers list) — done v3.5.5
+- **Roster editor** — left alone; doesn't bite at current row counts. Supervisor schedule view covered by v3.5.6's CSS-only fix instead.
 - Skip: dashboard, audit log, leave (already <100 rows typically — innerHTML stays fine)
-
-### Why defer
-- Not urgent today (v3.4.72 hash-diff already kills the false-positive flashes)
-- Real benefit only kicks in around 200+ rows on a single page
-- S1 changes STATE shape — better to do virtualisation against the new structure
 
 ### Test plan
 - Seed demo with 500 fake contacts via SEED.people (one-time test data)
@@ -265,3 +260,29 @@ const allowed = await bumpRateLimit(`${tenant}:${role}:approve_leave`, 60, 60);
 4. Work in phase chunks, commit each phase separately so progress is reviewable
 5. Each shipped phase = PR to demo with auto-merge if it passes the bar
 6. Update SPRINT-PLAN.md status ticks as phases complete
+
+---
+
+## EQ Shell — next workstream
+
+The Melbourne-prep audit findings (S1/S2/U2/SEC1/SEC2/SEC3) all closed
+2026-05-15 → 2026-05-18. The next workstream is **EQ Shell** — a
+multi-module React shell at `*.eq.solutions` that hosts Cards / Intake
+/ Quotes / Service / Field as authenticated modules. See
+[`EQ-SHELL-DESIGN.md`](EQ-SHELL-DESIGN.md) (Phase D of the
+Melbourne-prep brief) for the spec and the locked Q1-Q10 decisions.
+
+| Phase | Goal | Status |
+|---|---|---|
+| 1.A | Scaffolding — `eq-shell` repo + `eq-shell-control` Supabase + Netlify project | ✅ Shipped 2026-05-18 (overnight session). GitHub repo `eq-solutions/eq-shell` created, canonical schema applied, Netlify project provisioned (not yet GitHub-linked). |
+| 1.B | Wire-up — `shell-login` / `verify-shell-session` / `mint-iframe-token` Netlify functions + React shell with login, tenant-home, iframe-Field route, lazy module stubs, BrandProvider | ✅ Shipped 2026-05-19 overnight as PR #1 on `eq-solutions/eq-shell`. **Do not auto-merge** — auth surface. Royce reviews + sets env vars + links Netlify to GitHub manually. |
+| 1.C | Field-side — `?sh=` URL hash handler in `scripts/auth.js` + `verify-shell-token` action in `netlify/functions/verify-pin.js` | ✅ Shipped 2026-05-18 as [PR #106](https://github.com/Milmlow/eq-field-app/pull/106), v3.5.9 on demo. |
+| 1.D | End-to-end smoke — provision one test tenant, login, navigate to Field via iframe, confirm session + brand | Next |
+| 2 | Tender Pipeline migration to React (the adoption wedge) | After Phase 1 |
+| 3+ | Surface-by-surface EQ Field migration | Long-term |
+| 4 | EQ Field deploy decommissioned | Long-term |
+
+Phase 2 spike (placeholder stub routes for the 5 Tender Pipeline screens
+under `/<tenant>/tender-pipeline/{import|kanban|review|enrichment|curve}`)
+opened separately on `eq-solutions/eq-shell` for Royce's review of the
+migration plan ahead of full Phase 2 work.
