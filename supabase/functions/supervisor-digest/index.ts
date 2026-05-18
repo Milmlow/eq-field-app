@@ -97,7 +97,7 @@ function escHtml(s: unknown): string {
 // `kind: 'leave-action'` makes the signing-key reuse explicit —
 // the same key signs session tokens, but those have no `kind` and
 // approve-leave.js refuses anything that isn't 'leave-action'.
-const LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const LEAVE_ACTION_TTL_MS = 48 * 60 * 60 * 1000; // 48 hours (SEC1, was 7 days; must match send-email.js)
 
 function utf8ToBase64(s: string): string {
   const bytes = new TextEncoder().encode(s);
