@@ -344,7 +344,64 @@ async function checkPin() {
   }
 }
 
+// v3.5.9 (Phase 1.C) — EQ Shell iframe handoff. Shell loads Field as
+// <iframe src="https://eq-solves-field.netlify.app/#sh=<token>">; we
+// read the hash on boot, swap the shell token for a 7d session token
+// via verify-pin (action=verify-shell-token), and skip the PIN gate.
+// Hash is consumed (cleared from URL via history.replaceState) so the
+// token doesn't sit in browser history or accidental screenshots.
+//
+// Backwards-compatible: when there's no #sh= hash, this is a no-op
+// and the existing remember-me / PIN-gate paths run as before.
+async function _consumeShellToken() {
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  if (!hash) return false;
+  const params = new URLSearchParams(hash);
+  const token = params.get('sh');
+  if (!token) return false;
+
+  // Always clear the hash before validation so a token that fails to
+  // verify doesn't get persisted in the URL bar / history.
+  try {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  } catch (e) { /* old Safari — non-fatal */ }
+
+  try {
+    const resp = await fetch('/.netlify/functions/verify-pin', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'verify-shell-token', token })
+    });
+    if (!resp.ok) {
+      console.warn('EQ[auth] shell-token verify HTTP ' + resp.status);
+      return false;
+    }
+    const data = JSON.parse(await resp.text());
+    if (!data.valid) {
+      console.warn('EQ[auth] shell-token verify rejected');
+      return false;
+    }
+    sessionStorage.setItem(ACCESS_KEY, '1');
+    sessionStorage.setItem('eq_logged_in_name', data.name || '');
+    if (data.role === 'supervisor') sessionStorage.setItem('eq_auto_admin', '1');
+    if (data.sessionToken) {
+      sessionStorage.setItem('eq_session_token', data.sessionToken);
+      localStorage.setItem('eq_agent_token',     data.sessionToken);
+    }
+    console.info('EQ[auth] shell-token accepted for ' + data.name + ' (' + data.role + ')');
+    return true;
+  } catch (e) {
+    console.warn('EQ[auth] shell-token verify failed:', e && e.message || e);
+    return false;
+  }
+}
+
 async function checkAccess() {
+  // v3.5.9 — EQ Shell handoff takes precedence over all other paths.
+  // If a valid shell token is in the URL hash, we set up the session
+  // and skip every fallback below.
+  if (await _consumeShellToken()) return true;
+
   if (sessionStorage.getItem(ACCESS_KEY) === '1') return true;
 
   // Local "remember me" restore for tenant-code gate (no server).

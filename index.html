@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.8'; // cache-buster — bump on icon changes
+    var v = '3.5.9'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -215,8 +215,67 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.8
+  EQ Solves — Field  v3.5.9
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.9  (Phase 1.C — EQ Shell iframe handoff token)
+  ────────────────────────────────────────────────────────────
+  • Phase 1.C of NEW-WINDOW-PROMPT-melbourne-ready.md → EQ-SHELL-DESIGN.md.
+    Lets the EQ Shell embed Field as an iframe + pass authenticated
+    identity via a short-lived HMAC token in the URL hash, so the
+    shell-side login carries through and the Field PIN gate is skipped.
+  • verify-pin.js — new action 'verify-shell-token':
+      1. Shell mints token  →  signed { kind:'shell-token', name, role,
+                                        exp:<ms> } via EQ_SECRET_SALT
+      2. Field POSTs to verify-pin { action:'verify-shell-token', token }
+      3. Server validates HMAC + kind + exp, mints a fresh 7d session
+         token, returns { valid:true, name, role, sessionToken }.
+    New verifyShellToken() helper enforces kind === 'shell-token' so
+    a session-token (no kind) or leave-action token (kind='leave-
+    action') can't be substituted (token-type confusion guard).
+  • scripts/auth.js — new _consumeShellToken() runs FIRST in
+    checkAccess(). Reads location.hash for `sh=<token>`, clears the
+    hash via history.replaceState (so the token doesn't persist in
+    browser history / accidental screenshots), POSTs to verify-pin,
+    on success sets the same sessionStorage shape a successful PIN
+    gate produces (ACCESS_KEY, eq_logged_in_name, eq_auto_admin if
+    supervisor, sessionToken + agent_token).
+  • BACKWARDS-COMPATIBLE — when there's no `#sh=` in the URL, this
+    is a no-op and every existing path (PIN gate, local remember-me,
+    remember_token, staff TS gate, agency gate) runs unchanged.
+    Direct visits to eq-solves-field.netlify.app still get the gate.
+  • SHELL-SIDE prerequisites:
+    - eq-shell must share EQ_SECRET_SALT with this Netlify project
+      (same value across both projects' env vars).
+    - eq-shell mints tokens with exp = Date.now() + 60_000 (60s) so
+      a leaked URL is only valid for the iframe load window.
+    These prerequisites are NOT in this PR — they ship as part of
+    Phase 1.B (the eq-shell repo wire-up). This PR just makes Field
+    ready to RECEIVE the token when the shell is ready.
+  • SECURITY notes:
+    - Shell tokens are server-validated; client-side hash parsing
+      is informational only.
+    - The 60s TTL bounds replay window; a captured URL becomes
+      useless quickly.
+    - Field still requires the EQ_SECRET_SALT secret to mint a
+      forgery — shipping the token in the URL doesn't leak the
+      signing key.
+    - On any verify failure, the hash is still cleared (already
+      consumed) and the existing gate paths run as fallback.
+  • FILES TOUCHED
+    - netlify/functions/verify-pin.js  (new verifyShellToken() +
+                                         new 'verify-shell-token' action)
+    - scripts/auth.js                  (new _consumeShellToken() +
+                                         called first in checkAccess())
+    - scripts/app-state.js             (APP_VERSION 3.5.8 → 3.5.9)
+    - sw.js                            (CACHE bump only)
+  • TEST PLAN — without the eq-shell running, this is purely a
+    no-op. End-to-end verification waits for Phase 1.B's eq-shell
+    deploy to ship + Phase 1.D's smoke test.
+    Standalone smoke: visit
+    https://eq-solves-field.netlify.app/#sh=garbage → confirm the
+    hash is cleared in URL bar, "shell-token verify rejected" warns
+    in console, and the normal PIN gate appears as fallback.
 
   CHANGES IN v3.5.8  (U2 Phase 3 — modal focus management + aria-live)
   ────────────────────────────────────────────────────────────
