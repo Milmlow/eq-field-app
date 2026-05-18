@@ -6,9 +6,10 @@
 // The token IS the authentication — there is no login at this
 // endpoint. Tokens are signed with EQ_SECRET_SALT, are bound to
 // a single leave_id + action + approver email, and expire after
-// 7 days. The endpoint is idempotent: clicking the same link
-// twice shows an "already actioned" page on the second click,
-// not a double-process.
+// 48 hours (SEC1, tightened from 7 days 2026-05-18 — see
+// LEAVE_ACTION_TTL_MS in send-email.js / supervisor-digest/index.ts).
+// The endpoint is idempotent: clicking the same link twice shows
+// an "already actioned" page on the second click, not a double-process.
 //
 // Env vars required:
 //   EQ_SECRET_SALT     — HMAC signing key (must match send-email

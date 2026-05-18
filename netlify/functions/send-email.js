@@ -85,7 +85,7 @@ function validateEmails(arr, fieldName, max) {
 // Tokens are minted server-side ONLY — the requester's browser never
 // sees them, which is what stops a requester from minting their own
 // approve-link to bypass the named approver.
-const LEAVE_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const LEAVE_ACTION_TTL_MS = 48 * 60 * 60 * 1000; // 48 hours (SEC1, was 7 days; Melbourne procurement posture)
 
 function signLeaveActionToken(leaveId, action, approverEmail) {
   const payload = JSON.stringify({
