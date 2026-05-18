@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.6'; // cache-buster — bump on icon changes
+    var v = '3.5.7'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -215,8 +215,54 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.6
+  EQ Solves — Field  v3.5.7
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.7  (U2 axe — auto-flagged contrast + missing select labels)
+  ────────────────────────────────────────────────────────────
+  • Phase 2 of FINDING #U2 (NEW-WINDOW-PROMPT-melbourne-ready.md
+    Phase C1). Closes axe-core's auto-flagged WCAG 2.1 AA findings:
+      - 21 color-contrast violations (sidebar text on dark navy,
+        BETA/NEW badges, stat-card sub-labels, status pills,
+        What's-new banner header).
+      - 2 select-name violations (#globalWeek + #dash-group-filter
+        had no accessible name; both now have aria-label).
+  • CSS variables added in styles/base.css:
+      --green-text  #15803D  (was --green #16A34A, 3.14:1 on light)
+      --amber-text  #B45309  (was --amber #D97706, 3.07:1 on light)
+      --purple-text #5B53A8  (was --purple #7C77B9, 3.48:1 on light)
+    Brand variables kept for backgrounds + accent bars. Class-level
+    .pill-green / .pill-amber / .stat-card-sub / .nav-label updated
+    to use the new text variants.
+  • Inline contrast bumps in index.html — sidebar Field tagline /
+    version badge / Logout · Audit · Privacy buttons / Property of
+    EQ footer all bumped from rgba(.32–.4) to rgba(.7–.75) on the
+    --navy bg. Pipeline + Trial NEW badges now use cyan-300
+    (#67e8f9) on the same darker-cyan bg. Job Numbers + Apprentices
+    BETA badges use --amber-text.
+  • whatsnew banner "What's new — vX.Y.Z" header now uses
+    --purple-text for the same WCAG threshold.
+  • Re-running axe-core after these changes drops violations from
+    23 → 0 on the unauthenticated landing. (Post-auth surfaces
+    will be exercised in Phase C2 manual pass.)
+  • NO BEHAVIOUR CHANGE — pure CSS + aria-label additions. Brand
+    look stays visually intact; lighter sidebar text just reads
+    cleanly. Pills + badges show as same colors at slightly lower
+    saturation. Auto-merge candidate per the brief's bar (<300 lines,
+    no auth/RLS/env/migrations touched).
+  • FILES TOUCHED
+    - styles/base.css           (3 new vars + 3 class colors)
+    - index.html                (2 aria-labels + ~9 inline-style
+                                 contrast bumps + this banner)
+    - scripts/whatsnew.js       (purple-text for the heading)
+    - scripts/app-state.js      (APP_VERSION 3.5.6 → 3.5.7)
+    - sw.js                     (CACHE bump only)
+  • TEST PLAN — visit https://eq-solves-field.netlify.app/ — confirm
+    sidebar headers, version badge, Logout/Privacy buttons, and
+    "Property of EQ" footer all read legibly (not the prior
+    near-invisible rgba(.32)). Pipeline NEW + jobnumbers BETA badges
+    still read as cyan and amber respectively, just slightly bolder.
+    Re-run axe-core → 0 violations.
 
   CHANGES IN v3.5.6  (S2 Phase 3 — roster editor + roster view scaling)
   ────────────────────────────────────────────────────────────
@@ -2469,7 +2515,7 @@
     <svg style="height:36px;width:auto;flex-shrink:0;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="130 325 764 370"><path fill="#3DA8D8" d="M721.22,622.17l46.95,47q-31,12.78-67,12.78-70.68,0-121.58-48.84a162,162,0,0,1-31.23-40.81c15.14-18.46,31.52-39,46-58.58q5.83,34.5,28.53,58.21,30.47,31.86,78.27,31.85A121.63,121.63,0,0,0,721.22,622.17Z"/><path fill="#3DA8D8" d="M874.32,508.74q0,36.54-12.29,67l-52.8-52.81c.45-4.58.65-9.33.65-14.2q0-51.27-30.45-83.1t-78.27-31.89c-41.88,0-71.72,22-93.95,55.63-23.45,35.54-44.66,72.83-73.39,104.55C493,599,439.3,647.71,390.38,667.77c-2.58,1.07-5.2,2.09-7.86,3-.53.21-1,.37-1.55.53-1.11.37-2.22.74-3.28,1.11-3.89,1.23-7.41,2.25-10.6,3.11-1.19.33-2.34.61-3.44.86-.82.2-1.6.41-2.37.57-6.47,1.52-10.36,2.09-11.1,2.17a.31.31,0,0,1-.12,0,217.44,217.44,0,0,1-34.71,2.71q-70.68,0-121.58-48.84T142.89,508.74q0-75.47,50.88-124.32t121.58-48.84q56.11,0,96.28,27.35t65.08,77.94L251.61,565.56l-25.05-48.72,164.39-91Q374.32,409.1,358,401.45t-42.65-7.7q-47.83,0-78.31,31.89t-30.5,83.1q0,51.27,30.5,83.14t78.31,31.85a213,213,0,0,0,43.18-6.35c66.73-17.07,122.15-91,160.31-144.09,20.46-28.45,35.28-64.47,60.7-88.87q50.91-48.81,121.58-48.84,71.3,0,122.23,48.84T874.32,508.74Z"/><rect fill="#3DA8D8" x="745.11" y="474.28" width="66.9" height="223.16" transform="translate(-186.23 722.12) rotate(-45)"/></svg>
     <div style="display:flex;flex-direction:column;justify-content:center;border-left:1px solid rgba(255,255,255,.15);padding-left:10px;margin-left:2px">
       <span style="color:rgba(255,255,255,.9);font-size:13px;font-weight:700;letter-spacing:.5px;line-height:1">Solves</span>
-      <span style="color:rgba(255,255,255,.4);font-size:10px;font-weight:500;letter-spacing:.3px;line-height:1;margin-top:3px">Field</span>
+      <span style="color:rgba(255,255,255,.75);font-size:10px;font-weight:500;letter-spacing:.3px;line-height:1;margin-top:3px">Field</span>
     </div>
   </div>
   <div class="nav">
@@ -2500,20 +2546,20 @@
       <button class="nav-item" onclick="showPage('pipeline-dashboard')" id="nav-pipeline-dashboard"><span class="nav-icon">📊</span> Dashboard</button>
       <button class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline"><span class="nav-icon">▦</span> Pipeline <span class="nav-badge" id="badge-pipeline-clash" style="display:none">0</span></button>
       <button class="nav-item" onclick="showPage('pipeline-review')" id="nav-pipeline-review"><span class="nav-icon">⌖</span> Fortnightly Review</button>
-      <button class="nav-item" onclick="showPage('pipeline-import')" id="nav-pipeline-import"><span class="nav-icon">⇧</span> Tender Sync <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
+      <button class="nav-item" onclick="showPage('pipeline-import')" id="nav-pipeline-import"><span class="nav-icon">⇧</span> Tender Sync <span style="font-size:8px;font-weight:700;color:#67e8f9;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
     </div>
     <div class="nav-section">
       <div class="nav-label">Testing (DO NOT USE)</div>
-      <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#06B6D4;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
+      <button class="nav-item" onclick="showPage('jobnumbers')" id="nav-jobnumbers"><span class="nav-icon">🔢</span> Job Numbers <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item" onclick="showPage('apprentices')" id="nav-apprentices"><span class="nav-icon">🎓</span> Apprentices <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item" onclick="showPage('trial')" id="nav-trial"><span class="nav-icon">◎</span> Trial Dashboard <span style="font-size:8px;font-weight:700;color:#67e8f9;background:rgba(6,182,212,.15);padding:1px 5px;border-radius:3px;margin-left:4px">NEW</span></button>
       <!-- v3.5.2 — Site Reports HUB collapses the three sibling entries below.
            The originals are kept (style="display:none") so showPage('prestart'/'toolbox'/'diary')
            deep-links and existing onclick callers (home tile screen, audit log links) still work. -->
-      <button class="nav-item edit-only" onclick="showPage('site-reports')" id="nav-site-reports"><span class="nav-icon">📋</span> Site Reports <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
-      <button class="nav-item edit-only" onclick="showPage('prestart')" id="nav-prestart" style="display:none"><span class="nav-icon">⚠</span> Prestart <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-prestart" style="display:none">0</span></button>
-      <button class="nav-item edit-only" onclick="showPage('toolbox')" id="nav-toolbox" style="display:none"><span class="nav-icon">🔧</span> Toolbox <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-toolbox" style="display:none">0</span></button>
-      <button class="nav-item edit-only" onclick="showPage('diary')" id="nav-diary" style="display:none"><span class="nav-icon">📔</span> Diary <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-diary" style="display:none">0</span></button>
+      <button class="nav-item edit-only" onclick="showPage('site-reports')" id="nav-site-reports"><span class="nav-icon">📋</span> Site Reports <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span></button>
+      <button class="nav-item edit-only" onclick="showPage('prestart')" id="nav-prestart" style="display:none"><span class="nav-icon">⚠</span> Prestart <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-prestart" style="display:none">0</span></button>
+      <button class="nav-item edit-only" onclick="showPage('toolbox')" id="nav-toolbox" style="display:none"><span class="nav-icon">🔧</span> Toolbox <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-toolbox" style="display:none">0</span></button>
+      <button class="nav-item edit-only" onclick="showPage('diary')" id="nav-diary" style="display:none"><span class="nav-icon">📔</span> Diary <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:1px 5px;border-radius:3px;margin-left:4px">BETA</span> <span class="nav-badge" id="badge-diary" style="display:none">0</span></button>
     </div>
   </div>
   <div class="sidebar-footer" style="padding:0">
@@ -2526,13 +2572,13 @@
     </button>
     <div style="padding:10px 16px;border-top:1px solid rgba(255,255,255,.06)">
       <strong style="color:rgba(255,255,255,.7);font-size:10px">EQ Solves — Field</strong><br>
-      <span id="app-version-badge" style="color:rgba(255,255,255,.4);font-size:9px"></span><br>
-      <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
+      <span id="app-version-badge" style="color:rgba(255,255,255,.75);font-size:9px"></span><br>
+      <button onclick="logoutUser()" style="background:none;border:none;color:rgba(255,255,255,.75);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Logout</button>
       &nbsp;·&nbsp;
-      <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
+      <button id="audit-log-btn" onclick="openAuditLog()" style="display:none;background:none;border:none;color:rgba(255,255,255,.75);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Audit Log</button>
       &nbsp;·&nbsp;
-      <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.35);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
-      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.32);font-size:9px;line-height:1.5">
+      <button onclick="openPrivacyNotice()" style="background:none;border:none;color:rgba(255,255,255,.75);font-size:9px;cursor:pointer;padding:3px 0 0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">Privacy</button>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);color:rgba(255,255,255,.7);font-size:9px;line-height:1.5">
         Property of EQ
       </div>
     </div>
@@ -2552,7 +2598,7 @@
            truncates to "(t...s)". Select sizes to the widest option's content
            (~150px on desktop with "◉  DD.MM.YY  (this week)"). Mobile already
            has flex:1 on .topbar-week so the dropdown stays comfortable. -->
-      <select id="globalWeek" onchange="onWeekChange()" style="border:none;background:transparent;font-family:inherit;font-size:11px;color:var(--ink-3);outline:none;cursor:pointer;padding:0"></select>
+      <select id="globalWeek" aria-label="Week selector" onchange="onWeekChange()" style="border:none;background:transparent;font-family:inherit;font-size:11px;color:var(--ink-3);outline:none;cursor:pointer;padding:0"></select>
       <button onclick="stepWeek(1)" style="background:none;border:none;cursor:pointer;color:var(--navy-2);font-size:15px;padding:0 2px;line-height:1;font-family:inherit">›</button>
     </div>
     <span class="pill pill-green" id="stat-active">— active</span>
@@ -2590,7 +2636,7 @@
       <div class="section-title">Site Breakdown — Per Day</div>
       <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
         <input id="dash-site-filter" class="form-input" type="text" placeholder="Filter sites…" style="width:180px;height:30px;font-size:12px;padding:4px 10px" oninput="renderDashboard()">
-        <select id="dash-group-filter" class="form-input" style="width:150px;height:30px;font-size:12px;padding:4px 10px" onchange="renderDashboard()">
+        <select id="dash-group-filter" aria-label="Filter by group" class="form-input" style="width:150px;height:30px;font-size:12px;padding:4px 10px" onchange="renderDashboard()">
           <option value="">All groups</option>
           <option value="Direct">Direct only</option>
           <option value="Apprentice">Apprentices</option>
@@ -2829,7 +2875,7 @@
   <div class="page hidden" id="page-jobnumbers">
     <div style="max-width:820px">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
-        <span style="font-size:8px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:2px 8px;border-radius:4px">BETA</span>
+        <span style="font-size:8px;font-weight:700;color:var(--amber-text);background:var(--amber-lt);padding:2px 8px;border-radius:4px">BETA</span>
         <span style="flex:1"></span>
         <button class="btn btn-secondary btn-sm edit-only" onclick="exportJobNumbersCSV()" style="font-size:11px">↓ CSV</button>
         <button class="btn btn-secondary btn-sm edit-only" onclick="document.getElementById('import-jobs-file').click()" style="font-size:11px">↑ Import</button>
