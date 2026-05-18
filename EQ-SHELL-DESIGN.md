@@ -1,6 +1,6 @@
 # EQ Shell — Architecture design
 
-**Status:** Q1-Q4 LOCKED 2026-05-18 (see "Decisions" below). Q5-Q10 still open; MVP scope ready.
+**Status:** Q1-Q10 LOCKED 2026-05-18. MVP scope ready. Awaiting kickoff green-light.
 **Created:** 2026-05-18 by Claude during Phase D of `NEW-WINDOW-PROMPT-melbourne-ready.md`.
 **Supersedes:** Phase D as written in that brief. The brief assumed an "EQ Field tenant onboarding admin flow"; the actual direction is a higher-level EQ Shell of which EQ Field becomes one module among several.
 
@@ -13,7 +13,12 @@
 | Q1 — shell repo state | **No code yet — fresh start.** | I scaffold a new repo. Stack proposal: Vite + React + TypeScript + React Router (Vite over Next.js — no SSR needed for an authenticated tool; faster setup; simpler Netlify hosting). |
 | Q2 — Field integration | **iframe MVP + new screens in React (trajectory).** | Phase 1: shell iframe-loads existing EQ Field deploy. Phase 2: Tender Pipeline's planned screens land as React shell-routes (NOT as additions to vanilla Field). Phase 3+: gradual surface-by-surface Field migration as each needs rework. No big-bang rewrite. |
 | Q3 — canonical layer | **EQ-corporate canonical Supabase.** | New project `eq-shell-control` owns `tenants`, `users`, `module_entitlements`, `branding`. Each tenant keeps their own Supabase for app data. Shell reads canonical; modules read their tenant's project. Schema-template approach (Q3 option b) deferred. |
-| Q5-Q10 | Still open. | Less blocking than Q1-Q4. Will be answered as the implementation surfaces them. |
+| Q5 — entitlements | **Lazy-load + runtime gate.** | Each module is a separate JS chunk via Vite's dynamic `import()` / React's `lazy()`. Shell fetches only the chunks for enabled modules. Bandwidth-efficient, mostly-secure, free in the framework. Procurement-cleanest answer (B — build-time omit) is reserved for the day a customer demands it. |
+| Q6 — branding | **Shell React Context + iframe URL hash.** | Shell fetches brand object from canonical Supabase on login, holds in React Context, passes to React modules via Provider. Field iframe gets brand object via URL hash alongside the auth token. Two delivery mechanisms, both natural to their context. |
+| Q8 — timeline | **Representative shape — weeks/months.** | No signed Melbourne deal yet; platform-readiness shapes prospect conversations. Phase 1 over a few weeks, iterate on first prospect feedback. Most natural pace. |
+| Q9 — marketing site | **Marketing stays at root, shell on subdomains.** | `eq.solutions` = existing Cloudflare Pages marketing site, untouched. `*.eq.solutions` = shell deploy on Netlify. Cleanest separation; no migration risk; marketing's manual zip-upload deploy process keeps working. |
+| Q10 — Tender Pipeline placement | **Split out as React module under the shell (Phase 2).** | Becomes a first-class module, not a sub-feature of Field. Phase 2 is the wedge. |
+| Q7 — minimum viable shell | **Answered by Phase 1 scope below.** | Shell repo + canonical Supabase + 3 Netlify functions + iframe-Field route. ~1-3 sessions. |
 
 ### The auth contract spelled out (Q4)
 
@@ -74,41 +79,7 @@ This doc captures my understanding so far, raises the open questions that need a
 
 ## Open questions before code
 
-Q1-Q4 are answered (see top of doc). Q5-Q10 are open but less blocking — I can scaffold Phase 1 + start Phase 2 without locking them. Captured here for completeness; we'll resolve as the implementation surfaces each.
-
-### Q5. Module entitlements — runtime or build-time?
-
-When a tenant has Cards + EQ Field enabled but not Quotes:
-- (a) Shell hides the Quotes nav entry; everyone fetches the same shell bundle.
-- (b) Shell builds a per-tenant bundle that omits Quotes code.
-
-(a) is cheap to ship, opens the door to feature-flag-style toggles. (b) is what enterprise customers typically expect for "code we don't pay for never reaches us". (a) is the MVP; (b) is Wave 5+.
-
-### Q6. Branding — per tenant where?
-
-Today's EQ Field switches between EQ blue and SKS navy via hostname detection in `scripts/app-state.js`. With a shell:
-- Brand colors / logos / favicons are shell-owned.
-- Modules ask the shell for the current tenant's brand object on mount.
-- Or: modules accept brand props from the shell at route render time.
-
-This is straightforward once Q2 (React vs vanilla embedding) is decided.
-
-### Q7. ~~Minimum viable shell~~ → Answered by Phase 1 scope below.
-
-### Q8. What's the timeline / who's the first non-SKS customer?
-
-The brief framed this as "Melbourne-ready" — i.e. ready for a real Melbourne customer to sign up. Is Melbourne:
-- (a) A signed deal with a deadline I should plan against?
-- (b) A representative shape ("if we wanted to land an enterprise customer, the platform shouldn't be the blocker")?
-- (c) An internal aspiration with no specific customer behind it yet?
-
-(a) means days/weeks; (b) means weeks/months; (c) means architect-but-don't-rush. Determines whether I start building this week or just iterate the doc. **Still want this answer before Phase 1 kickoff.**
-
-### Q9. Does the EQ Shell replace the eq.solutions marketing site, or live alongside?
-
-`eq.solutions` is currently the marketing site (manual Cloudflare Pages zip upload per CLAUDE.md). The Phase 1 design assumes marketing stays at root `eq.solutions` and the shell lives at `*.eq.solutions`. Worth confirming so I don't disturb the marketing deploy.
-
-### Q10. Where does Tender Pipeline live in this picture? → Answered by Phase 2 scope below (split out under the shell as a React module).
+All Q1-Q10 are locked (see top of doc). No remaining design blockers for Phase 1 kickoff.
 
 ---
 
@@ -206,14 +177,16 @@ Not for this year. Worth naming so the trajectory is honest.
 
 ## Next steps after this PR merges
 
-1. **Phase 1 kickoff** — scaffold the `eq-shell` repo (Vite + React + TS), `eq-shell-control` Supabase project, Netlify project with `*.eq.solutions` wildcard. ~1 session.
-2. **Phase 1 wire-up** — shell-login + verify-shell-session + mint-iframe-token functions. Basic React shell with login + tenant-home + iframe-Field route. ~1 session.
-3. **Phase 1 Field side** — `?sh=` URL hash handler in `scripts/auth.js` so the iframe handoff works. Small PR against `demo`. ~30 min.
-4. **End-to-end smoke test** — provision one tenant (`sks-test.eq.solutions`), login, navigate to Field via iframe, confirm session flows through. ~1 session.
+All design questions answered (Q1-Q10). No remaining decision blockers. Concrete kickoff plan:
 
-Then Phase 2 (Tender Pipeline migration to React) starts. ~3-5 more sessions.
+1. **Phase 1.A — scaffolding** — create new `eq-shell` repo on GitHub, Vite + React + TS init, Netlify project with `*.eq.solutions` wildcard pending, `eq-shell-control` Supabase project provisioned with the three tables. ~1 session, mostly mechanical.
+2. **Phase 1.B — wire-up** — `shell-login`, `verify-shell-session`, `mint-iframe-token` Netlify functions. Basic React shell with login + tenant-home + iframe-Field route. React Context for brand. Lazy-loaded module routes (stub "coming soon" pages for Cards/Intake/Quotes/Service). ~1 session.
+3. **Phase 1.C — Field side** — `?sh=` URL hash handler in `scripts/auth.js` so the iframe handoff works. Small PR against `eq-field-app/demo`. ~30 min.
+4. **Phase 1.D — end-to-end smoke** — provision one test tenant (`sks-test.eq.solutions`), login, navigate to Field via iframe, confirm session flows through, check brand applies. ~1 session.
 
-Pending answer: **Q8 (timeline / first non-SKS customer)** shapes whether Phase 1 kicks off this week or stays paused. **Q9** is a 5-minute confirmation about the marketing site.
+Then **Phase 2 (Tender Pipeline migration to React)** starts — see Phase 2 section above. ~3-5 more sessions.
+
+Per Q8 (representative-shape timeline), the cadence is "few weeks, iterate on prospect feedback" — no rush to ship Phase 1 in a single sitting.
 
 ---
 
