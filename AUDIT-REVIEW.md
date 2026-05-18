@@ -244,3 +244,54 @@ Three of the draft's count functions were wired against fields that don't exist 
 3. **Mission B Item 3 (S3 realtime window)** — still parked per AUDIT-REVIEW; needs explicit green-light.
 
 **FINDING status changes:** #SEC2 → tracked (migration file landed PENDING). #S1 → effectively closed by v3.5.3 (PR #89). The Closed/Shipped findings section below should pick up #S1 once you confirm demo soak.
+
+---
+
+### Session — 2026-05-18 — S1 SKS port (v3.4.74, Mission B Item 1)
+
+**Look at this first:** [PR #93](https://github.com/Milmlow/eq-field-app/pull/93) — `v3.4.74 — S1 sliding-window queries (SKS port from demo v3.5.3)`. Targets `main`. **DO NOT auto-merge** — SKS prod port per the brief's hard rule requires your explicit instruction. Test plan in the PR body.
+
+**Pre-flight findings (state-of-the-world correction):**
+
+The session brief (`NEW-WINDOW-PROMPT-sec2-melbourne.md` on Desktop) was written 2026-05-15 and assumed SEC2 + S2 Phase 1 were pending. Reality at 2026-05-18: SEC2 shipped via PR #90 on 2026-05-15, S2 Phase 1 (Contacts virtualisation) shipped via PR #91 today (2026-05-18 06:30). Both Mission A and Mission B Item 2 Phase 1 were already done. Only S1 SKS port + S2 Phase 2 + S3 were left.
+
+Royce chose to go ahead with S1 SKS port despite soak being at the lower edge of the 3-5 day window (3 days clean since v3.5.3 merged 2026-05-15 04:52).
+
+**What shipped (PR open, NOT merged):**
+
+v3.4.74 on `main` — S1 sliding-window queries, **re-implemented fresh** against main (not cherry-picked). Why fresh: between main (v3.4.73) and demo (v3.5.4) there are ~16 versions of stacked demo-only work (mobile-first home, Site Reports HUB, Tender Pipeline, supervisor home, S2 contacts virtualisation, etc.) that touch the same files S1 modifies — especially `index.html`. Cherry-pick conflict risk was high; clean re-application avoided spurious conflicts and keeps the SKS branch lean (no demo-only features carry over).
+
+Version choice: `v3.4.74` (conservative, matches the SKS train at v3.4.73) per Royce's call. The string `v3.4.74` already exists on demo (ESC-fix from Night 1) but never on `main` — no collision.
+
+Behaviour parity with demo v3.5.3:
+- `STATE.schedule` + `STATE.timesheets` bounded to ±4 weeks around `STATE.currentWeek`
+- `STATE.loadedWeeks` Set tracks loaded week keys; capped at 16 by `_evictDistantWeeks`
+- `onWeekChange` is now `async` + lazy-loads missing weeks via `_loadWeeks` with adjacent pre-fetch
+- Bulk exports (`exportScheduleCSV`) use `_loadFullDataForExport` snapshot — doesn't mutate STATE
+- Inline `↻ Loading…` indicator on the week-label during in-flight fetches
+- SEED tenants short-circuit early — no behaviour change for eq/demo slugs
+
+Diff: 5 files, 312 insertions / 14 deletions (compare to demo S1: 303 / 23 — same shape, slightly larger banner).
+
+**Decisions needed from Royce:**
+
+1. **Review + merge PR #93** when ready. Test plan in the PR body — Netlify preview deploy will exercise `?tenant=sks` path end-to-end (DevTools Network tab should show `&week=in.(...)` filters).
+2. **S2 Phase 2 (Supervisors + Roster editor virtualisation)** — paused pending your green-light per the brief's "PAUSE FOR ROYCE between each" rule. Reply with go/no-go after PR #93 reaches a state you're happy with.
+3. **S3 (week-scoped realtime channel)** — still parked. Brief says only proceed with explicit green-light.
+
+**What was deliberately NOT touched:**
+
+- Demo branch (this entry's PR is on a separate hygiene branch off `origin/demo`; the S1 work itself targets `main`)
+- SKS Supabase project (off-limits per brief)
+- scripts/tender-pipeline.js (Royce's active surface)
+- `migrations/` (SEC2 file remains PENDING; no other migration touched)
+- Auth / RLS / env vars
+
+**FINDING status changes:** #S1 stays in "Open findings" until you merge PR #93 (then move to Closed/Shipped). Once landed, this is the audit's first cross-branch port — worth noting as a pattern for future demo→main work.
+
+**Substrate hygiene:** not updated this session — v3.4.74 hasn't merged yet. Once PR #93 lands, the substrate `eq/changelog/field.md` should get an entry; deferred to the merge moment.
+
+**Process notes:**
+
+- The brief's "pre-flight catches stale state" guidance paid off — without it I would have re-shipped SEC2 from scratch. Brief versioning on Desktop matters.
+- Re-implementation against main was the right call vs cherry-pick. Cherry-picking through 16 versions of stacked diffs would have wasted hours on conflict resolution and risked subtle scoping errors (the surrounding code on demo no longer matches main's structure).
