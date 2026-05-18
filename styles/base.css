@@ -434,8 +434,23 @@ td.meta-col  { color: var(--ink-3); font-size: 11.5px; }
   align-items: center;
   background: white;
   border-bottom: 1px solid var(--border);
+  /* v3.5.6 (S2 Phase 3 — editor scaling): let the browser skip layout+paint
+     for offscreen rows. DOM stays intact so inputs keep focus, presence
+     outlines, and event handlers across scroll. Fixed contain-intrinsic-size
+     keeps the scrollbar accurate before rows are rendered. */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 36px;
 }
 .roster-editor-row:last-child { border-bottom: none; }
+
+/* v3.5.6 (S2 Phase 3 — read-only roster scaling): same content-visibility
+   treatment for the roster view tables. Page-level scroll preserved; the
+   browser just skips paint+layout for offscreen rows. Per-group tables
+   benefit independently. */
+#roster-content tbody tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 32px;
+}
 .editor-name {
   min-width: 160px;
   flex-shrink: 0;

@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.5'; // cache-buster — bump on icon changes
+    var v = '3.5.6'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -215,8 +215,50 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.5
+  EQ Solves — Field  v3.5.6
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.6  (S2 Phase 3 — roster editor + roster view scaling)
+  ────────────────────────────────────────────────────────────
+  • Closes out FINDING #S2 — third surface (Roster editor) +
+    the read-only Roster view. Different approach from #91/#92
+    Contacts/Supervisors virtualisation because the editor has
+    8 <input> elements per row with focus/blur/oninput/onchange
+    handlers wired into the realtime presence system. Ripping
+    inputs out of DOM mid-edit (as EQVirtualTable would) kills
+    focus, breaks presence outlines, drops typing state.
+  • THE FIX — CSS `content-visibility: auto` on offscreen rows.
+    Browser skips layout+paint for rows not in the viewport;
+    DOM stays intact so inputs keep focus, presence outlines
+    stay applied, and event listeners don't need rewiring.
+    `contain-intrinsic-size` keeps the scrollbar accurate
+    before rows are actually rendered.
+  • SAME TREATMENT for the read-only Roster view tbody rows.
+    Per-group tables retain their visual separation; page-level
+    scroll preserved (no scroll model change).
+  • NO JS CHANGES — Phase 3 is a pure CSS delta (~12 lines).
+    No new shim instances, no per-page wiring. The
+    `EQVirtualTable` shim from v3.5.4 stays where it is (used
+    by Contacts + Supervisors only).
+  • BROWSER SUPPORT — content-visibility: Chrome 85+ (Aug 2020),
+    Firefox 125+ (Apr 2024), Safari 18+ (Sep 2024). Pre-Safari-18
+    iPad clients fall back gracefully — feature is non-essential
+    and renders normally without it. Same gracefully-degrade
+    pattern as `display: grid` etc.
+  • FILES TOUCHED
+    - styles/base.css           (content-visibility on
+                                 .roster-editor-row +
+                                 #roster-content tbody tr)
+    - scripts/app-state.js      (APP_VERSION 3.5.5 → 3.5.6)
+    - sw.js                     (CACHE bump only)
+    - index.html                (favicon cache-bust, this banner)
+  • TEST PLAN — open Edit Roster page (still loads), confirm
+    a cell mid-edit doesn't lose focus when scrolling other
+    rows offscreen. Open Roster (read-only) page, confirm
+    weekly grid renders identically. With seed500: confirm
+    initial render is faster than v3.5.5 on a low-end laptop.
+
+
 
   CHANGES IN v3.5.5  (S2 Phase 2 — Supervisors page virtualisation)
   ────────────────────────────────────────────────────────────
