@@ -41,10 +41,57 @@ function corsHeaders(event) {
 const STAFF_CODE   = process.env.STAFF_CODE;
 const MANAGER_CODE = process.env.MANAGER_CODE;
 
-// ── Rate limiting (in-memory, best-effort) ───────────────────
+// ── Rate limiting ────────────────────────────────────────────
+// In-memory (best-effort) path. Active by default. Survives only within
+// a single Netlify Function instance — cold starts reset.
 const attempts = {};
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS   = 15 * 60 * 1000;
+
+// SEC2 Phase D — distributed rate limit via Supabase RPC.
+// Toggled ON per-tenant by setting Netlify env var RATE_LIMIT_V2=on.
+// When ON, failed PIN attempts call public.bump_rate_limit() on the
+// audit-log Supabase (the project the rate_limit_buckets migration
+// landed on). RPC returning FALSE → return 429 immediately; returning
+// TRUE or failing → fall through to the in-memory path.
+//
+// Rollback: unset RATE_LIMIT_V2 in the Netlify dashboard → next cold
+// start serves only the in-memory path. No code change required.
+const RATE_LIMIT_V2 = (process.env.RATE_LIMIT_V2 || '').toLowerCase() === 'on';
+const RATE_LIMIT_WINDOW_SEC = 15 * 60;  // matches LOCKOUT_MS
+
+function tenantFromOrigin(event) {
+  const origin = event.headers['origin'] || event.headers['Origin'] || '';
+  if (origin.includes('sks-nsw-labour'))  return 'sks';
+  if (origin.includes('eq-solves-field')) return 'eq';
+  return 'unknown';
+}
+
+// Returns: true (allowed) | false (rate-limited) | null (RPC failed — caller falls back)
+async function bumpRateLimitRPC(bucketKey, max, windowSec) {
+  if (!SB_URL || !SB_KEY) return null;
+  try {
+    const res = await fetch(`${SB_URL}/rest/v1/rpc/bump_rate_limit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SB_KEY,
+        'Authorization': `Bearer ${SB_KEY}`,
+        'Accept':        'application/json'
+      },
+      body: JSON.stringify({
+        p_key:            bucketKey,
+        p_max:            max,
+        p_window_seconds: windowSec
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data === true || data === false) ? data : null;
+  } catch (e) {
+    return null;
+  }
+}
 
 // ── Audit logging ────────────────────────────────────────────
 async function logAttempt(name, success, ip, detail) {
@@ -154,6 +201,26 @@ exports.handler = async (event) => {
         body: JSON.stringify({ valid: true, role, token, sessionToken })
       };
     } else {
+      // ── Failed PIN attempt — rate-limit check ───────────────
+      // SEC2 Phase D: when RATE_LIMIT_V2=on, the distributed RPC bucket
+      // is the authoritative lockout check (survives cold starts).
+      // Returning null = RPC failed → fall through to in-memory path
+      // so a Supabase blip doesn't kill the gate.
+      if (RATE_LIMIT_V2) {
+        const tenant    = tenantFromOrigin(event);
+        const bucketKey = `${tenant}:gate-pin:${ip}`;
+        const allowed   = await bumpRateLimitRPC(bucketKey, MAX_ATTEMPTS, RATE_LIMIT_WINDOW_SEC);
+        if (allowed === false) {
+          await logAttempt(name, false, ip, 'LOCKOUT TRIGGERED (rpc)');
+          return {
+            statusCode: 429, headers,
+            body: JSON.stringify({ valid: false, role: null, locked: true, message: `Too many attempts. Try again in up to 15 minutes.` })
+          };
+        }
+        // allowed === true (under the limit) OR allowed === null (RPC blip):
+        // continue to the in-memory path below as a belt-and-braces fallback.
+      }
+
       record.count++;
       if (record.count >= MAX_ATTEMPTS) {
         record.lockedUntil = now + LOCKOUT_MS;
