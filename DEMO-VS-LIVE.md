@@ -11,16 +11,31 @@
 |---|---|---|
 | **URL** | eq-solves-field.netlify.app | sks-nsw-labour.netlify.app |
 | **Repo branch** | `demo` | `main` |
-| **GitHub branch HEAD** | `c9cde43` (post-#100, Phase B closed) | `2c769e0` (PR #69) |
-| **APP_VERSION** | `3.5.6` (server-side Phase B since then) | `3.4.73` |
-| **sw.js CACHE** | `eq-field-v3.5.6` | `eq-field-v3.4.73` |
-| **Last shipped** | 2026-05-18 (Phase A+B Melbourne prep) | 2026-05-13 |
+| **GitHub branch HEAD** | `7249833` (post-#104, EQ Shell design landed; PR #106 / v3.5.9 still open) | `2c769e0` (PR #69) |
+| **APP_VERSION** | `3.5.8` (`3.5.9` queued in open PR #106) | `3.4.73` |
+| **sw.js CACHE** | `eq-field-v3.5.8` | `eq-field-v3.4.73` |
+| **Last shipped** | 2026-05-18 (Phase A+B+C+D Melbourne prep + EQ Shell design) | 2026-05-13 |
 | **Tenant slug** | `eq` | `sks` |
 | **Supabase project** | `ktmjmdzqrogauaevbktn` | `nspbmirochztcjijmcrx` |
 | **Active users** | 0 (dev/demo only) | ~20 supervisors / staff |
 | **Branding** | EQ blue diamond (`icons-eq/`) | SKS navy logo (`icons/`) |
 
-**Divergence:** 59 commits, ~11,500 lines added across 61 files since the branches forked. SKS prod has been frozen on v3.4.73 since 2026-05-13 while demo took on 14 versions of work.
+**Divergence:** ~64 commits, ~12,500 lines added across ~64 files since the branches forked. SKS prod has been frozen on v3.4.73 since 2026-05-13 while demo took on v3.4.74 → v3.5.8 (15 versions, plus v3.5.9 queued in PR #106).
+
+---
+
+## v3.5.7 → v3.5.9 / EQ Shell Phase 1.C — what landed since v3.5.6
+
+| Version | Surface | Workstream | PR |
+|---|---|---|---|
+| v3.5.7 | U2 Phase 2 — axe auto-fixes (contrast, select-name, sidebar-footer base color) | Accessibility | [#102](https://github.com/Milmlow/eq-field-app/pull/102) |
+| v3.5.8 | U2 Phase 3 — manual modal focus capture/restore + aria-live announcements | Accessibility | [#105](https://github.com/Milmlow/eq-field-app/pull/105) |
+| EQ-SHELL-DESIGN.md | Phase D — Q1-Q10 architecture lock | EQ Shell | [#104](https://github.com/Milmlow/eq-field-app/pull/104) |
+| v3.5.9 | Phase 1.C — `verifyShellToken()` + `verify-shell-token` action in `verify-pin.js`; `_consumeShellToken()` in `scripts/auth.js`. Backwards-compatible — no-op on direct visits. | EQ Shell | [#106](https://github.com/Milmlow/eq-field-app/pull/106) (open) |
+
+**U2 finding fully closed.** AUDIT-REVIEW.md no longer has an open accessibility item against demo. WCAG 2.1 AA procurement-readiness pass per the Melbourne brief.
+
+**EQ Shell handoff token READY.** Direct visits to `eq-solves-field.netlify.app` remain gate-protected; iframe loads with `#sh=<token>` skip the gate via the new `verify-shell-token` swap → 7d session token. Awaits Phase 1.B (shell side) deploying with the same `EQ_SECRET_SALT` for end-to-end smoke.
 
 ---
 

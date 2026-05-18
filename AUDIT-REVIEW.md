@@ -71,20 +71,6 @@ not yet addressed stay until Royce decides + closes them._
 - **Recommended fix:** progressive pass — first all icon-only buttons (✎ Edit, ✕ Delete, 📦 Archive, ↺ Restore, etc.) get `aria-label`. Then modal `role="dialog"` + `aria-labelledby`. Then sortable headers get `aria-sort`. Estimated ~6-8 hours total for a meaningful pass.
 - **Decision needed:** scope a sprint for this, or treat as gradual?
 
-#### FINDING #S1 — scalability [HIGH] — full-table fetch on schedule + timesheets
-- **File:** `index.html:2517-2521` (loadFromSupabase)
-- **Evidence:** `sbFetch('schedule?select=*')` and `sbFetch('timesheets?select=*')` with NO week filter. At Melbourne scale (577 ppl × 52 weeks = ~30k schedule rows, similar for timesheets), initial load is 5–10MB. Every poll re-pulls it. Already documented in `MELBOURNE-SCALE-DESIGN.md` §6.
-- **Enterprise tie-in:** BLOCKS the Melbourne rollout directly. At ~100 users the current pattern starts to slow noticeably; at 577 it's unusable.
-- **Recommended fix:** scope schedule + timesheets queries to a sliding window of weeks (e.g. current week ± 8). Lazy-load older data when user navigates back. Design in MELBOURNE-SCALE-DESIGN.md §6 already specifies the shape.
-- **Decision needed:** prioritise this for the next sprint? It's the single biggest scaling blocker.
-
-#### FINDING #S2 — scalability [med] — wholesale innerHTML rebuild on render
-- **Files:** `scripts/roster.js:294, 491, 591`, `scripts/leave.js:1004, 1135`, `scripts/timesheets.js:451, 638, 956, 1088`, etc. (~15 sites)
-- **Evidence:** every render swaps the full innerHTML on the page container. v3.4.72's hash-diff reduces frequency but not cost per render.
-- **Enterprise tie-in:** at 500+ rows on contacts/roster pages, the rebuild becomes visibly chunky (~100-300ms freeze). Affects perceived performance even when correctness is fine.
-- **Recommended fix:** virtualisation library (e.g. clusterize.js, ~3KB) for the few big-list views (contacts, roster editor). Alternatively, lit-html for surgical updates. MELBOURNE-SCALE-DESIGN.md §6.1 mentions the gap.
-- **Decision needed:** library vs roll-our-own, and when?
-
 ### Parked findings — acknowledged, deliberately deferred
 
 - **FINDING #S3 — scalability [med] — realtime channel is org-scoped, not week-scoped.**
@@ -101,12 +87,55 @@ not yet addressed stay until Royce decides + closes them._
 - **FINDING #SEC1 — security [med] — magic-link approve/reject TTL was 7 days.** SHIPPED 2026-05-18 via [PR #100](https://github.com/Milmlow/eq-field-app/pull/100) (Phase B3 of `NEW-WINDOW-PROMPT-melbourne-ready.md`). `LEAVE_ACTION_TTL_MS` dropped from `7 * 24 * 60 * 60 * 1000` to `48 * 60 * 60 * 1000` in both `netlify/functions/send-email.js` and `supabase/functions/supervisor-digest/index.ts`. Was parked 2026-05-13 by Royce; unparked for Melbourne procurement posture.
 - **FINDING #SEC2 — security [low] — verify-pin rate limit was in-memory only.** SHIPPED 2026-05-18 via [PR #99](https://github.com/Milmlow/eq-field-app/pull/99) (Phase B2 / Phase D activation). Phase 1 (schema design) shipped 2026-05-15 via PR #90. Phase D activated 2026-05-18: migration `2026-05-15_rate_limit_buckets_v1.sql` applied to EQ demo Supabase, RPC sanity-tested (5x true, 6th false), `netlify/functions/verify-pin.js` wired to `bump_rate_limit` RPC behind env-var feature flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)` added to `scripts/supabase.js` for future defence-in-depth callers. **Activation requires setting `RATE_LIMIT_V2=on` in the Netlify env vars** — not flipped automatically by the merge. In-memory path serves as fallback when RPC blips.
 - **FINDING #SEC3 — security [med] — Tender Pipeline RLS placeholder wide-open.** Discovered + recorded 2026-05-18 (DEMO-VS-LIVE.md). SHIPPED same day via [PR #98](https://github.com/Milmlow/eq-field-app/pull/98) (Phase B1). All 24 placeholder `_anon_*` policies on the 6 tender tables replaced — `tenders` / `tender_import_runs` / `tender_review_decisions` / `pending_schedule` gated on `org_id IS NOT NULL`; `nominations` / `tender_enrichment` gated on `EXISTS (tender_id → tenders.org_id IS NOT NULL)`. **HONEST CAVEAT in migration header:** EQ Field's anon-key auth model can't enforce `auth.uid()`-based per-user RLS — cross-tenant read by anyone holding the anon key remains structural until SSO (MELBOURNE-SCALE-DESIGN.md §7 Q7, Wave 5+). The brief's prescribed `TO authenticated USING (auth.uid()...)` pattern was a wrong premise; the precedent set in `2026-05-13_roster_presence_rls_tighten.sql` was the right shape.
+- **FINDING #S1 — scalability [HIGH] — full-table fetch on schedule + timesheets.** Discovered Night 1 (2026-05-13). The single biggest scaling blocker called out for Melbourne. SHIPPED 2026-05-15 → 2026-05-18 across four phases on demo:
+    - **Phase 1 (visibility tracking)** + **Phase 2 (scope initial load)** + **Phase 3 (lazy-load on week navigation)** + **Phase 4 (cache eviction)** — all four folded into one PR per SPRINT-QUESTIONS Q11 default. Shipped via [PR #89](https://github.com/Milmlow/eq-field-app/pull/89) as v3.5.3 (2026-05-15). Added `STATE.loadedWeeks` Set, `_getVisibleWeekRange()` helper (currentWeek ± 4), rewrote `loadFromSupabase()` to scope `schedule?select=*&week=in.(weekList)` + `timesheets?select=*&week=in.(weekList)`, lazy-fetch on `onWeekChange()`, cap loadedWeeks at 16 with LRU eviction.
+    - **Phase 5 (aggregate queries for dashboard)** investigated separately; confirmed **no-op** — `renderDashboard` + `updateTopStats` already scope via `getWeekSchedule()` and current week is always in the loaded window. No aggregate RPC needed.
+    - **SKS port** open in [PR #93](https://github.com/Milmlow/eq-field-app/pull/93) as v3.4.74 on `main` (2026-05-18). Re-implemented fresh rather than cherry-picked due to ~16 versions of demo-only stacked work between main (v3.4.73) and demo (v3.5.4). **DO NOT auto-merge** — explicit Royce instruction required for SKS prod port.
+    - Net effect on demo: initial Supabase fetch drops from O(all-time) to O(9 weeks). At Melbourne scale (577 × 52 = ~30k rows), schedule transfer shrinks from ~5-10MB to ~50KB. Behaviour preserved at SKS scale.
+- **FINDING #S2 — scalability [med] — wholesale innerHTML rebuild on render.** Discovered Night 1 (2026-05-13). SHIPPED 2026-05-15 → 2026-05-18 across three workstreams, all behaviour-preserving:
+    - **v3.5.4 — render-hash short-circuit** ([PR #91](https://github.com/Milmlow/eq-field-app/pull/91), 2026-05-15). Computed cheap hash of view inputs in `scripts/roster.js`, `scripts/leave.js`, `scripts/timesheets.js`; skipped `innerHTML` swap when hash unchanged. Kills the flash on idle polls (separate from the v3.4.72 polled-data hash-diff at the network layer).
+    - **v3.5.5 — contacts/supervisors virtualisation** ([PR #92](https://github.com/Milmlow/eq-field-app/pull/92), 2026-05-17). `clusterize.js` (~3KB) wired into the two highest-row pages. Threshold-gated (only kicks in past ~150 rows) so SKS-scale views remain identical.
+    - **v3.5.6 — schedule `content-visibility:auto`** ([PR #95](https://github.com/Milmlow/eq-field-app/pull/95), 2026-05-18). CSS-only — off-viewport schedule rows skip rendering. ~50% paint-time reduction on the supervisor schedule view at 500+ rows. Native browser feature, no library cost.
+    - Decisions log: library-vs-roll-our-own settled on `clusterize.js` (tiny, vanilla, stable, drop-in). Roster editor and dashboard left alone — they don't bite at current row counts, and the schedule fix covered the largest-actual-list case.
 
 ---
 
 ## Iteration log
 
 _Each nightly run appends a `## Night N — [Date] — [Angle]` section here._
+
+### Session — 2026-05-18 → 2026-05-19 — Phase A+B+C+D Melbourne prep + EQ Shell pivot
+
+**Look at this first:** Melbourne-prep findings (S1, S2, U2, SEC1, SEC2, SEC3) are all CLOSED on demo. The next workstream is the EQ Shell — a multi-module React shell at `*.eq.solutions`. Phase 1.A (infra) + Phase 1.B (wire-up) + Phase 1.C (Field-side) all open as PRs; **none merged**. Royce reviews + sets env vars + links Netlify to GitHub manually after morning review.
+
+**What shipped in this session (PRs against `eq-field-app/demo` unless noted):**
+
+| Phase | Work | PRs | Outcome |
+|---|---|---|---|
+| Phase A | verify baseline | [#97](https://github.com/Milmlow/eq-field-app/pull/97) | Re-confirmed both deploys' state pre-sprint. |
+| Phase B1 | SEC3 Tender RLS tighten | [#98](https://github.com/Milmlow/eq-field-app/pull/98) | All 24 placeholder `_anon_*` policies replaced. See FINDING #SEC3 closure. |
+| Phase B2 | SEC2 rate-limit activation | [#99](https://github.com/Milmlow/eq-field-app/pull/99) | `bump_rate_limit` RPC wired behind `RATE_LIMIT_V2` env flag. |
+| Phase B3 | SEC1 magic-link TTL | [#100](https://github.com/Milmlow/eq-field-app/pull/100) | 7d → 48h on both `send-email.js` + `supervisor-digest`. |
+| Phase C | U2 axe + manual a11y | [#102](https://github.com/Milmlow/eq-field-app/pull/102) (v3.5.7) + [#105](https://github.com/Milmlow/eq-field-app/pull/105) (v3.5.8) | Axe auto-flagged contrast/select-name fixes + manual modal-focus + aria-live. NVDA/VoiceOver smoke deferred (out-of-harness). |
+| Phase D | EQ Shell design lock | [#104](https://github.com/Milmlow/eq-field-app/pull/104) | Q1-Q10 all answered. `EQ-SHELL-DESIGN.md` is the source of truth. |
+| Phase 1.A | EQ Shell infra (real cloud resources) | n/a (no eq-field-app diff) | GitHub repo `eq-solutions/eq-shell` (private, Vite + React + TS scaffold). Supabase project `eq-shell-control` (id `hxwitoveffxhcgjvubbd`, region ap-southeast-2) with canonical schema v1 (`tenants`, `users`, `module_entitlements`, `_touch_updated_at` trigger; RLS enabled deny-by-default). Netlify project `eq-shell` (id `a3473f83-7c82-4f1e-872d-aa96eaa55172`, team `milmlow`) provisioned but NOT GitHub-linked yet — Royce wires after review. |
+| Phase 1.B | EQ Shell wire-up | `eq-solutions/eq-shell` [PR #1](https://github.com/eq-solutions/eq-shell/pull/1) | Three TS Netlify functions (`shell-login`, `verify-shell-session`, `mint-iframe-token`) + React Router shell + `BrandProvider` + lazy module stubs (Cards/Intake/Quotes/Service/Tender Pipeline). Supabase migration `2026_05_18_phase_1b_pin_hash_and_service_role_policies` applied to eq-shell-control (added `users.pin_hash` + service-role-only ALL policies on three canonical tables with the same HONEST CAVEAT precedent as roster_presence/tender RLS). **Required env vars:** `EQ_SECRET_SALT` (SAME as eq-solves-field), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. Royce sets post-merge. |
+| Phase 1.C | EQ Shell Field-side handoff | [#106](https://github.com/Milmlow/eq-field-app/pull/106) (v3.5.9) | New `verifyShellToken()` + `verify-shell-token` action in `netlify/functions/verify-pin.js`; new `_consumeShellToken()` in `scripts/auth.js`. Field READY to receive shell-minted iframe handoff tokens. No-op until Phase 1.B's shell deploys. |
+| Phase 2 spike | Tender Pipeline placeholder routes | `eq-solutions/eq-shell` [PR # — fill in after merge](https://github.com/eq-solutions/eq-shell/pulls) | Stubs at `/<tenant>/tender-pipeline/{import|kanban|review|enrichment|curve}` documenting migration plan + vanilla-code line ranges to port. ~10 lines per stub. |
+
+**Decisions punted to Royce (morning):**
+
+1. **Netlify env vars on `eq-shell` project.** Three required for the auth contract: `EQ_SECRET_SALT` (must match `eq-solves-field`'s value or the iframe handshake breaks), `SUPABASE_URL` (`https://hxwitoveffxhcgjvubbd.supabase.co`), `SUPABASE_SERVICE_ROLE_KEY` (from Supabase dashboard — not readable via MCP). Royce sets manually.
+2. **Netlify ↔ GitHub link on `eq-shell`.** Project was provisioned empty in Phase 1.A; not connected to the repo yet. Royce wires after Phase 1.B PR is reviewed.
+3. **SKS prod ports** (S1, U2, SEC2, etc.) remain in [PR #93](https://github.com/Milmlow/eq-field-app/pull/93) and DEMO-VS-LIVE.md decision matrix — Royce green-lights when ready.
+4. **Logout endpoint on eq-shell.** Phase 1.B compromise: cookie expires in 7d; client-side button just navigates to `/`. Follow-up adds a `shell-logout` function that sends `Set-Cookie: ...; Max-Age=0`.
+
+**What stayed out of scope this session:**
+- Per-user `auth.uid()`-based RLS on `eq-shell-control` — waits until client-side Supabase access matters (Phase 2+).
+- Rate limiting on `shell-login` — same gap pre-SEC2; extend the `rate_limit_buckets` pattern in a follow-up.
+- DNS for `*.eq.solutions` — per the brief guardrail, no DNS changes made.
+
+---
 
 ### Night 0 — 2026-05-13 — Setup
 
