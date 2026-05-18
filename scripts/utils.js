@@ -58,35 +58,105 @@ function showToast(msg, duration = 3000) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────
+//
+// v3.5.8 (U2 Phase 3 — manual accessibility pass): openModal/closeModal
+// now manage focus per WCAG keyboard-nav expectations.
+//   1. On open: stash the element that had focus (trigger), then
+//      move focus INTO the modal (data-initial-focus → first focusable).
+//   2. On close: restore focus to the stashed trigger so keyboard
+//      users don't get dumped back at <body>.
+//   3. Tab cycles within the top-most open modal — focus doesn't
+//      leak out to the background page while a dialog is up.
+// Nested modals (e.g. Confirm on top of Edit) use a stack so each
+// close pops back to the previous trigger.
+//
+// Also stamps role="dialog" + aria-modal="true" on every .modal-overlay
+// on first openModal call so screen readers announce them as dialogs.
+
+const _modalTriggerStack = [];
+
+function _ensureModalAriaAttrs(el) {
+  if (!el.hasAttribute('role')) el.setAttribute('role', 'dialog');
+  if (!el.hasAttribute('aria-modal')) el.setAttribute('aria-modal', 'true');
+}
+
+function _focusableEls(modal) {
+  return Array.from(modal.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(e => e.offsetParent !== null);
+}
+
+function _focusInitial(modal) {
+  // Honour data-initial-focus if present, else first focusable, else the modal itself.
+  const explicit = modal.querySelector('[data-initial-focus]');
+  if (explicit && explicit.offsetParent !== null) { try { explicit.focus(); } catch (_) {} return; }
+  const candidates = _focusableEls(modal);
+  if (candidates.length) { try { candidates[0].focus(); } catch (_) {} return; }
+  if (!modal.hasAttribute('tabindex')) modal.setAttribute('tabindex', '-1');
+  try { modal.focus(); } catch (_) {}
+}
+
 function openModal(id) {
   const el = document.getElementById(id);
-  if (el) el.classList.add('open');
+  if (!el) return;
+  _ensureModalAriaAttrs(el);
+  _modalTriggerStack.push(document.activeElement);
+  el.classList.add('open');
+  // requestAnimationFrame so the .open class is applied (visibility flips) before focus.
+  // Safari and iOS especially are picky about focus() on display:none ancestors.
+  requestAnimationFrame(() => _focusInitial(el));
 }
 
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) el.classList.remove('open');
+  // Restore focus to whoever opened this modal (or the most-recent stack entry).
+  const trigger = _modalTriggerStack.pop();
+  if (trigger && document.body.contains(trigger) && typeof trigger.focus === 'function') {
+    try { trigger.focus(); } catch (_) {}
+  }
 }
 
-// Close modal on backdrop click
+// Close modal on backdrop click — preserve focus restore by routing through closeModal.
 document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('open');
+  if (e.target.classList.contains('modal-overlay') && e.target.id) {
+    closeModal(e.target.id);
   }
 });
 
-// v3.4.74: ESC-to-close on the top-most open modal. Standard keyboard
-// convention — previously modals could only be closed via the ✕ button
-// or a backdrop click. Closes only ONE modal per press so a confirm-on-
-// top-of-edit stack peels back rather than blowing both away.
-// Skips when focus is on a form field that's actively using Escape
-// (rare but defensive — e.g. native datepickers).
+// v3.4.74: ESC-to-close on the top-most open modal. v3.5.8 routes through
+// closeModal() so focus restores correctly (was just removing the class).
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
   const open = document.querySelectorAll('.modal-overlay.open');
   if (!open.length) return;
   // Close the LAST opened modal (DOM order ≈ open order in practice).
-  open[open.length - 1].classList.remove('open');
+  const topMost = open[open.length - 1];
+  if (topMost.id) closeModal(topMost.id);
+  else topMost.classList.remove('open');
+});
+
+// v3.5.8 — Tab focus trap inside the top-most open modal. Without this,
+// keyboard users can Tab "past" the dialog into the background page —
+// WCAG 2.4.3 (focus order) + 2.1.1 (keyboard) require focus stay inside.
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Tab') return;
+  const open = document.querySelectorAll('.modal-overlay.open');
+  if (!open.length) return;
+  const modal = open[open.length - 1];
+  const focusables = _focusableEls(modal);
+  if (!focusables.length) { e.preventDefault(); return; }
+  const first = focusables[0];
+  const last  = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  // Cycle: Shift+Tab from first → last; Tab from last → first; otherwise let the browser handle it.
+  if (e.shiftKey && (active === first || !modal.contains(active))) {
+    e.preventDefault();
+    try { last.focus(); } catch (_) {}
+  } else if (!e.shiftKey && (active === last || !modal.contains(active))) {
+    e.preventDefault();
+    try { first.focus(); } catch (_) {}
+  }
 });
 
 // ── CSV helpers ───────────────────────────────────────────────
