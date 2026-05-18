@@ -1,37 +1,41 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: SEC2 — rate_limit_buckets table + bump_rate_limit() RPC
 -- Project:   eq-field-app
--- Version:   design-only (no app version bump — file is unapplied)
--- Created:   2026-05-15
--- Status:    PENDING — DESIGN ONLY. DO NOT APPLY YET.
--- Applied:   Demo  (ktmjmdzqrogauaevbktn) — NOT applied (intentionally pending)
---            Prod  (nspbmirochztcjijmcrx) — NOT applied (intentionally pending)
+-- Version:   demo Phase B2 of NEW-WINDOW-PROMPT-melbourne-ready.md
+-- Created:   2026-05-15 (design)
+-- Applied:   Demo  (ktmjmdzqrogauaevbktn) — 2026-05-18 (Phase D activation)
+--            Prod  (nspbmirochztcjijmcrx) — pending (apply on explicit "SKS live")
 -- ────────────────────────────────────────────────────────────
--- DO NOT RUN THIS FILE.
+-- BACKGROUND (FINDING #SEC2 in AUDIT-REVIEW.md):
+--   Pre-this-migration, netlify/functions/verify-pin.js used an in-memory
+--   `attempts = {}` map for rate limiting. Netlify Functions are stateless —
+--   each cold start reset the map, letting attackers spam past the 5-attempt
+--   threshold by triggering cold starts. This migration adds the table +
+--   atomic bump-and-check RPC; the matching client wiring (env-var-flagged
+--   RATE_LIMIT_V2 in verify-pin.js + bumpRateLimit helper in
+--   scripts/supabase.js) ships in the same PR.
 --
---   • Do NOT call `mcp__*__apply_migration` for this file.
---   • Do NOT call `mcp__*__execute_sql` against the public.rate_limit_buckets
---     table or the public.bump_rate_limit() function.
---   • This file exists as documentation + ready-to-run shell only.
---     The schema is locked in now so Phase D doesn't have to re-design it
---     under deadline pressure.
+-- WHY SECURITY DEFINER:
+--   The RPC bypasses RLS so the anon role can call it (clients use anon
+--   key only — see scripts/app-state.js TENANT_SUPABASE). Underlying table
+--   has RLS enabled with no policies → denied by default for direct
+--   anon/authenticated access. Only the RPC path can read/write.
 --
--- Why pending: rate_limit_buckets is only useful when there's a caller
--- enforcing it. Today's `netlify/functions/verify-pin.js` uses an
--- in-memory map (FINDING #SEC2 in AUDIT-REVIEW.md). The fix lives in
--- Phase D — when server-side role checks land, we'll wire bump_rate_limit()
--- into:
---   1. `verify-pin.js`  → replaces the in-memory `attempts` map
---   2. role-gated endpoints (approve_leave, etc.) → per-tier quotas
+-- ROLLBACK:
+--   Unset RATE_LIMIT_V2 in the Netlify dashboard. Function falls back to
+--   the in-memory path immediately on next cold start. Schema can stay
+--   in place (it does nothing without callers).
 --
--- When Phase D starts:
---   1. mcp apply this file to the EQ demo project (ktmjmdzqrogauaevbktn) first.
---   2. Wire `bump_rate_limit()` into `verify-pin.js`, soak on demo.
---   3. Promote to SKS prod (nspbmirochztcjijmcrx) only on explicit "SKS live".
+-- SKS PROD ROLLOUT:
+--   Apply this migration to nspbmirochztcjijmcrx ONLY on explicit Royce
+--   instruction. The Netlify function code already supports per-tenant
+--   activation via env var (RATE_LIMIT_V2=on on eq-solves-field but not
+--   sks-nsw-labour until SKS is ready).
 --
 -- Source: SPRINT-PLAN.md §SEC2 (schema design captured 2026-05-13,
 --         locked 2026-05-15 per SPRINT-QUESTIONS Q9 default "yes,
---         create the file unapplied").
+--         create the file unapplied"). Activated 2026-05-18 per
+--         NEW-WINDOW-PROMPT-melbourne-ready.md Phase B2 green-light.
 -- ────────────────────────────────────────────────────────────
 
 -- migrations/<future-date>_rate_limit_buckets.sql

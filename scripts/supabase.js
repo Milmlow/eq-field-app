@@ -82,6 +82,47 @@ function _sbLog(level, stage, details) {
   else                         console.info(prefix, details);
 }
 
+// ── SEC2 Phase D — client-side rate-limit RPC helper ─────────
+// Optional defence-in-depth wrapper around public.bump_rate_limit(p_key,
+// p_max, p_window_seconds). Returns true (allowed), false (rate-limited),
+// or null (RPC failed — caller decides what to do).
+//
+// Server-side enforcement still lives in netlify/functions/verify-pin.js;
+// this helper is for client-side flows that want to throttle without a
+// round-trip via a Netlify Function (e.g. PostHog send bursts, future
+// role-gated client actions). The RPC is SECURITY DEFINER so the anon
+// key shipped in TENANT_SUPABASE.<tenant>.key can call it without RLS
+// granting direct access to public.rate_limit_buckets.
+async function bumpRateLimit(key, max, windowSeconds) {
+  if (_isDemoTenant() || !SB_URL) return true;  // demo tenant skips network
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/rpc/bump_rate_limit', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Accept':        'application/json'
+      },
+      credentials: 'omit',
+      body: JSON.stringify({
+        p_key:            String(key),
+        p_max:            max | 0,
+        p_window_seconds: windowSeconds | 0
+      })
+    });
+    if (!res.ok) {
+      _sbLog('warn', 'rate-limit', 'RPC ' + res.status + ' for key=' + key);
+      return null;
+    }
+    const data = await res.json();
+    return (data === true || data === false) ? data : null;
+  } catch (e) {
+    _sbLog('warn', 'rate-limit', 'RPC threw: ' + (e && e.message || e));
+    return null;
+  }
+}
+
 // ── Write queue indicator ────────────────────────────────────
 let _pendingWriteCount = 0;
 let _saveIndicatorTimer = null;
