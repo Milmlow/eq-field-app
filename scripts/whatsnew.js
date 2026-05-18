@@ -50,7 +50,7 @@ function _renderWhatsNew() {
     <div style="background:var(--purple-lt);border-left:4px solid var(--purple);border-radius:6px;padding:12px 16px;margin-bottom:20px">
       <div style="display:flex;align-items:flex-start;gap:12px">
         <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.5px">What's new — ${WHATSNEW_VERSION}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--purple-text);text-transform:uppercase;letter-spacing:.5px">What's new — ${WHATSNEW_VERSION}</div>
           <div style="font-size:14px;font-weight:600;color:var(--navy);margin-top:2px">Major features since you last saw this card</div>
         </div>
         <button onclick="dismissWhatsNew()" title="Dismiss"
