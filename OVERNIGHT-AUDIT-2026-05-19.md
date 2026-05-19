@@ -6,8 +6,8 @@ Review of four open PRs that landed overnight 2026-05-18 → 2026-05-19. Read-on
 
 | PR | Repo | Title | Verdict | Confidence |
 |---|---|---|---|---|
-| **#106** | Milmlow/eq-field-app | v3.5.9 Phase 1.C Field-side handoff | **LGTM merge as-is** | High |
-| **#107** | Milmlow/eq-field-app | Doc hygiene pass | **Merge after fixing one placeholder** | High |
+| **#106** | eq-solutions/eq-field | v3.5.9 Phase 1.C Field-side handoff | **LGTM merge as-is** | High |
+| **#107** | eq-solutions/eq-field | Doc hygiene pass | **Merge after fixing one placeholder** | High |
 | **#1** | eq-solutions/eq-shell | Phase 1.B shell auth + iframe handoff | **Merge with minor fixes (8 should-fix, no critical)** | High |
 | **#2** | eq-solutions/eq-shell | Phase 2 spike — Tender Pipeline routes | **Block until rebased / sequenced with #1** | High |
 
@@ -47,11 +47,11 @@ This was the single highest-risk part of overnight work. Both sides match:
 | Side | File | What it does |
 |---|---|---|
 | Sign (PR #1) | `eq-shell/netlify/functions/_shared/token.ts:264-268` | `base64(JSON.stringify(payload)) + '.' + hex(HMAC-SHA256(EQ_SECRET_SALT, JSON.stringify(payload)))` |
-| Verify (PR #106) | `eq-field-app/netlify/functions/verify-pin.js:147-159` | Decodes `base64(payload)`, re-HMACs the raw decoded bytes, compares to provided sig |
+| Verify (PR #106) | `eq-field/netlify/functions/verify-pin.js:147-159` | Decodes `base64(payload)`, re-HMACs the raw decoded bytes, compares to provided sig |
 
 Both sides hash the **transmitted JSON bytes** — not a re-stringified copy. So JSON key order on the producing side doesn't matter to validation. Token shape `{ kind: 'shell-token', name, role, exp }` matches the four checks PR #106 runs (`kind === 'shell-token'`, `typeof exp === 'number'`, `exp >= Date.now()`, both `name` and `role` truthy).
 
-Canonical reference compared against: `eq-field-app/netlify/functions/verify-pin.js:117-123` (`signToken`). PR #1's `signShellToken` is the same shape with the addition of the `kind` discriminator.
+Canonical reference compared against: `eq-field/netlify/functions/verify-pin.js:117-123` (`signToken`). PR #1's `signShellToken` is the same shape with the addition of the `kind` discriminator.
 
 ### Env-var matrix
 
@@ -73,7 +73,7 @@ Three new Netlify functions on `eq-shell`:
 - `verify-shell-session` — GET — reads cookie, returns user/tenant/entitlements
 - `mint-iframe-token` — POST — 60s HMAC token in shape PR #106 validates
 
-Plus one new action on `eq-field-app/verify-pin`:
+Plus one new action on `eq-field/verify-pin`:
 - `verify-shell-token` — POST — swaps shell token for 7d Field session token
 
 All five paths inherit the existing `EQ_SECRET_SALT` HMAC pattern. None of them is rate-limited yet (verify-pin's existing rate limit only applies to PIN-action calls). The brief flagged `shell-login` specifically as a follow-up. Same gap applies to all three new shell functions.
@@ -137,7 +137,7 @@ Confidence: **High.** The core contract is correct; the should-fixes are quality
 ### PR #2 — Phase 2 spike (Block until rebased)
 
 - Route shape correct: 5 stubs, each `React.lazy()`, each citing vanilla source location.
-- Line ranges verified against `eq-field-app/scripts/tender-pipeline.js` (1929 lines): Import 276 / Kanban 542 / Enrichment 752 / Review 963 / Curve 1457 all map to the right `render*` / `openTenderPanel` function.
+- Line ranges verified against `eq-field/scripts/tender-pipeline.js` (1929 lines): Import 276 / Kanban 542 / Enrichment 752 / Review 963 / Curve 1457 all map to the right `render*` / `openTenderPanel` function.
 - Blocking issue: rewrites `src/App.tsx`, `src/App.css`, `src/index.css` in a way that conflicts with PR #1. The -395 deletions are the Vite scaffold being torn out for a SECOND time differently.
 - Conceptual issue: Enrichment + Curve as standalone routes don't match the vanilla UX (slide-over panel + stateful confirm screen). Consider `/enrichment/:tenderId` or folding into Kanban.
 

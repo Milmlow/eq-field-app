@@ -28,10 +28,10 @@
 
 | Version | Surface | Workstream | PR |
 |---|---|---|---|
-| v3.5.7 | U2 Phase 2 — axe auto-fixes (contrast, select-name, sidebar-footer base color) | Accessibility | [#102](https://github.com/Milmlow/eq-field-app/pull/102) |
-| v3.5.8 | U2 Phase 3 — manual modal focus capture/restore + aria-live announcements | Accessibility | [#105](https://github.com/Milmlow/eq-field-app/pull/105) |
-| EQ-SHELL-DESIGN.md | Phase D — Q1-Q10 architecture lock | EQ Shell | [#104](https://github.com/Milmlow/eq-field-app/pull/104) |
-| v3.5.9 | Phase 1.C — `verifyShellToken()` + `verify-shell-token` action in `verify-pin.js`; `_consumeShellToken()` in `scripts/auth.js`. Backwards-compatible — no-op on direct visits. | EQ Shell | [#106](https://github.com/Milmlow/eq-field-app/pull/106) (open) |
+| v3.5.7 | U2 Phase 2 — axe auto-fixes (contrast, select-name, sidebar-footer base color) | Accessibility | [#102](https://github.com/eq-solutions/eq-field/pull/102) |
+| v3.5.8 | U2 Phase 3 — manual modal focus capture/restore + aria-live announcements | Accessibility | [#105](https://github.com/eq-solutions/eq-field/pull/105) |
+| EQ-SHELL-DESIGN.md | Phase D — Q1-Q10 architecture lock | EQ Shell | [#104](https://github.com/eq-solutions/eq-field/pull/104) |
+| v3.5.9 | Phase 1.C — `verifyShellToken()` + `verify-shell-token` action in `verify-pin.js`; `_consumeShellToken()` in `scripts/auth.js`. Backwards-compatible — no-op on direct visits. | EQ Shell | [#106](https://github.com/eq-solutions/eq-field/pull/106) (open) |
 
 **U2 finding fully closed.** AUDIT-REVIEW.md no longer has an open accessibility item against demo. WCAG 2.1 AA procurement-readiness pass per the Melbourne brief.
 
@@ -87,7 +87,7 @@ Grouped by domain. Each block has the same shape: what it is, where it lives, sc
 
 **✅ FINDING #SEC3 closed 2026-05-18.**
 
-Shipped via [PR #98](https://github.com/Milmlow/eq-field-app/pull/98) (migration `2026-05-18_tender_rls_tighten.sql`, applied to EQ Supabase via MCP). All 24 placeholder `_anon_*` policies replaced — `tenders` / `tender_import_runs` / `tender_review_decisions` / `pending_schedule` gated on `org_id IS NOT NULL`; `nominations` / `tender_enrichment` gated on `EXISTS (tender_id → tenders.org_id IS NOT NULL)`.
+Shipped via [PR #98](https://github.com/eq-solutions/eq-field/pull/98) (migration `2026-05-18_tender_rls_tighten.sql`, applied to EQ Supabase via MCP). All 24 placeholder `_anon_*` policies replaced — `tenders` / `tender_import_runs` / `tender_review_decisions` / `pending_schedule` gated on `org_id IS NOT NULL`; `nominations` / `tender_enrichment` gated on `EXISTS (tender_id → tenders.org_id IS NOT NULL)`.
 
 **HONEST CAVEAT in the migration header** (mirrors `2026-05-13_roster_presence_rls_tighten.sql` precedent): the brief's prescribed `auth.uid()`-based pattern would have broken Tender Pipeline — EQ Field uses the anon key only, no per-user JWT. What's enforceable within the anon-key model: orphan-row prevention + structural integrity at the DB layer. Cross-tenant read by anyone holding the anon key remains structural until per-user SSO ships (MELBOURNE-SCALE-DESIGN.md §7 Q7, Wave 5+).
 
@@ -218,7 +218,7 @@ Shipped via [PR #98](https://github.com/Milmlow/eq-field-app/pull/98) (migration
 
 **Status (2026-05-18):**
 - ✅ **Phase 1 (design)** shipped 2026-05-15 via PR #90 — `migrations/2026-05-15_rate_limit_buckets_v1.sql`.
-- ✅ **Phase D (activation)** shipped 2026-05-18 via [PR #99](https://github.com/Milmlow/eq-field-app/pull/99). Migration applied to EQ demo Supabase. `verify-pin.js` wired with env-var feature flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)` added to `scripts/supabase.js`.
+- ✅ **Phase D (activation)** shipped 2026-05-18 via [PR #99](https://github.com/eq-solutions/eq-field/pull/99). Migration applied to EQ demo Supabase. `verify-pin.js` wired with env-var feature flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)` added to `scripts/supabase.js`.
 - ⏳ **Activation:** requires `RATE_LIMIT_V2=on` in eq-solves-field Netlify env vars. Without that flip, in-memory path serves as before. Code is dormant post-merge.
 
 **Port risk:** Zero on SKS until you explicitly roll out. SKS Supabase doesn't have the migration applied and the SKS Netlify deploy doesn't have `RATE_LIMIT_V2` set. To roll to SKS: apply the migration to `nspbmirochztcjijmcrx`, then flip the env var on sks-nsw-labour Netlify.

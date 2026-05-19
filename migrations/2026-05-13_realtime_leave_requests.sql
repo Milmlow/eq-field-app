@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: add leave_requests to supabase_realtime publication
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.59
 -- Created:   2026-05-13 (BATTLE-TEST Round 1 closeout)
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — applied via Supabase MCP

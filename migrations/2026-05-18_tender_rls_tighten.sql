@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: tighten RLS on Tender Pipeline tables (FINDING #SEC3)
--- Project:   eq-field-app (EQ tenant only — ktmjmdzqrogauaevbktn)
+-- Project:   eq-field (EQ tenant only — ktmjmdzqrogauaevbktn)
 -- Version:   demo Phase B1 of NEW-WINDOW-PROMPT-melbourne-ready.md
 -- Created:   2026-05-18
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — pending application via this PR

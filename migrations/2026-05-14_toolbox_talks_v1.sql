@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: site_reports v2 — toolbox_talks table
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.75
 -- Created:   2026-05-14
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — pending

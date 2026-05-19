@@ -182,7 +182,7 @@ notes: "Demo/EQ SEED path unchanged").
 - No Supabase schedule request fires (EQ demo serves from SEED, as
   designed).
 
-**Where the runtime path IS exercised:** [PR #93](https://github.com/Milmlow/eq-field-app/pull/93)
+**Where the runtime path IS exercised:** [PR #93](https://github.com/eq-solutions/eq-field/pull/93)
 ports S1 to `main` (v3.4.74 on the SKS branch) — when that lands on
 the SKS preview deploy, `?tenant=sks` does hit Supabase and the
 DevTools Network tab will show the `week=in.(...)` filter. That's the

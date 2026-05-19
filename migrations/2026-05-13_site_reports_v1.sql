@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: site_reports v1 — prestarts table
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.67
 -- Created:   2026-05-13
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — 2026-05-13 ✓

@@ -87,7 +87,7 @@ All Q1-Q10 are locked (see top of doc). No remaining design blockers for Phase 1
 
 Given the locked decisions, here's the concrete Phase 1 scope:
 
-**New `eq-shell` repo** — Vite + React + TypeScript + React Router. Hosted on Netlify (its own project, separate from `eq-field-app`).
+**New `eq-shell` repo** — Vite + React + TypeScript + React Router. Hosted on Netlify (its own project, separate from `eq-field`).
 
 **New `eq-shell-control` Supabase project** — EQ-corporate canonical. Tables:
 
@@ -181,7 +181,7 @@ All design questions answered (Q1-Q10). No remaining decision blockers. Concrete
 
 1. **Phase 1.A — scaffolding** — create new `eq-shell` repo on GitHub, Vite + React + TS init, Netlify project with `*.eq.solutions` wildcard pending, `eq-shell-control` Supabase project provisioned with the three tables. ~1 session, mostly mechanical.
 2. **Phase 1.B — wire-up** — `shell-login`, `verify-shell-session`, `mint-iframe-token` Netlify functions. Basic React shell with login + tenant-home + iframe-Field route. React Context for brand. Lazy-loaded module routes (stub "coming soon" pages for Cards/Intake/Quotes/Service). ~1 session.
-3. **Phase 1.C — Field side** — `?sh=` URL hash handler in `scripts/auth.js` so the iframe handoff works. Small PR against `eq-field-app/demo`. ~30 min.
+3. **Phase 1.C — Field side** — `?sh=` URL hash handler in `scripts/auth.js` so the iframe handoff works. Small PR against `eq-field/demo`. ~30 min.
 4. **Phase 1.D — end-to-end smoke** — provision one test tenant (`sks-test.eq.solutions`), login, navigate to Field via iframe, confirm session flows through, check brand applies. ~1 session.
 
 Then **Phase 2 (Tender Pipeline migration to React)** starts — see Phase 2 section above. ~3-5 more sessions.

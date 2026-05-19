@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: tighten RLS on roster_presence (BATTLE-TEST #4)
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.59
 -- Created:   2026-05-13 (battle-test closeout Round 1)
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — pending (Royce on holidays)

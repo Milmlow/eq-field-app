@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: prestarts.photos — inline photo storage
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.68
 -- Created:   2026-05-13
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — 2026-05-13 ✓

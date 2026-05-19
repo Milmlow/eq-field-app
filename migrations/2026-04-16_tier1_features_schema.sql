@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: Tier 1 features schema
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.3 (+ groundwork for future tier-1 features)
 -- Supabase:  20260416190053_tier1_features_schema
 -- Applied:   Prod  (nspbmirochztcjijmcrx) — 2026-04-16 ✓
