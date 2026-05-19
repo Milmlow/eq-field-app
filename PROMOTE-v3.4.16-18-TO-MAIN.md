@@ -1,7 +1,7 @@
 # Promotion Plan — v3.4.9 + v3.4.16–18 to SKS Labour Prod
 
 **Owner:** Royce Milmlow
-**Source branch:** `demo` (eq-field-app, `ktmjmdzqrogauaevbktn`, eq-solves-field.netlify.app)
+**Source branch:** `demo` (eq-field, `ktmjmdzqrogauaevbktn`, eq-solves-field.netlify.app)
 **Target branch:** `main` (same repo, `nspbmirochztcjijmcrx`, sks-nsw-labour.netlify.app)
 **Status:** Demo features complete and verified (incl. post-v3.4.18 hardening on 2026-04-22). SKS promotion **not yet executed** — this doc is the playbook.
 
@@ -103,7 +103,7 @@ Run the verification block after applying. Expected results are inline in the fi
 
 ## Step 2 — Code merge (demo → main)
 
-With source on one repo two branches (`Milmlow/eq-field-app` `demo` vs `main`), the promotion is a **branch merge**, not a cross-repo cherry-pick. However, SKS-specific plumbing (tenant slug, group aliases, no-analytics build) must be preserved — do not wholesale fast-forward `demo` onto `main`.
+With source on one repo two branches (`eq-solutions/eq-field` `demo` vs `main`), the promotion is a **branch merge**, not a cross-repo cherry-pick. However, SKS-specific plumbing (tenant slug, group aliases, no-analytics build) must be preserved — do not wholesale fast-forward `demo` onto `main`.
 
 Open a PR `demo → main` and cherry-pick the diff per file:
 
