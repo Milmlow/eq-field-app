@@ -17,7 +17,7 @@
   try {
     var h = (location.hostname || '').toLowerCase();
     var dir = h.indexOf('sks') !== -1 ? 'icons' : 'icons-eq';
-    var v = '3.5.9'; // cache-buster — bump on icon changes
+    var v = '3.5.10'; // cache-buster — bump on icon changes
     var head = document.head || document.getElementsByTagName('head')[0];
     function add(rel, type, sizes, href) {
       var l = document.createElement('link');
@@ -215,8 +215,43 @@
 
 <!--
   ════════════════════════════════════════════════════════════════
-  EQ Solves — Field  v3.5.9
+  EQ Solves — Field  v3.5.10
   Modularised April 2026 — inline JS now ~300 lines (was ~4,000)
+
+  CHANGES IN v3.5.10  (timing-safe HMAC comparison in verify-pin.js)
+  ────────────────────────────────────────────────────────────
+  • One paper-cut closeout from the 2026-05-19 EQ Shell session.
+    `verifyToken()` + `verifyShellToken()` in verify-pin.js were
+    comparing HMAC sigs via plain `!==`. Plain equality is
+    vulnerable to timing-based byte-by-byte sig recovery — an
+    attacker can craft inputs that bisect through the sig hex
+    by measuring response-time differences against each guess.
+    The fix is `crypto.timingSafeEqual` over hex-decoded buffers,
+    short-circuiting on length mismatch but constant-time
+    otherwise.
+  • Mirrors the `sigsEqual()` helper shipped in
+    `eq-solutions/eq-shell` PR #3 (netlify/functions/_shared/
+    token.ts) — same shape, same guards.
+  • THREAT MODEL — practical exploitability is low because
+    Netlify's edge timing variance is much larger than the
+    sub-microsecond differences a remote attacker could measure
+    over the public internet. The fix is "do the right thing
+    anyway" + matches what eq-shell does.
+  • NO BEHAVIOUR CHANGE for legitimate paths — valid sigs still
+    validate, invalid still reject. Pure swap of the comparison
+    primitive.
+  • FILES TOUCHED
+    - netlify/functions/verify-pin.js  (+11 lines `sigsEqual()`
+                                         helper, 2 call-site swaps)
+    - scripts/app-state.js             (APP_VERSION 3.5.9 → 3.5.10)
+    - sw.js                            (CACHE bump only)
+    - index.html                       (favicon cache-bust, this
+                                         banner)
+  • TEST PLAN — no functional change; smoke is "PIN gate still
+    works on direct visit + shell-token iframe handshake from
+    PR #106 still skips the gate when a valid token arrives in
+    `#sh=`". Negative path: a malformed/expired token still
+    returns `valid: false` exactly as before.
 
   CHANGES IN v3.5.9  (Phase 1.C — EQ Shell iframe handoff token)
   ────────────────────────────────────────────────────────────
