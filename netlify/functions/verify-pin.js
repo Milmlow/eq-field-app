@@ -122,12 +122,27 @@ function signToken(name, role, expiresAt) {
   return Buffer.from(payload).toString('base64') + '.' + sig;
 }
 
+// v3.5.10 — constant-time HMAC sig comparison. Plain === is vulnerable to
+// timing-based byte-by-byte sig recovery; timingSafeEqual short-circuits
+// on length mismatch but otherwise runs in constant time regardless of
+// where the first byte diverges. Mirrors the sigsEqual() pattern shipped
+// in eq-solutions/eq-shell PR #3 (netlify/functions/_shared/token.ts).
+function sigsEqual(expected, provided) {
+  if (typeof expected !== 'string' || typeof provided !== 'string') return false;
+  if (expected.length !== provided.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(provided, 'hex'));
+  } catch (e) {
+    return false;
+  }
+}
+
 function verifyToken(token) {
   try {
     const [payloadB64, sig] = token.split('.');
     const payload = Buffer.from(payloadB64, 'base64').toString();
     const expectedSig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
-    if (sig !== expectedSig) return null;
+    if (!sigsEqual(expectedSig, sig)) return null;
     const data = JSON.parse(payload);
     if (data.exp < Date.now()) return null;
     return data;
@@ -150,7 +165,7 @@ function verifyShellToken(token) {
     if (!payloadB64 || !sig) return null;
     const payload = Buffer.from(payloadB64, 'base64').toString();
     const expectedSig = crypto.createHmac('sha256', SECRET_SALT).update(payload).digest('hex');
-    if (sig !== expectedSig) return null;
+    if (!sigsEqual(expectedSig, sig)) return null;
     const data = JSON.parse(payload);
     if (data.kind !== 'shell-token') return null;
     if (typeof data.exp !== 'number' || data.exp < Date.now()) return null;
