@@ -28,7 +28,7 @@ CHANGELOG-v3.4.9.md                                      — NEW
 
 ### 1. Push the frontend to GitHub `demo` branch
 
-Unzip and commit to `Milmlow/eq-field-app` on the `demo` branch. Netlify
+Unzip and commit to `eq-solutions/eq-field` on the `demo` branch. Netlify
 picks it up automatically. The migrations and `supabase/functions/` folder
 don't *need* to be in the repo (they don't get deployed from there), but
 keeping them in is nice for history.

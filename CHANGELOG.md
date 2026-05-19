@@ -2031,7 +2031,7 @@ The v3.4.5 `feedback_entries` resolved_* columns are also still demo-only — bo
 ### Upload checklist (demo branch)
 
 1. Unzip `eq-field-demo-v3.4.6.zip`.
-2. Upload each file to its matching path on `eq-solutions/eq-field-app`, branch `demo`:
+2. Upload each file to its matching path on `eq-solutions/eq-field`, branch `demo`:
    - `index.html`
    - `sw.js`
    - `scripts/app-state.js`
