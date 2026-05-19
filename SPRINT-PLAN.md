@@ -34,10 +34,10 @@ All four Melbourne-prep sprint items now closed on demo. SKS prod port queues le
 - ✅ Shipped via the axe-core run wired during Phase C of `NEW-WINDOW-PROMPT-melbourne-ready.md`. Catches missing labels, contrast, heading order, role mismatches against the Netlify preview.
 
 ### Phase 2 — Fix auto-flagged issues (~2-3h) ✅
-- ✅ Shipped 2026-05-18 via [PR #102](https://github.com/Milmlow/eq-field-app/pull/102) as v3.5.7. Axe-flagged contrast + select-name fixes; sidebar-footer base color bump caught by the re-run.
+- ✅ Shipped 2026-05-18 via [PR #102](https://github.com/eq-solutions/eq-field/pull/102) as v3.5.7. Axe-flagged contrast + select-name fixes; sidebar-footer base color bump caught by the re-run.
 
 ### Phase 3 — Targeted manual pass (~2-3h) ✅
-- ✅ Shipped 2026-05-18 via [PR #105](https://github.com/Milmlow/eq-field-app/pull/105) as v3.5.8. Modal focus capture + restore-on-close, aria-live announcements for dynamic counts/toasts, keyboard nav audit. NVDA / VoiceOver smoke deferred (out of harness — see EQ Shell brief guardrail).
+- ✅ Shipped 2026-05-18 via [PR #105](https://github.com/eq-solutions/eq-field/pull/105) as v3.5.8. Modal focus capture + restore-on-close, aria-live announcements for dynamic counts/toasts, keyboard nav audit. NVDA / VoiceOver smoke deferred (out of harness — see EQ Shell brief guardrail).
 
 ### Bonus
 - The CI tool's report doubles as procurement documentation. When a
@@ -56,13 +56,13 @@ All four Melbourne-prep sprint items now closed on demo. SKS prod port queues le
 **Total: ~7 hours. Behaviour-preserving throughout.**
 
 **Status:**
-- ✅ **Phases 1–4 (demo)** shipped 2026-05-15 via [PR #89](https://github.com/Milmlow/eq-field-app/pull/89) as v3.5.3.
+- ✅ **Phases 1–4 (demo)** shipped 2026-05-15 via [PR #89](https://github.com/eq-solutions/eq-field/pull/89) as v3.5.3.
   All five phases folded into one PR per SPRINT-QUESTIONS Q11 default
   ("bump per workstream"). Defaults applied throughout per Q1, Q2, Q3, Q4, Q5.
 - ✅ **Phase 5 (dashboard)** investigated and confirmed **no-op** per Q4 default —
   `renderDashboard` + `updateTopStats` already scope via `getWeekSchedule()` and
   current week is always in the loaded window. No aggregate RPC needed.
-- ⏳ **SKS port** open in [PR #93](https://github.com/Milmlow/eq-field-app/pull/93) as
+- ⏳ **SKS port** open in [PR #93](https://github.com/eq-solutions/eq-field/pull/93) as
   v3.4.74 on `main` (2026-05-18). Re-implemented fresh rather than cherry-picked
   due to ~16 versions of demo-only stacked work between main (v3.4.73) and
   demo (v3.5.4). DO NOT auto-merge — explicit Royce instruction required for
@@ -126,9 +126,9 @@ S1 is the single biggest blocker for Melbourne customer onboarding. Design doc a
 
 **Status:** ✅ All three workstreams shipped 2026-05-15 → 2026-05-18.
 
-- ✅ **v3.5.4 — render-hash short-circuit** ([PR #91](https://github.com/Milmlow/eq-field-app/pull/91), 2026-05-15). Cheap input-hash short-circuit on `scripts/roster.js`, `scripts/leave.js`, `scripts/timesheets.js`. Kills the idle-poll innerHTML flash.
-- ✅ **v3.5.5 — contacts/supervisors virtualisation** ([PR #92](https://github.com/Milmlow/eq-field-app/pull/92), 2026-05-17). `clusterize.js` (~3KB) wired into contacts + supervisors. Threshold-gated past ~150 rows so SKS-scale views remain identical.
-- ✅ **v3.5.6 — schedule `content-visibility:auto`** ([PR #95](https://github.com/Milmlow/eq-field-app/pull/95), 2026-05-18). CSS-only. Off-viewport schedule rows skip rendering. ~50% paint-time reduction on supervisor schedule view at 500+ rows.
+- ✅ **v3.5.4 — render-hash short-circuit** ([PR #91](https://github.com/eq-solutions/eq-field/pull/91), 2026-05-15). Cheap input-hash short-circuit on `scripts/roster.js`, `scripts/leave.js`, `scripts/timesheets.js`. Kills the idle-poll innerHTML flash.
+- ✅ **v3.5.5 — contacts/supervisors virtualisation** ([PR #92](https://github.com/eq-solutions/eq-field/pull/92), 2026-05-17). `clusterize.js` (~3KB) wired into contacts + supervisors. Threshold-gated past ~150 rows so SKS-scale views remain identical.
+- ✅ **v3.5.6 — schedule `content-visibility:auto`** ([PR #95](https://github.com/eq-solutions/eq-field/pull/95), 2026-05-18). CSS-only. Off-viewport schedule rows skip rendering. ~50% paint-time reduction on supervisor schedule view at 500+ rows.
 
 ### Library choice: `clusterize.js`
 - 3KB, vanilla JS, no framework lock-in, ~10 years stable
@@ -154,7 +154,7 @@ S1 is the single biggest blocker for Melbourne customer onboarding. Design doc a
 **Status:**
 - ✅ **Phase 1 (design)** shipped 2026-05-15 via PR #90 — schema captured
   verbatim in [`migrations/2026-05-15_rate_limit_buckets_v1.sql`](migrations/2026-05-15_rate_limit_buckets_v1.sql).
-- ✅ **Phase D (activation)** shipped 2026-05-18 via [PR #99](https://github.com/Milmlow/eq-field-app/pull/99)
+- ✅ **Phase D (activation)** shipped 2026-05-18 via [PR #99](https://github.com/eq-solutions/eq-field/pull/99)
   — migration applied to EQ demo Supabase, `bump_rate_limit` RPC
   wired into `netlify/functions/verify-pin.js` behind env-var feature
   flag `RATE_LIMIT_V2`. Client helper `bumpRateLimit(key, max, windowSeconds)`
@@ -245,10 +245,10 @@ const allowed = await bumpRateLimit(`${tenant}:${role}:approve_leave`, 60, 60);
 
 ## Out of scope this sprint (parked + tracked)
 
-- **C1** — apprentices.js split → [issue #74](https://github.com/Milmlow/eq-field-app/issues/74), scheduled when convenient
+- **C1** — apprentices.js split → [issue #74](https://github.com/eq-solutions/eq-field/issues/74), scheduled when convenient
 - **C2** — already deleted (PR #75)
 - **S3** — realtime org-scoped → parked, revisit alongside S1 phase 3
-- **SEC1** — magic-link TTL → ✅ unparked + shipped 2026-05-18 via [PR #100](https://github.com/Milmlow/eq-field-app/pull/100) (7d → 48h)
+- **SEC1** — magic-link TTL → ✅ unparked + shipped 2026-05-18 via [PR #100](https://github.com/eq-solutions/eq-field/pull/100) (7d → 48h)
 
 ---
 
@@ -276,7 +276,7 @@ Melbourne-prep brief) for the spec and the locked Q1-Q10 decisions.
 |---|---|---|
 | 1.A | Scaffolding — `eq-shell` repo + `eq-shell-control` Supabase + Netlify project | ✅ Shipped 2026-05-18 (overnight session). GitHub repo `eq-solutions/eq-shell` created, canonical schema applied, Netlify project provisioned (not yet GitHub-linked). |
 | 1.B | Wire-up — `shell-login` / `verify-shell-session` / `mint-iframe-token` Netlify functions + React shell with login, tenant-home, iframe-Field route, lazy module stubs, BrandProvider | ✅ Shipped 2026-05-19 overnight as PR #1 on `eq-solutions/eq-shell`. **Do not auto-merge** — auth surface. Royce reviews + sets env vars + links Netlify to GitHub manually. |
-| 1.C | Field-side — `?sh=` URL hash handler in `scripts/auth.js` + `verify-shell-token` action in `netlify/functions/verify-pin.js` | ✅ Shipped 2026-05-18 as [PR #106](https://github.com/Milmlow/eq-field-app/pull/106), v3.5.9 on demo. |
+| 1.C | Field-side — `?sh=` URL hash handler in `scripts/auth.js` + `verify-shell-token` action in `netlify/functions/verify-pin.js` | ✅ Shipped 2026-05-18 as [PR #106](https://github.com/eq-solutions/eq-field/pull/106), v3.5.9 on demo. |
 | 1.D | End-to-end smoke — provision one test tenant, login, navigate to Field via iframe, confirm session + brand | Next |
 | 2 | Tender Pipeline migration to React (the adoption wedge) | After Phase 1 |
 | 3+ | Surface-by-surface EQ Field migration | Long-term |

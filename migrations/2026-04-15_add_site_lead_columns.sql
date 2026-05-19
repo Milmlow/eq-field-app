@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: Site lead columns (name + phone)
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.x groundwork (shipped ahead of v3.4.3)
 -- Supabase:  20260415035838_add_site_lead_columns
 -- Applied:   Prod  (nspbmirochztcjijmcrx) — 2026-04-15 ✓

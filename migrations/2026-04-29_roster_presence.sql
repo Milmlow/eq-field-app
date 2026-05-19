@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: roster_presence — ephemeral "X is editing cell Y"
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.47
 -- Created:   2026-04-29
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — pending

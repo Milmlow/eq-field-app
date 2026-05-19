@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: SEC2 — rate_limit_buckets table + bump_rate_limit() RPC
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   demo Phase B2 of NEW-WINDOW-PROMPT-melbourne-ready.md
 -- Created:   2026-05-15 (design)
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — 2026-05-18 (Phase D activation)

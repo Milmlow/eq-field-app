@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: managers gets dob/start_date + archive (both tables)
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.70
 -- Created:   2026-05-13
 -- Applied:   EQ   (ktmjmdzqrogauaevbktn) — via MCP 2026-05-13

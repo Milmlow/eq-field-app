@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: site_reports v3 — site_diaries table
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.77
 -- Created:   2026-05-14
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — pending

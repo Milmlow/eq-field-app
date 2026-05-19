@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: extend supabase_realtime publication on EQ Supabase
--- Project:   eq-field-app (EQ tenant only — ktmjmdzqrogauaevbktn)
+-- Project:   eq-field (EQ tenant only — ktmjmdzqrogauaevbktn)
 -- Version:   3.4.49
 -- Created:   2026-04-30 (battle-test pass 2)
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — pending (Royce on holidays)

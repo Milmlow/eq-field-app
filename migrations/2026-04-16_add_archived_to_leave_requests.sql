@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: Archive flag for leave requests
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.3
 -- Supabase:  20260416180305_add_archived_to_leave_requests
 -- Applied:   Prod  (nspbmirochztcjijmcrx) — 2026-04-16 ✓

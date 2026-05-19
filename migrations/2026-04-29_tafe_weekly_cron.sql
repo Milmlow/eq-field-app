@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: schedule tafe-weekly-fill via pg_cron
--- Project:   eq-field-app  (and SKS NSW Labour, applied separately)
+-- Project:   eq-field  (and SKS NSW Labour, applied separately)
 -- Version:   3.4.41
 -- Created:   2026-04-29
 -- Applied:   Demo  ( ) — pending

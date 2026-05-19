@@ -1,6 +1,6 @@
 -- ────────────────────────────────────────────────────────────
 -- Migration: TAFE day + NSW 2026 holiday seed
--- Project:   eq-field-app
+-- Project:   eq-field
 -- Version:   3.4.2
 -- Applied:   Demo  (ktmjmdzqrogauaevbktn) — 2026-04-16 ✓
 --            Prod  (nspbmirochztcjijmcrx) — 2026-04-16 ✓
